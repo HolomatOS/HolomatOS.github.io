@@ -1,0 +1,1833 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JARVIS HOLOMAT V3</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            color: #00d9ff;
+        }
+
+        /* Boot Screen */
+        .boot-screen {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .boot-logo {
+            width: 200px;
+            height: 200px;
+            border: 3px solid #00d9ff;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            box-shadow: 0 0 40px rgba(0, 217, 255, 0.6), inset 0 0 40px rgba(0, 217, 255, 0.1);
+            animation: bootPulse 2s ease-in-out infinite;
+            margin-bottom: 30px;
+            transition: transform 0.3s ease;
+        }
+
+        .boot-screen:hover .boot-logo {
+            transform: scale(1.1);
+        }
+
+        @keyframes bootPulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+                box-shadow: 0 0 40px rgba(0, 217, 255, 0.6);
+            }
+
+            50% {
+                transform: scale(1.05);
+                box-shadow: 0 0 60px rgba(0, 217, 255, 0.9);
+            }
+        }
+
+        .boot-text {
+            font-size: 24px;
+            font-weight: bold;
+            letter-spacing: 3px;
+            text-align: center;
+        }
+
+        .boot-version {
+            font-size: 12px;
+            letter-spacing: 4px;
+            margin-top: 10px;
+            opacity: 0.7;
+        }
+
+        .boot-instruction {
+            font-size: 10px;
+            letter-spacing: 3px;
+            margin-top: 40px;
+            opacity: 0.5;
+            animation: blink 2s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 0.5;
+            }
+
+            50% {
+                opacity: 1;
+            }
+        }
+
+        /* Loading Screen */
+        .loading-screen {
+            width: 100vw;
+            height: 100vh;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at center, #001a33, #000);
+            position: relative;
+        }
+
+        .loading-screen.active {
+            display: flex;
+        }
+
+        .corner-bracket {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            border: 2px solid #00d9ff;
+        }
+
+        .bracket-tl {
+            top: 100px;
+            left: 100px;
+            border-right: none;
+            border-bottom: none;
+        }
+
+        .bracket-tr {
+            top: 100px;
+            right: 100px;
+            border-left: none;
+            border-bottom: none;
+        }
+
+        .bracket-bl {
+            bottom: 100px;
+            left: 100px;
+            border-right: none;
+            border-top: none;
+        }
+
+        .bracket-br {
+            bottom: 100px;
+            right: 100px;
+            border-left: none;
+            border-top: none;
+        }
+
+        .loading-title {
+            font-size: 48px;
+            font-weight: bold;
+            letter-spacing: 8px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 30px #00d9ff;
+            animation: glow 2s ease-in-out infinite;
+        }
+
+        @keyframes glow {
+
+            0%,
+            100% {
+                text-shadow: 0 0 30px #00d9ff;
+            }
+
+            50% {
+                text-shadow: 0 0 50px #00d9ff, 0 0 70px #00d9ff;
+            }
+        }
+
+        .loading-subtitle {
+            font-size: 16px;
+            letter-spacing: 4px;
+            margin-bottom: 60px;
+        }
+
+        .loading-item {
+            width: 500px;
+            margin: 15px 0;
+        }
+
+        .loading-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 12px;
+            letter-spacing: 2px;
+        }
+
+        .loading-bar {
+            width: 100%;
+            height: 6px;
+            background: rgba(0, 217, 255, 0.2);
+            border: 1px solid #00d9ff;
+            overflow: hidden;
+        }
+
+        .loading-progress {
+            height: 100%;
+            background: linear-gradient(90deg, #00d9ff, #0066ff);
+            width: 0;
+            box-shadow: 0 0 15px #00d9ff;
+            transition: width 0.3s ease;
+        }
+
+        /* Main Menu */
+        .main-menu {
+            width: 100vw;
+            height: 100vh;
+            display: none;
+            position: relative;
+            background: radial-gradient(circle at center, #001a33, #000);
+            flex-direction: column;
+        }
+
+        .main-menu.active {
+            display: flex;
+        }
+
+        .starfield {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .star {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: #fff;
+            border-radius: 50%;
+            animation: twinkle 3s ease-in-out infinite;
+        }
+
+        @keyframes twinkle {
+
+            0%,
+            100% {
+                opacity: 0.3;
+            }
+
+            50% {
+                opacity: 1;
+            }
+        }
+
+        .menu-header {
+            position: relative;
+            padding: 40px;
+            text-align: center;
+            z-index: 10;
+        }
+
+        .menu-title {
+            font-size: 20px;
+            letter-spacing: 6px;
+            margin-bottom: 5px;
+        }
+
+        .menu-subtitle {
+            font-size: 11px;
+            letter-spacing: 3px;
+            opacity: 0.7;
+        }
+
+        .menu-center {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .central-orb {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: radial-gradient(circle, #00d9ff, #0066ff);
+            box-shadow: 0 0 60px rgba(0, 217, 255, 0.8), inset 0 0 30px rgba(255, 255, 255, 0.3);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            animation: orbPulse 3s ease-in-out infinite;
+        }
+
+        @keyframes orbPulse {
+
+            0%,
+            100% {
+                transform: translate(-50%, -50%) scale(1);
+            }
+
+            50% {
+                transform: translate(-50%, -50%) scale(1.1);
+            }
+        }
+
+        .menu-options {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 700px;
+            height: 700px;
+        }
+
+        .menu-option {
+            position: absolute;
+            width: 140px;
+            height: 140px;
+            border: 2px solid #00d9ff;
+            border-radius: 50%;
+            background: rgba(0, 20, 40, 0.8);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 20px rgba(0, 217, 255, 0.3);
+        }
+
+        .menu-option:hover {
+            background: rgba(0, 217, 255, 0.2);
+            box-shadow: 0 0 40px rgba(0, 217, 255, 0.8);
+        }
+
+        .option-1 {
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .option-1:hover {
+            transform: translateX(-50%) scale(1.15);
+        }
+
+        .option-2 {
+            bottom: 120px;
+            left: 0px;
+        }
+
+        .option-2:hover {
+            transform: scale(1.15);
+        }
+
+        .option-3 {
+            bottom: 120px;
+            right: 0px;
+        }
+
+        .option-3:hover {
+            transform: scale(1.15);
+        }
+
+        .option-4 {
+            top: 35%;
+            right: 0;
+            transform: translateY(-50%);
+        }
+
+        .option-4:hover {
+            transform: translateY(-50%) scale(1.15);
+        }
+
+        .option-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        .option-label {
+            font-size: 12px;
+            letter-spacing: 2px;
+            text-align: center;
+        }
+
+        .menu-status {
+            position: relative;
+            padding: 40px;
+            text-align: center;
+            font-size: 10px;
+            letter-spacing: 3px;
+            z-index: 10;
+        }
+
+        .voice-button {
+            position: absolute;
+            bottom: 74px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 140px;
+            height: 140px;
+            border: 3px solid #00d9ff;
+            border-radius: 50%;
+            background: rgba(0, 20, 40, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 30px rgba(0, 217, 255, 0.4);
+            z-index: 10;
+        }
+
+        .voice-button:hover {
+            transform: translateX(-50%) scale(1.1);
+            box-shadow: 0 0 50px rgba(0, 217, 255, 0.8);
+            background: rgba(0, 217, 255, 0.2);
+        }
+
+        .voice-button.listening {
+            animation: voicePulse 1s ease-in-out infinite;
+            background: rgba(0, 217, 255, 0.3);
+            box-shadow: 0 0 60px rgba(0, 217, 255, 1);
+        }
+
+        @keyframes voicePulse {
+
+            0%,
+            100% {
+                transform: translateX(-50%) scale(1);
+            }
+
+            50% {
+                transform: translateX(-50%) scale(1.15);
+            }
+        }
+
+        .voice-icon {
+            font-size: 36px;
+            color: #00d9ff;
+        }
+
+        .voice-status {
+            position: absolute;
+            bottom: 90px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 11px;
+            letter-spacing: 2px;
+            color: #00d9ff;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 10;
+        }
+
+        .voice-status.active {
+            opacity: 1;
+        }
+
+        .info-panel {
+            position: absolute;
+            top: 40px;
+            right: 40px;
+            width: 200px;
+            background: rgba(0, 20, 40, 0.8);
+            border: 1px solid #00d9ff;
+            padding: 15px;
+            font-size: 10px;
+            box-shadow: 0 0 20px rgba(0, 217, 255, 0.3);
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(0, 217, 255, 0.3);
+        }
+
+        /* Scanner Page */
+        .scanner-page {
+            width: 100vw;
+            height: 100vh;
+            display: none;
+            background: #000;
+            position: relative;
+        }
+
+        .scanner-page.active {
+            display: block;
+        }
+
+        .page-header {
+            position: absolute;
+            top: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 32px;
+            letter-spacing: 8px;
+            text-shadow: 0 0 20px #00d9ff;
+            transition: opacity 0.5s ease;
+        }
+
+        .page-header.hidden {
+            opacity: 0;
+        }
+
+        .scan-area {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: #000;
+        }
+
+        .scan-line {
+            position: absolute;
+            right: -100%;
+            top: 0;
+            width: 3px;
+            height: 100%;
+            background: #00d9ff;
+            box-shadow:
+                0 0 30px #00d9ff,
+                0 0 60px #00d9ff,
+                0 0 90px #00d9ff,
+                0 0 120px #00d9ff,
+                0 0 150px #00d9ff,
+                0 0 200px #00d9ff,
+                0 0 250px rgba(0, 217, 255, 0.8);
+            display: none;
+            filter: brightness(2.5) saturate(1.5);
+            opacity: 1;
+        }
+
+        .scan-line.scanning {
+            display: block;
+            animation: scanRight 25s linear;
+        }
+
+        @keyframes scanRight {
+            0% {
+                right: 100%;
+            }
+
+            100% {
+                right: -100%;
+            }
+        }
+
+        .back-btn {
+            position: absolute;
+            bottom: 40px;
+            left: 40px;
+            padding: 12px 30px;
+            background: transparent;
+            border: 2px solid #00d9ff;
+            color: #00d9ff;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            letter-spacing: 3px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 20px rgba(0, 217, 255, 0.3);
+        }
+
+        .back-btn:hover {
+            background: rgba(0, 217, 255, 0.2);
+            box-shadow: 0 0 30px rgba(0, 217, 255, 0.6);
+        }
+
+        .back-btn.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .scan-btn {
+            position: absolute;
+            bottom: 40px;
+            right: 40px;
+            padding: 12px 30px;
+            background: transparent;
+            border: 2px solid #00d9ff;
+            color: #00d9ff;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            letter-spacing: 3px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 20px rgba(0, 217, 255, 0.3);
+        }
+
+        .scan-btn:hover {
+            background: rgba(0, 217, 255, 0.2);
+            box-shadow: 0 0 30px rgba(0, 217, 255, 0.6);
+        }
+
+        .scan-btn.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .new-project-btn {
+            position: absolute;
+            top: 38%;
+            left: 27%;
+            transform: translateY(-50%);
+            width: 140px;
+            height: 140px;
+            border: 3px solid #00d9ff;
+            border-radius: 50%;
+            background: rgba(0, 20, 40, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 25px rgba(0, 217, 255, 0.4);
+            text-decoration: none;
+            color: #00d9ff;
+            z-index: 10;
+        }
+
+        .new-project-btn:hover {
+            transform: translateY(-50%) scale(1.15);
+            background: rgba(0, 217, 255, 0.2);
+            box-shadow: 0 0 40px rgba(0, 217, 255, 0.7);
+        }
+
+        .plus-icon {
+            font-size: 40px;
+            font-weight: 300;
+            margin-bottom: 5px;
+            line-height: 1;
+        }
+
+        .project-label {
+            font-size: 9px;
+            letter-spacing: 1.5px;
+            text-align: center;
+        }
+
+        /* AI Chat Page */
+        .chat-page {
+            width: 100vw;
+            height: 100vh;
+            display: none;
+            background: #000;
+            position: relative;
+        }
+
+        .chat-page.active {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            padding: 30px;
+            text-align: center;
+            border-bottom: 1px solid #00d9ff;
+        }
+
+        .chat-title {
+            font-size: 36px;
+            letter-spacing: 10px;
+            text-shadow: 0 0 30px #00d9ff;
+            margin-bottom: 5px;
+        }
+
+        .chat-subtitle {
+            font-size: 12px;
+            letter-spacing: 4px;
+            opacity: 0.7;
+        }
+
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .chat-container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .chat-container::-webkit-scrollbar-track {
+            background: rgba(0, 217, 255, 0.1);
+        }
+
+        .chat-container::-webkit-scrollbar-thumb {
+            background: #00d9ff;
+            border-radius: 4px;
+        }
+
+        .message {
+            max-width: 70%;
+            padding: 15px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            line-height: 1.6;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .message.user {
+            align-self: flex-end;
+            background: rgba(0, 217, 255, 0.2);
+            border: 1px solid #00d9ff;
+            margin-left: auto;
+        }
+
+        .message.assistant {
+            align-self: flex-start;
+            background: rgba(0, 100, 150, 0.2);
+            border: 1px solid #0066ff;
+        }
+
+        .chat-input-area {
+            padding: 20px 30px;
+            border-top: 1px solid #00d9ff;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 15px 20px;
+            background: rgba(0, 20, 40, 0.8);
+            border: 1px solid #00d9ff;
+            color: #00d9ff;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            outline: none;
+            box-shadow: 0 0 15px rgba(0, 217, 255, 0.2);
+        }
+
+        .chat-input::placeholder {
+            color: rgba(0, 217, 255, 0.5);
+        }
+
+        .send-btn {
+            padding: 15px 30px;
+            background: transparent;
+            border: 2px solid #00d9ff;
+            color: #00d9ff;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            letter-spacing: 2px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 20px rgba(0, 217, 255, 0.3);
+        }
+
+        .send-btn:hover {
+            background: rgba(0, 217, 255, 0.2);
+            box-shadow: 0 0 30px rgba(0, 217, 255, 0.6);
+        }
+
+        .chat-back-btn {
+            position: absolute;
+            top: 30px;
+            left: 30px;
+            padding: 10px 25px;
+            background: transparent;
+            border: 2px solid #00d9ff;
+            color: #00d9ff;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            letter-spacing: 2px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 15px rgba(0, 217, 255, 0.3);
+        }
+
+        .chat-back-btn:hover {
+            background: rgba(0, 217, 255, 0.2);
+            box-shadow: 0 0 25px rgba(0, 217, 255, 0.6);
+        }
+
+        /* 3D Modeling Page */
+        .modeling-page {
+            width: 100vw;
+            height: 100vh;
+            display: none;
+            background: #000;
+            position: relative;
+        }
+
+        .modeling-page.active {
+            display: block;
+        }
+
+        .modeling-canvas {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .modeling-back-btn {
+            position: absolute;
+            bottom: 40px;
+            left: 40px;
+            padding: 12px 30px;
+            background: transparent;
+            border: 2px solid #00d9ff;
+            color: #00d9ff;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            letter-spacing: 3px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 20px rgba(0, 217, 255, 0.3);
+            z-index: 100;
+        }
+
+        .modeling-back-btn:hover {
+            background: rgba(0, 217, 255, 0.2);
+            box-shadow: 0 0 30px rgba(0, 217, 255, 0.6);
+        }
+
+        /* Map Page */
+        .map-page {
+            width: 100vw;
+            height: 100vh;
+            display: none;
+            background: #000;
+            position: relative;
+        }
+
+        .map-page.active {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .map-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .map-canvas {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            background: #000;
+        }
+
+        #realMap {
+            width: 100%;
+            height: 100%;
+        }
+
+        .map-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            background:
+                linear-gradient(#00d9ff 1px, transparent 1px),
+                linear-gradient(90deg, #00d9ff 1px, transparent 1px);
+            background-size: 50px 50px;
+            opacity: 0.05;
+        }
+
+        .world-map {
+            display: none;
+        }
+
+        .map-grid {
+            display: none;
+        }
+
+        .waypoint {
+            position: relative;
+            width: 15px;
+            height: 15px;
+            background: #00d9ff;
+            border: 2px solid #00d9ff;
+            border-radius: 50%;
+            box-shadow: 0 0 20px #00d9ff, 0 0 40px #00d9ff;
+            animation: waypointPulse 2s ease-in-out infinite;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .waypoint:hover {
+            transform: scale(1.3);
+            background: rgba(0, 217, 255, 0.6);
+        }
+
+        @keyframes waypointPulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(1.2);
+                opacity: 0.7;
+            }
+        }
+
+        .waypoint-label {
+            position: absolute;
+            top: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 10px;
+            letter-spacing: 1px;
+            white-space: nowrap;
+            color: #00d9ff;
+            text-shadow: 0 0 10px #00d9ff;
+        }
+
+        .location-marker {
+            position: relative;
+            width: 20px;
+            height: 20px;
+            background: radial-gradient(circle, #ff0000, #ff6600);
+            border: 3px solid #ff0000;
+            border-radius: 50%;
+            box-shadow: 0 0 30px #ff0000, 0 0 50px #ff0000;
+            animation: locationPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes locationPulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.3);
+            }
+        }
+
+        .map-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 1000;
+            /* Change from z-index: 10 */
+        }
+
+        .map-btn {
+            padding: 10px 20px;
+            background: rgba(0, 20, 40, 0.9);
+            border: 2px solid #00d9ff;
+            color: #00d9ff;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            letter-spacing: 2px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 15px rgba(0, 217, 255, 0.3);
+        }
+
+        .map-btn:hover {
+            background: rgba(0, 217, 255, 0.2);
+            box-shadow: 0 0 25px rgba(0, 217, 255, 0.6);
+        }
+
+        .map-info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            padding: 15px 20px;
+            background: rgba(0, 20, 40, 0.9);
+            border: 1px solid #00d9ff;
+            box-shadow: 0 0 20px rgba(0, 217, 255, 0.3);
+            font-size: 11px;
+            letter-spacing: 1px;
+            z-index: 1000;
+            /* Change from z-index: 10 */
+        }
+
+        .map-info-item {
+            margin: 5px 0;
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+        }
+
+        .map-back-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            padding: 10px 25px;
+            background: transparent;
+            border: 2px solid #00d9ff;
+            color: #00d9ff;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            letter-spacing: 2px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 15px rgba(0, 217, 255, 0.3);
+            z-index: 1000;
+            /* Change from z-index: 10 */
+        }
+
+        .map-back-btn:hover {
+            background: rgba(0, 217, 255, 0.2);
+            box-shadow: 0 0 25px rgba(0, 217, 255, 0.6);
+        }
+
+        .scan-wave {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border: 2px solid #00d9ff;
+            border-radius: 50%;
+            opacity: 0;
+        }
+
+        .scan-wave.active {
+            animation: scanExpand 3s ease-out;
+        }
+
+        @keyframes scanExpand {
+            0% {
+                width: 0;
+                height: 0;
+                opacity: 1;
+                transform: translate(-50%, -50%);
+            }
+
+            100% {
+                width: 1000px;
+                height: 1000px;
+                opacity: 0;
+                transform: translate(-50%, -50%);
+            }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+    <!-- ADD THIS INSIDE <head> (nothing else changed) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
+
+</head>
+<script>
+    /* =========================
+       REAL MAP – CLEAN & FIXED
+       ========================= */
+
+    let map = null;
+    let userMarker = null;
+    let waypoints = [
+        { name: 'ALPHA', lat: 40.7128, lng: -74.0060 },
+        { name: 'BRAVO', lat: 51.5074, lng: -0.1278 },
+        { name: 'CHARLIE', lat: 35.6762, lng: 139.6503 },
+        { name: 'DELTA', lat: -33.8688, lng: 151.2093 }
+    ];
+    let waypointMarkers = [];
+
+    function openMap() {
+        document.getElementById('mainMenu').classList.remove('active');
+        document.getElementById('mapPage').classList.add('active');
+
+        if (!map) initMap();
+    }
+
+    function initMap() {
+        map = L.map('realMap', {
+            zoomControl: false,
+            attributionControl: false
+        }).setView([20, 0], 2);
+
+        // CHANGE THIS LINE - Replace with satellite tiles
+        L.tileLayer(
+            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            { maxZoom: 18 }
+        ).addTo(map);
+
+        waypoints.forEach(addWaypointMarker);
+        trackLocation();
+    }
+
+    function addWaypointMarker(wp) {
+        const marker = L.circleMarker([wp.lat, wp.lng], {
+            radius: 8,
+            color: '#00d9ff',
+            fillColor: '#00d9ff',
+            fillOpacity: 0.7
+        }).addTo(map);
+
+        marker.bindTooltip(wp.name, { direction: 'top' });
+        waypointMarkers.push(marker);
+    }
+
+    function trackLocation() {
+        if (!navigator.geolocation) return;
+
+        navigator.geolocation.getCurrentPosition(pos => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+
+            if (!userMarker) {
+                userMarker = L.circleMarker([lat, lng], {
+                    radius: 10,
+                    color: '#ff0000',
+                    fillColor: '#ff3300',
+                    fillOpacity: 0.9
+                }).addTo(map);
+            } else {
+                userMarker.setLatLng([lat, lng]);
+            }
+
+            map.setView([lat, lng], 8);
+            updateCoordinates(lat, lng);
+        });
+    }
+
+    function updateCoordinates(lat, lng) {
+        document.getElementById('coordinates').textContent =
+            lat.toFixed(4) + '°, ' + lng.toFixed(4) + '°';
+    }
+
+    function scanArea() {
+        const wave = document.getElementById('scanWave');
+        wave.classList.remove('active');
+        void wave.offsetWidth;
+        wave.classList.add('active');
+
+        document.getElementById('mapStatus').textContent = 'SCANNING...';
+
+        setTimeout(() => {
+            document.getElementById('mapStatus').textContent =
+                waypointMarkers.length + ' WAYPOINTS DETECTED';
+        }, 3000);
+    }
+
+    function addWaypoint() {
+        if (!userMarker) return;
+
+        const latlng = userMarker.getLatLng();
+        const wp = {
+            name: 'WP-' + (waypoints.length + 1),
+            lat: latlng.lat,
+            lng: latlng.lng
+        };
+
+        waypoints.push(wp);
+        addWaypointMarker(wp);
+
+        document.getElementById('waypointCount').textContent =
+            waypoints.length + ' ACTIVE';
+    }
+</script>
+
+
+<body>
+    <!-- Boot Screen -->
+    <div class="boot-screen" id="bootScreen" onclick="startBoot()">
+        <div class="boot-logo">
+            <div class="boot-text">BOOT<br>HOLOMAT</div>
+        </div>
+        <div class="boot-version">HOLOMAT V3</div>
+        <div class="boot-instruction">CLICK TO INITIALIZE</div>
+    </div>
+
+    <!-- Loading Screen -->
+    <div class="loading-screen" id="loadingScreen">
+        <div class="corner-bracket bracket-tl"></div>
+        <div class="corner-bracket bracket-tr"></div>
+        <div class="corner-bracket bracket-bl"></div>
+        <div class="corner-bracket bracket-br"></div>
+
+        <div class="loading-title">HOLOMAT V3</div>
+        <div class="loading-subtitle">INTEGRATED AI: JARVIS</div>
+
+        <div class="loading-item">
+            <div class="loading-label">
+                <span>SYSTEM INITIALIZATION</span>
+                <span id="initPercent">0%</span>
+            </div>
+            <div class="loading-bar">
+                <div class="loading-progress" id="initProgress"></div>
+            </div>
+        </div>
+
+        <div class="loading-item">
+            <div class="loading-label">
+                <span>CORE SYSTEMS</span>
+                <span id="coreStatus">• LOADING</span>
+            </div>
+            <div class="loading-bar">
+                <div class="loading-progress" id="coreProgress"></div>
+            </div>
+        </div>
+
+        <div class="loading-item">
+            <div class="loading-label">
+                <span>AI ROUTINES</span>
+                <span id="aiStatus">• STANDBY</span>
+            </div>
+            <div class="loading-bar">
+                <div class="loading-progress" id="aiProgress"></div>
+            </div>
+        </div>
+
+        <div class="loading-item">
+            <div class="loading-label">
+                <span>INTERFACE</span>
+                <span id="interfaceStatus">• STANDBY</span>
+            </div>
+            <div class="loading-bar">
+                <div class="loading-progress" id="interfaceProgress"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Menu -->
+    <div class="main-menu" id="mainMenu">
+        <div class="starfield" id="starfield"></div>
+
+        <div class="menu-header">
+            <div class="menu-title">J.A.R.V.I.S</div>
+            <div class="menu-subtitle">JUST A RATHER VERY INTELLIGENT SYSTEM</div>
+        </div>
+
+        <div class="menu-center">
+            <div class="central-orb"></div>
+            <div class="menu-options">
+                <div class="menu-option option-1" onclick="openScanner()">
+                    <div class="option-icon">📡</div>
+                    <div class="option-label">SCANNER</div>
+                </div>
+                <div class="menu-option option-2" onclick="openChat()">
+                    <div class="option-icon">💬</div>
+                    <div class="option-label">AI CHAT</div>
+                </div>
+                <div class="menu-option option-3" onclick="open3DModeling()">
+                    <div class="option-icon">🎨</div>
+                    <div class="option-label">3D MODELING</div>
+                </div>
+                <div class="menu-option option-4" onclick="openMap()">
+                    <div class="option-icon">🗺️</div>
+                    <div class="option-label">MAP</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="info-panel">
+            <div
+                style="font-size: 12px; letter-spacing: 2px; margin-bottom: 15px; border-bottom: 1px solid #00d9ff; padding-bottom: 8px;">
+                SYSTEM STATUS</div>
+            <div class="info-item">
+                <span>DATE</span>
+                <span id="currentDate">MAY 14, 2025</span>
+            </div>
+            <div class="info-item">
+                <span>TIME</span>
+                <span id="currentTime">22:05</span>
+            </div>
+            <div class="info-item">
+                <span>CPU LOAD</span>
+                <span style="color: #0f0;">47%</span>
+            </div>
+            <div class="info-item">
+                <span>MEMORY</span>
+                <span style="color: #0f0;">62%</span>
+            </div>
+            <div class="info-item">
+                <span>NETWORK</span>
+                <span style="color: #0f0;">STABLE</span>
+            </div>
+        </div>
+
+        <div class="menu-status">• INTERFACE ACTIVE • 17 APPLICATIONS AVAILABLE</div>
+
+        <a href="https://sketchfab.com/" target="_blank" class="new-project-btn">
+            <div class="plus-icon">+</div>
+            <div class="project-label">NEW<br>PROJECT</div>
+        </a>
+
+        <div class="voice-status" id="voiceStatus">LISTENING...</div>
+        <button class="voice-button" id="voiceButton" onclick="toggleVoice()">
+            <div class="voice-icon">🎤</div>
+        </button>
+    </div>
+
+    <!-- Scanner Page -->
+    <div class="scanner-page" id="scannerPage">
+        <div class="page-header" id="scannerHeader">SCANNER</div>
+        <div class="scan-area">
+            <div class="scan-line" id="scanLine"></div>
+        </div>
+        <button class="back-btn" id="scannerBackBtn" onclick="backToMenu()">◄ BACK</button>
+        <button class="scan-btn" id="scannerScanBtn" onclick="startScan()">INITIATE SCAN</button>
+    </div>
+
+    <!-- AI Chat Page -->
+    <div class="chat-page" id="chatPage">
+        <button class="chat-back-btn" onclick="backToMenu()">◄ BACK</button>
+        <div class="chat-header">
+            <div class="chat-title">J.A.R.V.I.S</div>
+            <div class="chat-subtitle">ARTIFICIAL INTELLIGENCE ASSISTANT</div>
+        </div>
+        <div class="chat-container" id="chatContainer">
+            <div class="message assistant">
+                Hello, I'm JARVIS. How may I assist you today?
+            </div>
+        </div>
+        <div class="chat-input-area">
+            <input type="text" class="chat-input" id="chatInput" placeholder="Type your message here..."
+                onkeypress="handleEnter(event)">
+            <button class="send-btn" onclick="sendMessage()">SEND</button>
+        </div>
+    </div>
+
+    <!-- 3D Modeling Page -->
+    <div class="modeling-page" id="modelingPage">
+        <div class="page-header">3D MODELING</div>
+        <iframe class="modeling-canvas" id="modelingCanvas"
+            src="https://sketchfab.com/models/69dde1ad49e94852984e3d83928efd65/embed?autostart=1&ui_theme=dark"
+            frameborder="0" allow="autoplay; fullscreen; xr-spatial-tracking" allowfullscreen>
+        </iframe>
+        <button class="modeling-back-btn" onclick="backToMenu()">◄ BACK</button>
+    </div>
+
+    <!-- Map/Navigation Page -->
+    <div class="map-page" id="mapPage">
+        <button class="map-back-btn" onclick="backToMenu()">◄ BACK</button>
+
+        <div class="map-container">
+            <div id="realMap"></div>
+            <div class="map-grid"></div>
+            <div class="map-overlay"></div>
+            <div class="scan-wave" id="scanWave"></div>
+        </div>
+
+        <div class="map-controls">
+            <button class="map-btn" onclick="scanArea()">SCAN AREA</button>
+            <button class="map-btn" onclick="trackLocation()">TRACK LOCATION</button>
+            <button class="map-btn" onclick="addWaypoint()">ADD WAYPOINT</button>
+        </div>
+
+        <div class="map-info">
+            <div
+                style="font-size:12px;letter-spacing:2px;margin-bottom:10px;border-bottom:1px solid #00d9ff;padding-bottom:5px;">
+                NAVIGATION DATA
+            </div>
+            <div class="map-info-item">
+                <span>COORDINATES:</span>
+                <span id="coordinates">---</span>
+            </div>
+            <div class="map-info-item">
+                <span>WAYPOINTS:</span>
+                <span id="waypointCount">4 ACTIVE</span>
+            </div>
+            <div class="map-info-item">
+                <span>STATUS:</span>
+                <span id="mapStatus" style="color:#0f0;">OPERATIONAL</span>
+            </div>
+        </div>
+    </div>
+
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Boot sequence
+        function startBoot() {
+            document.getElementById('bootScreen').classList.add('hidden');
+            document.getElementById('loadingScreen').classList.add('active');
+            startLoading();
+        }
+
+        function startLoading() {
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += Math.random() * 15;
+                if (progress >= 100) {
+                    progress = 100;
+                    clearInterval(interval);
+                    setTimeout(showMainMenu, 500);
+                }
+
+                document.getElementById('initProgress').style.width = progress + '%';
+                document.getElementById('initPercent').textContent = Math.floor(progress) + '%';
+
+                if (progress > 25) {
+                    document.getElementById('coreProgress').style.width = ((progress - 25) * 1.33) + '%';
+                    document.getElementById('coreStatus').textContent = '• ONLINE';
+                    document.getElementById('coreStatus').style.color = '#0f0';
+                }
+                if (progress > 50) {
+                    document.getElementById('aiProgress').style.width = ((progress - 50) * 2) + '%';
+                    document.getElementById('aiStatus').textContent = '• ACTIVATED';
+                    document.getElementById('aiStatus').style.color = '#0f0';
+                }
+                if (progress > 75) {
+                    document.getElementById('interfaceProgress').style.width = ((progress - 75) * 4) + '%';
+                    document.getElementById('interfaceStatus').textContent = '• CALIBRATED';
+                    document.getElementById('interfaceStatus').style.color = '#0f0';
+                }
+            }, 100);
+        }
+
+        function showMainMenu() {
+            document.getElementById('loadingScreen').classList.remove('active');
+            document.getElementById('mainMenu').classList.add('active');
+            createStarfield();
+            updateTime();
+            setInterval(updateTime, 1000);
+        }
+
+        function createStarfield() {
+            const starfield = document.getElementById('starfield');
+            for (let i = 0; i < 100; i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+                star.style.left = Math.random() * 100 + '%';
+                star.style.top = Math.random() * 100 + '%';
+                star.style.animationDelay = Math.random() * 3 + 's';
+                starfield.appendChild(star);
+            }
+        }
+
+        function updateTime() {
+            const now = new Date();
+            const time = now.getHours().toString().padStart(2, '0') + ':' +
+                now.getMinutes().toString().padStart(2, '0');
+            document.getElementById('currentTime').textContent = time;
+        }
+
+        function openScanner() {
+            document.getElementById('mainMenu').classList.remove('active');
+            document.getElementById('scannerPage').classList.add('active');
+        }
+
+        function startScan() {
+            const scanLine = document.getElementById('scanLine');
+            const header = document.getElementById('scannerHeader');
+            const backBtn = document.getElementById('scannerBackBtn');
+            const scanBtn = document.getElementById('scannerScanBtn');
+
+            // Hide everything except scan line
+            header.classList.add('hidden');
+            backBtn.classList.add('hidden');
+            scanBtn.classList.add('hidden');
+
+            // Remove previous animation
+            scanLine.classList.remove('scanning');
+
+            // Trigger reflow
+            void scanLine.offsetWidth;
+
+            // Start scan animation
+            scanLine.classList.add('scanning');
+
+            // Bring everything back after scan completes (15 seconds)
+            setTimeout(() => {
+                header.classList.remove('hidden');
+                backBtn.classList.remove('hidden');
+                scanBtn.classList.remove('hidden');
+            }, 15000);
+        }
+
+        function openChat() {
+            document.getElementById('mainMenu').classList.remove('active');
+            document.getElementById('chatPage').classList.add('active');
+        }
+
+        function handleEnter(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            if (!message) return;
+
+            const container = document.getElementById('chatContainer');
+
+            // Add user message
+            const userMsg = document.createElement('div');
+            userMsg.className = 'message user';
+            userMsg.textContent = message;
+            container.appendChild(userMsg);
+
+            input.value = '';
+            container.scrollTop = container.scrollHeight;
+
+            // Call ChatGPT API
+            try {
+                const response = await fetch('https://api.anthropic.com/v1/messages', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        model: 'claude-sonnet-4-20250514',
+                        max_tokens: 1000,
+                        messages: [
+                            { role: 'user', content: message }
+                        ]
+                    })
+                });
+
+                const data = await response.json();
+                const assistantMessage = data.content.find(item => item.type === 'text')?.text || 'I apologize, but I encountered an error processing your request.';
+
+                // Add assistant message
+                const assistantMsg = document.createElement('div');
+                assistantMsg.className = 'message assistant';
+                assistantMsg.textContent = assistantMessage;
+                container.appendChild(assistantMsg);
+                container.scrollTop = container.scrollHeight;
+
+            } catch (error) {
+                console.error('Error:', error);
+                const errorMsg = document.createElement('div');
+                errorMsg.className = 'message assistant';
+                errorMsg.textContent = 'Connection error. Please ensure you have a stable internet connection.';
+                container.appendChild(errorMsg);
+                container.scrollTop = container.scrollHeight;
+            }
+        }
+
+        function open3DModeling() {
+            document.getElementById('mainMenu').classList.remove('active');
+            document.getElementById('modelingPage').classList.add('active');
+        }
+
+        function openMap() {
+            document.getElementById('mainMenu').classList.remove('active');
+            document.getElementById('mapPage').classList.add('active');
+
+            // Wait for Leaflet to load
+            setTimeout(() => {
+                if (typeof L !== 'undefined') {
+                    initializeMap();
+                } else {
+                    console.error('Leaflet not loaded');
+                }
+            }, 100);
+        }
+
+
+        function initializeMap() {
+            if (map) return; // Already initialized
+
+            if (typeof L === 'undefined') {
+                console.error('Leaflet library not loaded');
+                return;
+            }
+
+            // Initialize the map
+            map = L.map('realMap').setView([20, 0], 2);
+
+            // Add dark tile layer
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 18,
+            }).addTo(map);
+
+            // Create custom icons
+            const waypointIcon = L.divIcon({
+                className: 'waypoint',
+                html: '<div style="width: 15px; height: 15px; background: #00d9ff; border: 2px solid #00d9ff; border-radius: 50%; box-shadow: 0 0 20px #00d9ff;"></div>',
+                iconSize: [15, 15]
+            });
+
+            const userIcon = L.divIcon({
+                className: 'location-marker',
+                html: '<div style="width: 20px; height: 20px; background: radial-gradient(circle, #ff0000, #ff6600); border: 3px solid #ff0000; border-radius: 50%; box-shadow: 0 0 30px #ff0000; animation: locationPulse 1.5s ease-in-out infinite;"></div>',
+                iconSize: [20, 20]
+            });
+
+            // Add waypoints
+            waypoints.forEach(wp => {
+                const marker = L.marker([wp.lat, wp.lng], { icon: waypointIcon })
+                    .addTo(map)
+                    .bindPopup(`<div style="color: #00d9ff; font-family: 'Courier New'; letter-spacing: 2px;">WAYPOINT: ${wp.name}</div>`)
+                    .on('click', () => selectWaypoint(wp.name));
+                markers.push(marker);
+            });
+
+            // Add user location (default: Salt Lake City)
+            userMarker = L.marker([40.7608, -111.8910], { icon: userIcon })
+                .addTo(map)
+                .bindPopup('<div style="color: #ff0000; font-family: \'Courier New\'; letter-spacing: 2px;">YOUR LOCATION</div>');
+
+            // Update coordinates display
+            updateCoordinates(40.7608, -111.8910);
+
+            // Try to get real user location
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition((position) => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    userMarker.setLatLng([lat, lng]);
+                    map.setView([lat, lng], 8);
+                    updateCoordinates(lat, lng);
+                });
+            }
+        }
+
+        function updateCoordinates(lat, lng) {
+            const latDir = lat >= 0 ? 'N' : 'S';
+            const lngDir = lng >= 0 ? 'E' : 'W';
+            document.getElementById('coordinates').textContent =
+                `${Math.abs(lat).toFixed(4)}°${latDir}, ${Math.abs(lng).toFixed(4)}°${lngDir}`;
+        }
+
+        function backToMenu() {
+            document.getElementById('scannerPage').classList.remove('active');
+            document.getElementById('chatPage').classList.remove('active');
+            document.getElementById('modelingPage').classList.remove('active');
+            document.getElementById('mapPage').classList.remove('active');
+            document.getElementById('mainMenu').classList.add('active');
+        }
+
+        // Map Functions
+        function scanArea() {
+            if (!map) return;
+
+            const scanWave = document.getElementById('scanWave');
+            scanWave.classList.remove('active');
+            void scanWave.offsetWidth;
+            scanWave.classList.add('active');
+
+            document.getElementById('mapStatus').textContent = 'SCANNING...';
+            document.getElementById('mapStatus').style.color = '#ffff00';
+
+            // Flash all waypoints
+            markers.forEach(marker => {
+                marker.openPopup();
+                setTimeout(() => marker.closePopup(), 1000);
+            });
+
+            setTimeout(() => {
+                document.getElementById('mapStatus').textContent = 'SCAN COMPLETE';
+                document.getElementById('mapStatus').style.color = '#0f0';
+
+                setTimeout(() => {
+                    document.getElementById('mapStatus').textContent = 'OPERATIONAL';
+                }, 2000);
+            }, 3000);
+        }
+
+        function trackLocation() {
+            if (!map || !navigator.geolocation) {
+                alert('Geolocation is not supported by your browser');
+                return;
+            }
+
+            document.getElementById('mapStatus').textContent = 'TRACKING...';
+            document.getElementById('mapStatus').style.color = '#ffff00';
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+
+                    userMarker.setLatLng([lat, lng]);
+                    map.setView([lat, lng], 13);
+                    updateCoordinates(lat, lng);
+
+                    document.getElementById('mapStatus').textContent = 'LOCATION UPDATED';
+                    document.getElementById('mapStatus').style.color = '#00d9ff';
+
+                    setTimeout(() => {
+                        document.getElementById('mapStatus').textContent = 'OPERATIONAL';
+                        document.getElementById('mapStatus').style.color = '#0f0';
+                    }, 2000);
+                },
+                (error) => {
+                    document.getElementById('mapStatus').textContent = 'TRACKING FAILED';
+                    document.getElementById('mapStatus').style.color = '#ff0000';
+                    setTimeout(() => {
+                        document.getElementById('mapStatus').textContent = 'OPERATIONAL';
+                        document.getElementById('mapStatus').style.color = '#0f0';
+                    }, 2000);
+                }
+            );
+        }
+
+        function addWaypoint() {
+            if (!map) return;
+
+            const center = map.getCenter();
+            const newWaypoint = {
+                name: `WP-${markers.length + 1}`,
+                lat: center.lat,
+                lng: center.lng
+            };
+
+            const waypointIcon = L.divIcon({
+                className: 'waypoint',
+                html: '<div style="width: 15px; height: 15px; background: #00d9ff; border: 2px solid #00d9ff; border-radius: 50%; box-shadow: 0 0 20px #00d9ff;"></div>',
+                iconSize: [15, 15]
+            });
+
+            const marker = L.marker([newWaypoint.lat, newWaypoint.lng], { icon: waypointIcon })
+                .addTo(map)
+                .bindPopup(`<div style="color: #00d9ff; font-family: 'Courier New'; letter-spacing: 2px;">WAYPOINT: ${newWaypoint.name}</div>`)
+                .on('click', () => selectWaypoint(newWaypoint.name));
+
+            markers.push(marker);
+            waypoints.push(newWaypoint);
+
+            document.getElementById('waypointCount').textContent = waypoints.length + ' ACTIVE';
+            document.getElementById('mapStatus').textContent = 'WAYPOINT ADDED';
+            document.getElementById('mapStatus').style.color = '#0f0';
+
+            setTimeout(() => {
+                document.getElementById('mapStatus').textContent = 'OPERATIONAL';
+            }, 2000);
+        }
+
+        function selectWaypoint(name) {
+            document.getElementById('mapStatus').textContent = `WAYPOINT ${name} SELECTED`;
+            document.getElementById('mapStatus').style.color = '#00d9ff';
+
+            const waypoint = waypoints.find(wp => wp.name === name);
+            if (waypoint && map) {
+                map.setView([waypoint.lat, waypoint.lng], 10);
+            }
+
+            setTimeout(() => {
+                document.getElementById('mapStatus').textContent = 'OPERATIONAL';
+                document.getElementById('mapStatus').style.color = '#0f0';
+            }, 2000);
+        }
+
+        // Voice Recognition
+        let recognition = null;
+        let isListening = false;
+
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+
+            recognition.onresult = function (event) {
+                const transcript = event.results[0][0].transcript.toLowerCase();
+                console.log('Voice command:', transcript);
+
+                // Process voice commands
+                if (transcript.includes('scanner') || transcript.includes('scan')) {
+                    openScanner();
+                } else if (transcript.includes('chat') || transcript.includes('jarvis')) {
+                    openChat();
+                } else if (transcript.includes('3d') || transcript.includes('modeling') || transcript.includes('model')) {
+                    open3DModeling();
+                } else if (transcript.includes('map') || transcript.includes('navigation') || transcript.includes('navigate')) {
+                    openMap();
+                }
+
+                stopListening();
+            };
+
+            recognition.onerror = function (event) {
+                console.error('Speech recognition error:', event.error);
+                stopListening();
+            };
+
+            recognition.onend = function () {
+                stopListening();
+            };
+        }
+
+        function toggleVoice() {
+            if (!recognition) {
+                alert('Voice recognition is not supported in your browser. Please use Chrome or Edge.');
+                return;
+            }
+
+            if (isListening) {
+                stopListening();
+            } else {
+                startListening();
+            }
+        }
+
+        function startListening() {
+            if (!recognition) return;
+
+            isListening = true;
+            document.getElementById('voiceButton').classList.add('listening');
+            document.getElementById('voiceStatus').classList.add('active');
+
+            try {
+                recognition.start();
+            } catch (error) {
+                console.error('Error starting recognition:', error);
+                stopListening();
+            }
+        }
+
+        function stopListening() {
+            isListening = false;
+            document.getElementById('voiceButton').classList.remove('listening');
+            document.getElementById('voiceStatus').classList.remove('active');
+
+            if (recognition) {
+                try {
+                    recognition.stop();
+                } catch (error) {
+                    console.error('Error stopping recognition:', error);
+                }
+            }
+        }
+    </script>
+</body>
+
+</html>
