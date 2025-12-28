@@ -154,12 +154,29 @@
             top: 10px;
             left: 10px;
             color: white;
-            font-size: 12px;
+            font-size: 11px;
             text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
             z-index: 101;
-            background: rgba(0, 0, 0, 0.5);
+            background: rgba(0, 0, 0, 0.7);
             padding: 10px;
             border-radius: 5px;
+            max-width: 90%;
+            font-family: monospace;
+        }
+
+        #camera-info {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            color: white;
+            font-size: 10px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+            z-index: 101;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            max-width: 90%;
+            font-family: monospace;
         }
     </style>
 </head>
@@ -167,6 +184,7 @@
     <button id="start-button">Start AR Hand Tracking</button>
     <div id="loading" class="hidden">Loading hand tracking...</div>
     <div id="debug" class="hidden"></div>
+    <div id="camera-info" class="hidden"></div>
     
     <video id="camera" autoplay playsinline></video>
     <canvas id="canvas"></canvas>
@@ -206,6 +224,7 @@
         const cursor = document.getElementById('cursor');
         const icons = document.querySelectorAll('.icon');
         const debugDiv = document.getElementById('debug');
+        const cameraInfoDiv = document.getElementById('camera-info');
 
         let hands;
         let cameraInstance;
@@ -237,14 +256,74 @@
                     }
                 }
 
-                // Get camera stream - BACK CAMERA
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        facingMode: 'environment',
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 }
-                    }
+                // Get camera stream - FORCE BACK CAMERA
+                let stream;
+                let selectedCamera = null;
+                
+                // First, enumerate all cameras
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(d => d.kind === 'videoinput');
+                
+                // Display all available cameras
+                let cameraListHTML = '<strong>Available Cameras:</strong><br>';
+                videoDevices.forEach((device, index) => {
+                    cameraListHTML += `${index + 1}. ${device.label || 'Camera ' + (index + 1)}<br>`;
                 });
+                
+                try {
+                    // Try with exact environment first
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            facingMode: { exact: 'environment' },
+                            width: { ideal: 1920 },
+                            height: { ideal: 1080 }
+                        }
+                    });
+                    selectedCamera = 'facingMode: environment';
+                } catch (err) {
+                    // Fallback: Find back camera by label
+                    let backCameraId = null;
+                    for (let device of videoDevices) {
+                        const label = device.label.toLowerCase();
+                        if (label.includes('back') || label.includes('rear') || label.includes('environment')) {
+                            backCameraId = device.deviceId;
+                            selectedCamera = device.label;
+                            break;
+                        }
+                    }
+                    
+                    // If still not found, use the last camera (usually back camera on mobile)
+                    if (!backCameraId && videoDevices.length > 1) {
+                        backCameraId = videoDevices[videoDevices.length - 1].deviceId;
+                        selectedCamera = videoDevices[videoDevices.length - 1].label + ' (last camera)';
+                    }
+                    
+                    if (backCameraId) {
+                        stream = await navigator.mediaDevices.getUserMedia({
+                            video: {
+                                deviceId: { exact: backCameraId },
+                                width: { ideal: 1920 },
+                                height: { ideal: 1080 }
+                            }
+                        });
+                    } else {
+                        throw new Error('Back camera not found');
+                    }
+                }
+                
+                // Get actual track info
+                const videoTrack = stream.getVideoTracks()[0];
+                const settings = videoTrack.getSettings();
+                
+                // Display camera info
+                cameraListHTML += '<br><strong style="color: #00ff00;">🎥 ACTIVE CAMERA:</strong><br>';
+                cameraListHTML += `Label: ${videoTrack.label}<br>`;
+                cameraListHTML += `Facing Mode: ${settings.facingMode || 'unknown'}<br>`;
+                cameraListHTML += `Resolution: ${settings.width}x${settings.height}<br>`;
+                cameraListHTML += `Device ID: ${settings.deviceId ? settings.deviceId.substring(0, 20) + '...' : 'N/A'}`;
+                
+                cameraInfoDiv.innerHTML = cameraListHTML;
+                cameraInfoDiv.classList.remove('hidden');
 
                 camera.srcObject = stream;
 
