@@ -207,10 +207,27 @@
                 startButton.classList.add('hidden');
                 loading.classList.remove('hidden');
 
-                // Get camera stream
+                // Get all available video devices
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                
+                // Find back camera (usually the last one or labeled as 'back'/'environment')
+                let backCamera = videoDevices.find(device => 
+                    device.label.toLowerCase().includes('back') || 
+                    device.label.toLowerCase().includes('rear') ||
+                    device.label.toLowerCase().includes('environment')
+                );
+                
+                // If not found by label, use the last camera (usually back on mobile)
+                if (!backCamera && videoDevices.length > 0) {
+                    backCamera = videoDevices[videoDevices.length - 1];
+                }
+
+                // Get camera stream (BACK CAMERA)
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: {
-                        facingMode: 'environment',
+                        deviceId: backCamera ? { exact: backCamera.deviceId } : undefined,
+                        facingMode: { ideal: 'environment' },
                         width: { ideal: 1280 },
                         height: { ideal: 720 }
                     }
@@ -261,10 +278,18 @@
                 cursor.classList.remove('hidden');
                 isTracking = true;
 
-                // Make fullscreen
-                if (document.documentElement.requestFullscreen) {
-                    document.documentElement.requestFullscreen();
-                }
+                // Make fullscreen automatically
+                setTimeout(() => {
+                    if (document.documentElement.requestFullscreen) {
+                        document.documentElement.requestFullscreen();
+                    } else if (document.documentElement.webkitRequestFullscreen) {
+                        document.documentElement.webkitRequestFullscreen();
+                    } else if (document.documentElement.mozRequestFullScreen) {
+                        document.documentElement.mozRequestFullScreen();
+                    } else if (document.documentElement.msRequestFullscreen) {
+                        document.documentElement.msRequestFullscreen();
+                    }
+                }, 100);
             } catch (err) {
                 alert('Camera access denied: ' + err.message);
                 loading.classList.add('hidden');
