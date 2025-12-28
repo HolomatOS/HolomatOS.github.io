@@ -217,7 +217,6 @@
     <div class="cursor hidden" id="cursor"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 
     <script>
@@ -231,7 +230,6 @@
         const icons = document.querySelectorAll('.icon');
 
         let hands;
-        let cameraInstance;
         let isTracking = false;
         let lastPinchTime = 0;
 
@@ -275,23 +273,13 @@
 
                 hands.onResults(onResults);
 
-                // Start camera processing
-                cameraInstance = new Camera(camera, {
-                    onFrame: async () => {
-                        if (isTracking) {
-                            await hands.send({ image: camera });
-                        }
-                    },
-                    width: 1920,
-                    height: 1080
-                });
-
-                await cameraInstance.start();
+                // Process frames manually (no Camera utility)
+                isTracking = true;
+                processFrame();
 
                 loading.classList.add('hidden');
                 splitView.classList.remove('hidden');
                 cursor.classList.remove('hidden');
-                isTracking = true;
 
                 // Make fullscreen
                 if (document.documentElement.requestFullscreen) {
@@ -303,6 +291,13 @@
                 startButton.classList.remove('hidden');
             }
         });
+
+        async function processFrame() {
+            if (isTracking) {
+                await hands.send({ image: camera });
+                requestAnimationFrame(processFrame);
+            }
+        }
 
         function onResults(results) {
             // Clear canvas
