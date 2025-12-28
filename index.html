@@ -256,7 +256,7 @@
                     }
                 }
 
-                // Get camera stream - FORCE BACK CAMERA
+                // Get camera stream - FORCE FRONT CAMERA
                 let stream;
                 let selectedCamera = null;
                 
@@ -271,43 +271,43 @@
                 });
                 
                 try {
-                    // Try with exact environment first
+                    // Try with exact user (front camera) first
                     stream = await navigator.mediaDevices.getUserMedia({
                         video: {
-                            facingMode: { exact: 'environment' },
+                            facingMode: { exact: 'user' },
                             width: { ideal: 1920 },
                             height: { ideal: 1080 }
                         }
                     });
-                    selectedCamera = 'facingMode: environment';
+                    selectedCamera = 'facingMode: user (front)';
                 } catch (err) {
-                    // Fallback: Find back camera by label
-                    let backCameraId = null;
+                    // Fallback: Find front camera by label
+                    let frontCameraId = null;
                     for (let device of videoDevices) {
                         const label = device.label.toLowerCase();
-                        if (label.includes('back') || label.includes('rear') || label.includes('environment')) {
-                            backCameraId = device.deviceId;
+                        if (label.includes('front') || label.includes('user') || label.includes('facing front')) {
+                            frontCameraId = device.deviceId;
                             selectedCamera = device.label;
                             break;
                         }
                     }
                     
-                    // If still not found, use the last camera (usually back camera on mobile)
-                    if (!backCameraId && videoDevices.length > 1) {
-                        backCameraId = videoDevices[videoDevices.length - 1].deviceId;
-                        selectedCamera = videoDevices[videoDevices.length - 1].label + ' (last camera)';
+                    // If still not found, use the first camera (usually front camera on mobile)
+                    if (!frontCameraId && videoDevices.length > 0) {
+                        frontCameraId = videoDevices[0].deviceId;
+                        selectedCamera = videoDevices[0].label + ' (first camera)';
                     }
                     
-                    if (backCameraId) {
+                    if (frontCameraId) {
                         stream = await navigator.mediaDevices.getUserMedia({
                             video: {
-                                deviceId: { exact: backCameraId },
+                                deviceId: { exact: frontCameraId },
                                 width: { ideal: 1920 },
                                 height: { ideal: 1080 }
                             }
                         });
                     } else {
-                        throw new Error('Back camera not found');
+                        throw new Error('Front camera not found');
                     }
                 }
                 
