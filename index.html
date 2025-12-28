@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Hand Tracking - World Locked</title>
+    <title>AR Cardboard Passthrough</title>
     <style>
         * {
             margin: 0;
@@ -26,25 +26,20 @@
             z-index: 1;
         }
 
-        #canvas {
+        .split-view {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
             z-index: 2;
-            pointer-events: none;
         }
 
-        .ui-container {
-            position: fixed;
-            top: 0;
-            left: 0;
+        .eye {
             width: 100%;
             height: 100%;
-            z-index: 3;
-            pointer-events: none;
-            transform-origin: center center;
+            position: relative;
+            overflow: hidden;
         }
 
         .icon {
@@ -56,8 +51,7 @@
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            transition: transform 0.2s ease, filter 0.2s ease;
-            pointer-events: auto;
+            transition: transform 0.2s ease;
         }
 
         .icon img {
@@ -67,13 +61,8 @@
             filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.3));
         }
 
-        .icon.hovering {
-            transform: scale(1.3);
-            filter: brightness(1.2);
-        }
-
-        .icon.hovering img {
-            filter: drop-shadow(0 5px 15px rgba(255, 255, 255, 0.8));
+        .icon:hover {
+            transform: scale(1.15);
         }
 
         .icon-label {
@@ -88,11 +77,30 @@
             white-space: nowrap;
         }
 
-        /* Icon positions - World-locked positions */
-        .icon1 { top: 50%; left: 50%; margin-left: -210px; margin-top: -22.5px; }
-        .icon2 { top: 50%; left: 50%; margin-left: -70px; margin-top: -22.5px; }
-        .icon3 { top: 50%; left: 50%; margin-left: 70px; margin-top: -22.5px; }
-        .icon4 { top: 50%; left: 50%; margin-left: 210px; margin-top: -22.5px; }
+        /* Row 2 - Middle (only row) - Centered with 140px spacing */
+        .icon5 { top: 50%; left: 50%; transform: translate(-210px, -50%); }
+        .icon6 { top: 50%; left: 50%; transform: translate(-70px, -50%); }
+        .icon7 { top: 50%; left: 50%; transform: translate(70px, -50%); }
+        .icon8 { top: 50%; left: 50%; transform: translate(210px, -50%); }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0px);
+            }
+            50% {
+                transform: translateY(-3px);
+            }
+        }
+
+        .icon::before {
+            display: none;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 0;
+            }
+        }
 
         #start-button {
             position: fixed;
@@ -118,408 +126,73 @@
         .hidden {
             display: none;
         }
-
-        .cursor {
-            position: fixed;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: rgba(0, 122, 255, 0.8);
-            border: 3px solid white;
-            box-shadow: 0 0 20px rgba(0, 122, 255, 0.8);
-            pointer-events: none;
-            z-index: 10;
-            transform: translate(-50%, -50%);
-        }
-
-        .cursor.pinching {
-            background: rgba(255, 45, 85, 0.9);
-            box-shadow: 0 0 30px rgba(255, 45, 85, 1);
-            transform: translate(-50%, -50%) scale(1.5);
-        }
-
-        #loading {
-            position: fixed;
-            top: 60%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-size: 14px;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
-            z-index: 101;
-        }
-
-        #debug {
-            position: fixed;
-            top: 10px;
-            left: 10px;
-            color: white;
-            font-size: 11px;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
-            z-index: 101;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 10px;
-            border-radius: 5px;
-            max-width: 90%;
-            font-family: monospace;
-        }
-
-        #camera-info {
-            position: fixed;
-            bottom: 10px;
-            left: 10px;
-            color: white;
-            font-size: 10px;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
-            z-index: 101;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 10px;
-            border-radius: 5px;
-            max-width: 90%;
-            font-family: monospace;
-        }
     </style>
 </head>
 <body>
-    <button id="start-button">Start AR Hand Tracking</button>
-    <div id="loading" class="hidden">Loading hand tracking...</div>
-    <div id="debug" class="hidden"></div>
-    <div id="camera-info" class="hidden"></div>
+    <button id="start-button">Start AR Experience</button>
     
     <video id="camera" autoplay playsinline></video>
-    <canvas id="canvas"></canvas>
     
-    <div class="ui-container hidden" id="ui-container">
-        <div class="icon icon1" data-app="ai">
-            <img src="https://cdn-icons-png.flaticon.com/512/8943/8943377.png" alt="AI">
-            <span class="icon-label">AI Assistant</span>
-        </div>
-        <div class="icon icon2" data-app="gmail">
-            <img src="https://cdn-icons-png.flaticon.com/512/5968/5968534.png" alt="Gmail">
-            <span class="icon-label">Gmail</span>
-        </div>
-        <div class="icon icon3" data-app="appstore">
-            <img src="https://cdn-icons-png.flaticon.com/512/888/888841.png" alt="App Store">
-            <span class="icon-label">App Store</span>
-        </div>
-        <div class="icon icon4" data-app="music">
-            <img src="https://cdn-icons-png.flaticon.com/512/5968/5968959.png" alt="Apple Music">
-            <span class="icon-label">Apple Music</span>
+    <div class="split-view hidden" id="split-view">
+        <!-- Single View -->
+        <div class="eye">
+            <!-- Row 2 (only row) -->
+            <div class="icon icon5">
+                <img src="https://cdn-icons-png.flaticon.com/512/8943/8943377.png" alt="AI">
+                <span class="icon-label">AI Assistant</span>
+            </div>
+            <div class="icon icon6">
+                <img src="https://cdn-icons-png.flaticon.com/512/5968/5968534.png" alt="Gmail">
+                <span class="icon-label">Gmail</span>
+            </div>
+            <div class="icon icon7">
+                <img src="https://cdn-icons-png.flaticon.com/512/888/888841.png" alt="App Store">
+                <span class="icon-label">App Store</span>
+            </div>
+            <div class="icon icon8">
+                <img src="https://cdn-icons-png.flaticon.com/512/5968/5968959.png" alt="Apple Music">
+                <span class="icon-label">Apple Music</span>
+            </div>
         </div>
     </div>
 
-    <div class="cursor hidden" id="cursor"></div>
-
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
-
     <script>
         const startButton = document.getElementById('start-button');
-        const loading = document.getElementById('loading');
         const camera = document.getElementById('camera');
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const uiContainer = document.getElementById('ui-container');
-        const cursor = document.getElementById('cursor');
-        const icons = document.querySelectorAll('.icon');
-        const debugDiv = document.getElementById('debug');
-        const cameraInfoDiv = document.getElementById('camera-info');
-
-        let hands;
-        let cameraInstance;
-        let isTracking = false;
-        let lastPinchTime = 0;
-        let currentHoveredIcon = null;
-
-        // Gyroscope data
-        let gyroAlpha = 0;  // Rotation around Z axis (compass)
-        let gyroBeta = 0;   // Rotation around X axis (tilt forward/back)
-        let gyroGamma = 0;  // Rotation around Y axis (tilt left/right)
-        let initialAlpha = null;
-        let initialBeta = null;
-        let initialGamma = null;
+        const splitView = document.getElementById('split-view');
 
         startButton.addEventListener('click', async () => {
             try {
-                startButton.classList.add('hidden');
-                loading.classList.remove('hidden');
-
-                // Request device orientation permission (iOS 13+)
-                if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                    const permission = await DeviceOrientationEvent.requestPermission();
-                    if (permission !== 'granted') {
-                        alert('Device orientation permission denied');
-                        loading.classList.add('hidden');
-                        startButton.classList.remove('hidden');
-                        return;
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'environment',
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
                     }
-                }
-
-                // Get camera stream - FORCE FRONT CAMERA
-                let stream;
-                let selectedCamera = null;
-                
-                // First, enumerate all cameras
-                const devices = await navigator.mediaDevices.enumerateDevices();
-                const videoDevices = devices.filter(d => d.kind === 'videoinput');
-                
-                // Display all available cameras
-                let cameraListHTML = '<strong>Available Cameras:</strong><br>';
-                videoDevices.forEach((device, index) => {
-                    cameraListHTML += `${index + 1}. ${device.label || 'Camera ' + (index + 1)}<br>`;
                 });
-                
-                try {
-                    // Try with exact user (front camera) first
-                    stream = await navigator.mediaDevices.getUserMedia({
-                        video: {
-                            facingMode: { exact: 'user' },
-                            width: { ideal: 1920 },
-                            height: { ideal: 1080 }
-                        }
-                    });
-                    selectedCamera = 'facingMode: user (front)';
-                } catch (err) {
-                    // Fallback: Find front camera by label
-                    let frontCameraId = null;
-                    for (let device of videoDevices) {
-                        const label = device.label.toLowerCase();
-                        if (label.includes('front') || label.includes('user') || label.includes('facing front')) {
-                            frontCameraId = device.deviceId;
-                            selectedCamera = device.label;
-                            break;
-                        }
-                    }
-                    
-                    // If still not found, use the first camera (usually front camera on mobile)
-                    if (!frontCameraId && videoDevices.length > 0) {
-                        frontCameraId = videoDevices[0].deviceId;
-                        selectedCamera = videoDevices[0].label + ' (first camera)';
-                    }
-                    
-                    if (frontCameraId) {
-                        stream = await navigator.mediaDevices.getUserMedia({
-                            video: {
-                                deviceId: { exact: frontCameraId },
-                                width: { ideal: 1920 },
-                                height: { ideal: 1080 }
-                            }
-                        });
-                    } else {
-                        throw new Error('Front camera not found');
-                    }
-                }
-                
-                // Get actual track info
-                const videoTrack = stream.getVideoTracks()[0];
-                const settings = videoTrack.getSettings();
-                
-                // Display camera info
-                cameraListHTML += '<br><strong style="color: #00ff00;">🎥 ACTIVE CAMERA:</strong><br>';
-                cameraListHTML += `Label: ${videoTrack.label}<br>`;
-                cameraListHTML += `Facing Mode: ${settings.facingMode || 'unknown'}<br>`;
-                cameraListHTML += `Resolution: ${settings.width}x${settings.height}<br>`;
-                cameraListHTML += `Device ID: ${settings.deviceId ? settings.deviceId.substring(0, 20) + '...' : 'N/A'}`;
-                
-                cameraInfoDiv.innerHTML = cameraListHTML;
-                cameraInfoDiv.classList.remove('hidden');
 
                 camera.srcObject = stream;
+                startButton.classList.add('hidden');
+                splitView.classList.remove('hidden');
 
-                // Wait for video to be ready
-                await new Promise((resolve) => {
-                    camera.onloadedmetadata = () => {
-                        canvas.width = camera.videoWidth;
-                        canvas.height = camera.videoHeight;
-                        resolve();
-                    };
-                });
-
-                // Initialize MediaPipe Hands
-                hands = new Hands({
-                    locateFile: (file) => {
-                        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-                    }
-                });
-
-                hands.setOptions({
-                    maxNumHands: 1,
-                    modelComplexity: 1,
-                    minDetectionConfidence: 0.7,
-                    minTrackingConfidence: 0.7
-                });
-
-                hands.onResults(onResults);
-
-                // Start camera processing
-                cameraInstance = new Camera(camera, {
-                    onFrame: async () => {
-                        if (isTracking) {
-                            await hands.send({ image: camera });
-                        }
-                    },
-                    width: 1920,
-                    height: 1080
-                });
-
-                await cameraInstance.start();
-
-                // Start gyroscope tracking
-                window.addEventListener('deviceorientation', handleOrientation, true);
-
-                loading.classList.add('hidden');
-                uiContainer.classList.remove('hidden');
-                cursor.classList.remove('hidden');
-                debugDiv.classList.remove('hidden');
-                isTracking = true;
-
-                // Make fullscreen automatically
-                setTimeout(() => {
-                    if (document.documentElement.requestFullscreen) {
-                        document.documentElement.requestFullscreen();
-                    } else if (document.documentElement.webkitRequestFullscreen) {
-                        document.documentElement.webkitRequestFullscreen();
-                    } else if (document.documentElement.mozRequestFullScreen) {
-                        document.documentElement.mozRequestFullScreen();
-                    } else if (document.documentElement.msRequestFullscreen) {
-                        document.documentElement.msRequestFullscreen();
-                    }
-                }, 100);
+                // Make fullscreen
+                if (document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen();
+                }
             } catch (err) {
-                alert('Error: ' + err.message);
-                loading.classList.add('hidden');
-                startButton.classList.remove('hidden');
+                alert('Camera access denied: ' + err.message);
             }
         });
 
-        function handleOrientation(event) {
-            gyroAlpha = event.alpha || 0;  // 0-360 degrees (compass)
-            gyroBeta = event.beta || 0;    // -180 to 180 degrees (front/back tilt)
-            gyroGamma = event.gamma || 0;  // -90 to 90 degrees (left/right tilt)
-
-            // Set initial position (calibrate)
-            if (initialAlpha === null) {
-                initialAlpha = gyroAlpha;
-                initialBeta = gyroBeta;
-                initialGamma = gyroGamma;
-            }
-
-            // Calculate rotation deltas
-            let deltaAlpha = gyroAlpha - initialAlpha;
-            let deltaBeta = gyroBeta - initialBeta;
-            let deltaGamma = gyroGamma - initialGamma;
-
-            // Apply rotation to UI container (icons stay in world space)
-            // Multiply by sensitivity factor to control how much icons move
-            const sensitivity = 2;
-            const rotateY = deltaGamma * sensitivity;  // Left/Right head movement
-            const rotateX = -deltaBeta * sensitivity;  // Up/Down head movement
-
-            uiContainer.style.transform = `rotateY(${rotateY}deg) rotateX(${rotateX}deg)`;
-
-            // Debug info
-            debugDiv.innerHTML = `
-                Gyro: α:${gyroAlpha.toFixed(1)}° β:${gyroBeta.toFixed(1)}° γ:${gyroGamma.toFixed(1)}°<br>
-                Delta: Y:${rotateY.toFixed(1)}° X:${rotateX.toFixed(1)}°
-            `;
-        }
-
-        function onResults(results) {
-            // Clear canvas
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                const landmarks = results.multiHandLandmarks[0];
-                
-                // Draw hand skeleton
-                drawConnectors(ctx, landmarks, HAND_CONNECTIONS, { color: 'rgba(0, 255, 255, 0.3)', lineWidth: 2 });
-                drawLandmarks(ctx, landmarks, { color: 'rgba(255, 255, 255, 0.5)', lineWidth: 1, radius: 3 });
-
-                // Get index finger tip (landmark 8)
-                const indexTip = landmarks[8];
-                const indexTipX = indexTip.x * window.innerWidth;
-                const indexTipY = indexTip.y * window.innerHeight;
-
-                // Get thumb tip (landmark 4)
-                const thumbTip = landmarks[4];
-                const thumbTipX = thumbTip.x * window.innerWidth;
-                const thumbTipY = thumbTip.y * window.innerHeight;
-
-                // Calculate distance for pinch detection
-                const distance = Math.sqrt(
-                    Math.pow(indexTipX - thumbTipX, 2) + 
-                    Math.pow(indexTipY - thumbTipY, 2)
-                );
-
-                const isPinching = distance < 40;
-
-                // Update cursor position
-                cursor.style.left = indexTipX + 'px';
-                cursor.style.top = indexTipY + 'px';
-
-                if (isPinching) {
-                    cursor.classList.add('pinching');
-                } else {
-                    cursor.classList.remove('pinching');
-                }
-
-                // Check icon hover and click
-                let hoveredIcon = null;
-                icons.forEach(icon => {
-                    const rect = icon.getBoundingClientRect();
-                    const isHovering = (
-                        indexTipX >= rect.left &&
-                        indexTipX <= rect.right &&
-                        indexTipY >= rect.top &&
-                        indexTipY <= rect.bottom
-                    );
-
-                    if (isHovering) {
-                        hoveredIcon = icon;
-                        icon.classList.add('hovering');
-
-                        // Click on pinch
-                        if (isPinching && Date.now() - lastPinchTime > 500) {
-                            lastPinchTime = Date.now();
-                            const appName = icon.dataset.app;
-                            handleAppClick(appName);
-                        }
-                    } else {
-                        icon.classList.remove('hovering');
-                    }
-                });
-
-                currentHoveredIcon = hoveredIcon;
-            } else {
-                // No hand detected
-                cursor.style.display = 'none';
-                icons.forEach(icon => icon.classList.remove('hovering'));
-                currentHoveredIcon = null;
-            }
-
-            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                cursor.style.display = 'block';
-            }
-        }
-
-        function handleAppClick(appName) {
-            // Visual feedback
-            const clickedIcon = document.querySelector(`[data-app="${appName}"]`);
-            const originalTransform = clickedIcon.style.transform;
-            clickedIcon.style.transform = 'scale(0.9)';
-            setTimeout(() => {
-                clickedIcon.style.transform = originalTransform;
-            }, 200);
-
-            // Haptic feedback (if supported)
-            if (navigator.vibrate) {
-                navigator.vibrate(50);
-            }
-
-            // Alert (replace with actual app launch logic)
-            alert(`Opening ${appName}!`);
-        }
+        // Add click interaction to icons
+        document.querySelectorAll('.icon').forEach(icon => {
+            icon.addEventListener('click', function() {
+                this.style.transform = 'scale(1.3)';
+                setTimeout(() => {
+                    this.style.transform = '';
+                }, 200);
+            });
+        });
     </script>
 </body>
 </html>
