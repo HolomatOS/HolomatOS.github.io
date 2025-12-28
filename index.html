@@ -207,29 +207,12 @@
                 startButton.classList.add('hidden');
                 loading.classList.remove('hidden');
 
-                // Get all available video devices
-                const devices = await navigator.mediaDevices.enumerateDevices();
-                const videoDevices = devices.filter(device => device.kind === 'videoinput');
-                
-                // Find back camera (usually the last one or labeled as 'back'/'environment')
-                let backCamera = videoDevices.find(device => 
-                    device.label.toLowerCase().includes('back') || 
-                    device.label.toLowerCase().includes('rear') ||
-                    device.label.toLowerCase().includes('environment')
-                );
-                
-                // If not found by label, use the last camera (usually back on mobile)
-                if (!backCamera && videoDevices.length > 0) {
-                    backCamera = videoDevices[videoDevices.length - 1];
-                }
-
-                // Get camera stream (BACK CAMERA)
+                // Get camera stream - BACK CAMERA (same as working code)
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: {
-                        deviceId: backCamera ? { exact: backCamera.deviceId } : undefined,
-                        facingMode: { ideal: 'environment' },
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
+                        facingMode: 'environment',
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
                     }
                 });
 
@@ -267,8 +250,8 @@
                             await hands.send({ image: camera });
                         }
                     },
-                    width: 1280,
-                    height: 720
+                    width: 1920,
+                    height: 1080
                 });
 
                 await cameraInstance.start();
