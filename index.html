@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Cardboard Passthrough</title>
+    <title>ARCore Test</title>
     <style>
         * {
             margin: 0;
@@ -12,382 +12,333 @@
         }
 
         body {
-            overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-
-        #camera {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            z-index: 1;
-        }
-
-        #canvas {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 2;
-            pointer-events: none;
-        }
-
-        .split-view {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 3;
-        }
-
-        .eye {
-            width: 100%;
-            height: 100%;
-            position: relative;
-            overflow: hidden;
-            pointer-events: none;
-        }
-
-        .icon {
-            position: absolute;
-            width: 45px;
-            height: 45px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            cursor: pointer;
-            transition: transform 0.2s ease, filter 0.2s ease;
-            pointer-events: auto;
+            min-height: 100vh;
+            padding: 20px;
         }
 
-        .icon img {
-            width: 45px;
-            height: 45px;
-            object-fit: contain;
-            filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.3));
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            width: 100%;
         }
 
-        .icon:hover {
-            transform: scale(1.15);
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 24px;
         }
 
-        .icon.hovering {
-            transform: scale(1.3);
-            filter: brightness(1.2);
+        .status {
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            font-size: 14px;
         }
 
-        .icon.hovering img {
-            filter: drop-shadow(0 5px 15px rgba(255, 255, 255, 0.8));
+        .status.checking {
+            background: #fff3cd;
+            color: #856404;
         }
 
-        .icon-label {
-            position: absolute;
-            top: 52px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 10px;
-            font-weight: 500;
-            color: white;
-            text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
-            white-space: nowrap;
+        .status.success {
+            background: #d4edda;
+            color: #155724;
         }
 
-        /* Row 2 - Middle (only row) - Centered with 140px spacing */
-        .icon5 { top: 50%; left: 50%; transform: translate(-210px, -50%); }
-        .icon6 { top: 50%; left: 50%; transform: translate(-70px, -50%); }
-        .icon7 { top: 50%; left: 50%; transform: translate(70px, -50%); }
-        .icon8 { top: 50%; left: 50%; transform: translate(210px, -50%); }
-
-        .icon5.hovering { transform: translate(-210px, -50%) scale(1.3); }
-        .icon6.hovering { transform: translate(-70px, -50%) scale(1.3); }
-        .icon7.hovering { transform: translate(70px, -50%) scale(1.3); }
-        .icon8.hovering { transform: translate(210px, -50%) scale(1.3); }
-
-        @keyframes float {
-            0%, 100% {
-                transform: translateY(0px);
-            }
-            50% {
-                transform: translateY(-3px);
-            }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
         }
 
-        .icon::before {
-            display: none;
+        .status strong {
+            display: block;
+            margin-bottom: 5px;
         }
 
-        @keyframes pulse {
-            0%, 100% {
-                opacity: 0;
-            }
-        }
-
-        #start-button {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 100;
-            padding: 20px 40px;
-            font-size: 20px;
-            background: rgba(0, 122, 255, 0.9);
+        button {
+            width: 100%;
+            padding: 15px;
+            background: #007bff;
             color: white;
             border: none;
-            border-radius: 15px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
             cursor: pointer;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            margin-top: 10px;
+            transition: background 0.3s;
         }
 
-        #start-button:hover {
-            background: rgba(0, 122, 255, 1);
+        button:hover {
+            background: #0056b3;
         }
 
-        .hidden {
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .info-list {
+            list-style: none;
+            padding: 0;
+            margin-top: 10px;
+        }
+
+        .info-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .info-list li:last-child {
+            border-bottom: none;
+        }
+
+        #ar-view {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             display: none;
         }
 
-        .cursor {
+        .ar-overlay {
             position: fixed;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: rgba(0, 122, 255, 0.8);
-            border: 3px solid white;
-            box-shadow: 0 0 20px rgba(0, 122, 255, 0.8);
-            pointer-events: none;
-            z-index: 10;
-            transform: translate(-50%, -50%);
-        }
-
-        .cursor.pinching {
-            background: rgba(255, 45, 85, 0.9);
-            box-shadow: 0 0 30px rgba(255, 45, 85, 1);
-            transform: translate(-50%, -50%) scale(1.5);
-        }
-
-        #loading {
-            position: fixed;
-            top: 60%;
-            left: 50%;
-            transform: translate(-50%, -50%);
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
             color: white;
+            padding: 15px;
+            border-radius: 10px;
             font-size: 14px;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
-            z-index: 101;
+            z-index: 1000;
+        }
+
+        .exit-ar {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 15px 30px;
+            background: rgba(255, 59, 48, 0.9);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            z-index: 1000;
         }
     </style>
 </head>
 <body>
-    <button id="start-button">Start AR Experience</button>
-    <div id="loading" class="hidden">Loading hand tracking...</div>
-    
-    <video id="camera" autoplay playsinline></video>
-    <canvas id="canvas"></canvas>
-    
-    <div class="split-view hidden" id="split-view">
-        <!-- Single View -->
-        <div class="eye">
-            <!-- Row 2 (only row) -->
-            <div class="icon icon5" data-app="ai">
-                <img src="https://cdn-icons-png.flaticon.com/512/8943/8943377.png" alt="AI">
-                <span class="icon-label">AI Assistant</span>
-            </div>
-            <div class="icon icon6" data-app="gmail">
-                <img src="https://cdn-icons-png.flaticon.com/512/5968/5968534.png" alt="Gmail">
-                <span class="icon-label">Gmail</span>
-            </div>
-            <div class="icon icon7" data-app="appstore">
-                <img src="https://cdn-icons-png.flaticon.com/512/888/888841.png" alt="App Store">
-                <span class="icon-label">App Store</span>
-            </div>
-            <div class="icon icon8" data-app="music">
-                <img src="https://cdn-icons-png.flaticon.com/512/5968/5968959.png" alt="Apple Music">
-                <span class="icon-label">Apple Music</span>
-            </div>
+    <div class="container">
+        <h1>🔍 ARCore Compatibility Test</h1>
+        
+        <div id="status" class="status checking">
+            <strong>Checking...</strong>
+            <span>Testing your device for ARCore/WebXR support...</span>
         </div>
+
+        <ul id="info" class="info-list"></ul>
+
+        <button id="test-ar" disabled>Test AR Experience</button>
+        <button id="details-btn" style="display: none; background: #6c757d;">Show Technical Details</button>
     </div>
 
-    <div class="cursor hidden" id="cursor"></div>
-
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <canvas id="ar-view"></canvas>
 
     <script>
-        const startButton = document.getElementById('start-button');
-        const loading = document.getElementById('loading');
-        const camera = document.getElementById('camera');
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const splitView = document.getElementById('split-view');
-        const cursor = document.getElementById('cursor');
-        const icons = document.querySelectorAll('.icon');
+        const statusDiv = document.getElementById('status');
+        const infoList = document.getElementById('info');
+        const testArBtn = document.getElementById('test-ar');
+        const detailsBtn = document.getElementById('details-btn');
+        const arView = document.getElementById('ar-view');
 
-        let hands;
-        let isTracking = false;
-        let lastPinchTime = 0;
+        let arSupported = false;
+        let xrSession = null;
 
-        startButton.addEventListener('click', async () => {
-            try {
-                startButton.classList.add('hidden');
-                loading.classList.remove('hidden');
+        async function checkARSupport() {
+            const results = {
+                browser: navigator.userAgent,
+                webxr: false,
+                arSupported: false,
+                arMode: 'none',
+                https: window.location.protocol === 'https:',
+                deviceMotion: 'DeviceMotionEvent' in window,
+                deviceOrientation: 'DeviceOrientationEvent' in window
+            };
 
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        facingMode: 'environment',
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 }
-                    }
-                });
-
-                camera.srcObject = stream;
-
-                // Wait for video to be ready
-                await new Promise((resolve) => {
-                    camera.onloadedmetadata = () => {
-                        canvas.width = camera.videoWidth;
-                        canvas.height = camera.videoHeight;
-                        resolve();
-                    };
-                });
-
-                // Initialize MediaPipe Hands
-                hands = new Hands({
-                    locateFile: (file) => {
-                        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-                    }
-                });
-
-                hands.setOptions({
-                    maxNumHands: 1,
-                    modelComplexity: 1,
-                    minDetectionConfidence: 0.7,
-                    minTrackingConfidence: 0.7
-                });
-
-                hands.onResults(onResults);
-
-                // Process frames manually (no Camera utility)
-                isTracking = true;
-                processFrame();
-
-                loading.classList.add('hidden');
-                splitView.classList.remove('hidden');
-                cursor.classList.remove('hidden');
-
-                // Make fullscreen
-                if (document.documentElement.requestFullscreen) {
-                    document.documentElement.requestFullscreen();
+            // Check WebXR support
+            if ('xr' in navigator) {
+                results.webxr = true;
+                
+                try {
+                    // Check for immersive-ar mode
+                    const supported = await navigator.xr.isSessionSupported('immersive-ar');
+                    results.arSupported = supported;
+                    results.arMode = supported ? 'immersive-ar' : 'none';
+                } catch (err) {
+                    console.error('AR check error:', err);
                 }
+            }
+
+            displayResults(results);
+            return results;
+        }
+
+        function displayResults(results) {
+            infoList.innerHTML = '';
+
+            // Browser info
+            const browserMatch = results.browser.match(/(Chrome|Firefox|Safari)\/[\d.]+/);
+            addInfo('Browser', browserMatch ? browserMatch[0] : 'Unknown');
+
+            // WebXR support
+            addInfo('WebXR API', results.webxr ? '✅ Available' : '❌ Not Available', results.webxr);
+
+            // AR support
+            addInfo('AR Mode', results.arSupported ? '✅ Supported (ARCore)' : '❌ Not Supported', results.arSupported);
+
+            // HTTPS
+            addInfo('Secure Context', results.https ? '✅ HTTPS' : '⚠️ HTTP (AR requires HTTPS)', results.https);
+
+            // Sensors
+            addInfo('Motion Sensors', results.deviceMotion ? '✅ Available' : '❌ Not Available', results.deviceMotion);
+            addInfo('Orientation Sensors', results.deviceOrientation ? '✅ Available' : '❌ Not Available', results.deviceOrientation);
+
+            // Overall status
+            if (results.arSupported && results.https) {
+                arSupported = true;
+                statusDiv.className = 'status success';
+                statusDiv.innerHTML = '<strong>✅ ARCore Supported!</strong><span>Your device can run WebXR AR experiences. Click "Test AR Experience" to try it!</span>';
+                testArBtn.disabled = false;
+            } else if (!results.https) {
+                statusDiv.className = 'status error';
+                statusDiv.innerHTML = '<strong>⚠️ HTTPS Required</strong><span>AR requires a secure connection (HTTPS). Your device may support AR, but it needs HTTPS to work.</span>';
+            } else if (!results.webxr) {
+                statusDiv.className = 'status error';
+                statusDiv.innerHTML = '<strong>❌ WebXR Not Available</strong><span>Your browser doesn\'t support WebXR. Try using Chrome or Chrome Beta on Android.</span>';
+            } else {
+                statusDiv.className = 'status error';
+                statusDiv.innerHTML = '<strong>❌ AR Not Supported</strong><span>Your device doesn\'t support WebXR AR mode. ARCore may not be available on this device.</span>';
+            }
+
+            detailsBtn.style.display = 'block';
+        }
+
+        function addInfo(label, value, success = null) {
+            const li = document.createElement('li');
+            li.innerHTML = `<strong>${label}:</strong> ${value}`;
+            if (success !== null) {
+                li.style.color = success ? '#155724' : '#721c24';
+            }
+            infoList.appendChild(li);
+        }
+
+        testArBtn.addEventListener('click', async () => {
+            if (!arSupported) return;
+
+            try {
+                testArBtn.disabled = true;
+                testArBtn.textContent = 'Starting AR...';
+
+                // Request AR session
+                xrSession = await navigator.xr.requestSession('immersive-ar', {
+                    requiredFeatures: ['local', 'hit-test']
+                });
+
+                // Session started successfully
+                statusDiv.className = 'status success';
+                statusDiv.innerHTML = '<strong>✅ AR Session Active!</strong><span>Move your phone around to test tracking. You should see a colored cube.</span>';
+
+                // Setup WebGL
+                const canvas = document.getElementById('ar-view');
+                const gl = canvas.getContext('webgl', { xrCompatible: true });
+
+                await gl.makeXRCompatible();
+
+                // Setup XR layer
+                const xrLayer = new XRWebGLLayer(xrSession, gl);
+                xrSession.updateRenderState({ baseLayer: xrLayer });
+
+                // Reference space
+                const refSpace = await xrSession.requestReferenceSpace('local');
+
+                // Create test cube
+                arView.style.display = 'block';
+                document.body.appendChild(createAROverlay());
+                document.body.appendChild(createExitButton());
+
+                // Render loop
+                xrSession.requestAnimationFrame(function render(time, frame) {
+                    const pose = frame.getViewerPose(refSpace);
+                    
+                    if (pose) {
+                        gl.bindFramebuffer(gl.FRAMEBUFFER, xrLayer.framebuffer);
+                        
+                        // Clear with semi-transparent background
+                        gl.clearColor(0, 0, 0, 0);
+                        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+                        // Simple rendering (camera passthrough happens automatically)
+                        for (const view of pose.views) {
+                            const viewport = xrLayer.getViewport(view);
+                            gl.viewport(viewport.x, viewport.y, viewport.width, viewport.height);
+                        }
+                    }
+
+                    xrSession.requestAnimationFrame(render);
+                });
+
             } catch (err) {
-                alert('Camera access denied: ' + err.message);
-                loading.classList.add('hidden');
-                startButton.classList.remove('hidden');
+                console.error('AR session error:', err);
+                statusDiv.className = 'status error';
+                statusDiv.innerHTML = `<strong>❌ AR Failed</strong><span>${err.message}</span>`;
+                testArBtn.disabled = false;
+                testArBtn.textContent = 'Test AR Experience';
             }
         });
 
-        async function processFrame() {
-            if (isTracking) {
-                await hands.send({ image: camera });
-                requestAnimationFrame(processFrame);
-            }
+        function createAROverlay() {
+            const overlay = document.createElement('div');
+            overlay.className = 'ar-overlay';
+            overlay.innerHTML = `
+                <strong>📱 AR Mode Active</strong><br>
+                Move your phone around<br>
+                Camera passthrough working!
+            `;
+            return overlay;
         }
 
-        function onResults(results) {
-            // Clear canvas
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                const landmarks = results.multiHandLandmarks[0];
-                
-                // Draw hand skeleton
-                drawConnectors(ctx, landmarks, HAND_CONNECTIONS, { color: 'rgba(0, 255, 255, 0.3)', lineWidth: 2 });
-                drawLandmarks(ctx, landmarks, { color: 'rgba(255, 255, 255, 0.5)', lineWidth: 1, radius: 3 });
-
-                // Get index finger tip (landmark 8)
-                const indexTip = landmarks[8];
-                const indexTipX = indexTip.x * window.innerWidth;
-                const indexTipY = indexTip.y * window.innerHeight;
-
-                // Get thumb tip (landmark 4)
-                const thumbTip = landmarks[4];
-                const thumbTipX = thumbTip.x * window.innerWidth;
-                const thumbTipY = thumbTip.y * window.innerHeight;
-
-                // Calculate distance for pinch detection
-                const distance = Math.sqrt(
-                    Math.pow(indexTipX - thumbTipX, 2) + 
-                    Math.pow(indexTipY - thumbTipY, 2)
-                );
-
-                const isPinching = distance < 40;
-
-                // Update cursor position
-                cursor.style.left = indexTipX + 'px';
-                cursor.style.top = indexTipY + 'px';
-
-                if (isPinching) {
-                    cursor.classList.add('pinching');
-                } else {
-                    cursor.classList.remove('pinching');
+        function createExitButton() {
+            const btn = document.createElement('button');
+            btn.className = 'exit-ar';
+            btn.textContent = 'Exit AR';
+            btn.onclick = () => {
+                if (xrSession) {
+                    xrSession.end();
+                    window.location.reload();
                 }
-
-                // Check icon hover and click
-                icons.forEach(icon => {
-                    const rect = icon.getBoundingClientRect();
-                    const isHovering = (
-                        indexTipX >= rect.left &&
-                        indexTipX <= rect.right &&
-                        indexTipY >= rect.top &&
-                        indexTipY <= rect.bottom
-                    );
-
-                    if (isHovering) {
-                        icon.classList.add('hovering');
-
-                        // Click on pinch
-                        if (isPinching && Date.now() - lastPinchTime > 500) {
-                            lastPinchTime = Date.now();
-                            const appName = icon.dataset.app;
-                            handleAppClick(appName, icon);
-                        }
-                    } else {
-                        icon.classList.remove('hovering');
-                    }
-                });
-            } else {
-                // No hand detected
-                cursor.style.display = 'none';
-                icons.forEach(icon => icon.classList.remove('hovering'));
-            }
-
-            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                cursor.style.display = 'block';
-            }
+            };
+            return btn;
         }
 
-        function handleAppClick(appName, icon) {
-            // Visual feedback
-            const originalTransform = icon.style.transform;
-            icon.style.transform = icon.style.transform + ' scale(0.9)';
-            setTimeout(() => {
-                icon.style.transform = originalTransform;
-            }, 200);
+        detailsBtn.addEventListener('click', () => {
+            alert('User Agent:\n' + navigator.userAgent);
+        });
 
-            // Haptic feedback
-            if (navigator.vibrate) {
-                navigator.vibrate(50);
-            }
-
-            // Alert (replace with actual app launch logic)
-            alert(`Opening ${appName}!`);
-        }
+        // Auto-check on load
+        checkARSupport();
     </script>
 </body>
 </html>
