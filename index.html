@@ -32,93 +32,56 @@
             left: 0;
             width: 100%;
             height: 100%;
-            display: flex;
             z-index: 2;
         }
 
         .eye {
-            flex: 1;
+            width: 100%;
+            height: 100%;
             position: relative;
             overflow: hidden;
         }
 
-        .eye::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            width: 2px;
-            background: rgba(0, 0, 0, 0.5);
-            right: 0;
-            z-index: 10;
-        }
-
-        .eye:last-child::after {
-            display: none;
-        }
-
         .icon {
             position: absolute;
-            width: 90px;
-            height: 90px;
-            border-radius: 50%;
+            width: 35px;
+            height: 35px;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            background: rgba(255, 255, 255, 0.2);
-            backdrop-filter: blur(30px);
-            -webkit-backdrop-filter: blur(30px);
-            border: 2px solid rgba(255, 255, 255, 0.4);
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
             cursor: pointer;
             transition: transform 0.2s ease;
-            overflow: hidden;
         }
 
         .icon img {
-            width: 55px;
-            height: 55px;
+            width: 45px;
+            height: 45px;
             object-fit: contain;
+            filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.3));
         }
 
         .icon:hover {
-            transform: scale(1.1);
-            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.15);
         }
 
         .icon-label {
             position: absolute;
-            bottom: -30px;
+            top: 52px;
             left: 50%;
             transform: translateX(-50%);
-            font-size: 12px;
+            font-size: 10px;
             font-weight: 500;
             color: white;
-            text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
+            text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
             white-space: nowrap;
         }
 
-        /* Row 1 - Top */
-        .icon1 { top: 12%; left: 18%; }
-        .icon2 { top: 12%; left: 38%; }
-        .icon3 { top: 12%; left: 58%; }
-        .icon4 { top: 12%; left: 78%; }
-
-        /* Row 2 - Middle */
-        .icon5 { top: 38%; left: 13%; }
-        .icon6 { top: 38%; left: 33%; }
-        .icon7 { top: 38%; left: 53%; }
-        .icon8 { top: 38%; left: 73%; }
-
-        /* Row 3 - Bottom */
-        .icon9 { top: 64%; left: 23%; }
-        .icon10 { top: 64%; left: 43%; }
-        .icon11 { top: 64%; left: 63%; }
-        .icon12 { top: 64%; left: 83%; }
-
-        /* Left sidebar */
-        .sidebar { top: 30%; left: 3%; }
+        /* Row 2 - Middle (only row) - Centered with 140px spacing */
+        .icon5 { top: 50%; left: 50%; transform: translate(-210px, -50%); }
+        .icon6 { top: 50%; left: 50%; transform: translate(-70px, -50%); }
+        .icon7 { top: 50%; left: 50%; transform: translate(70px, -50%); }
+        .icon8 { top: 50%; left: 50%; transform: translate(210px, -50%); }
 
         @keyframes float {
             0%, 100% {
@@ -171,129 +134,24 @@
     <video id="camera" autoplay playsinline></video>
     
     <div class="split-view hidden" id="split-view">
-        <!-- Left Eye -->
+        <!-- Single View -->
         <div class="eye">
-            <!-- Sidebar -->
-            <div class="icon sidebar">
-                <img src="https://cdn-icons-png.flaticon.com/512/2040/2040504.png" alt="People">
-                <span class="icon-label">People</span>
-            </div>
-            
-            <!-- Row 1 -->
-            <div class="icon icon1">
-                <img src="https://cdn-icons-png.flaticon.com/512/5977/5977575.png" alt="TV">
-                <span class="icon-label">TV</span>
-            </div>
-            <div class="icon icon2">
-                <img src="https://cdn-icons-png.flaticon.com/512/2111/2111624.png" alt="Music">
-                <span class="icon-label">Music</span>
-            </div>
-            <div class="icon icon3">
-                <img src="https://cdn-icons-png.flaticon.com/512/2913/2913133.png" alt="Mindfulness">
-                <span class="icon-label">Mindfulness</span>
-            </div>
-            <div class="icon icon4">
-                <img src="https://cdn-icons-png.flaticon.com/512/2040/2040504.png" alt="Settings">
-                <span class="icon-label">Settings</span>
-            </div>
-
-            <!-- Row 2 -->
+            <!-- Row 2 (only row) -->
             <div class="icon icon5">
-                <img src="https://cdn-icons-png.flaticon.com/512/5968/5968534.png" alt="Freeform">
-                <span class="icon-label">Freeform</span>
+                <img src="https://cdn-icons-png.flaticon.com/512/8943/8943377.png" alt="AI">
+                <span class="icon-label">AI Assistant</span>
             </div>
             <div class="icon icon6">
-                <img src="https://cdn-icons-png.flaticon.com/512/565/565527.png" alt="Safari">
-                <span class="icon-label">Safari</span>
+                <img src="https://cdn-icons-png.flaticon.com/512/5968/5968534.png" alt="Gmail">
+                <span class="icon-label">Gmail</span>
             </div>
             <div class="icon icon7">
-                <img src="https://cdn-icons-png.flaticon.com/512/1829/1829589.png" alt="Photos">
-                <span class="icon-label">Photos</span>
+                <img src="https://cdn-icons-png.flaticon.com/512/888/888841.png" alt="App Store">
+                <span class="icon-label">Apple Store</span>
             </div>
             <div class="icon icon8">
-                <img src="https://cdn-icons-png.flaticon.com/512/2991/2991148.png" alt="Notes">
-                <span class="icon-label">Notes</span>
-            </div>
-
-            <!-- Row 3 -->
-            <div class="icon icon9">
-                <img src="https://cdn-icons-png.flaticon.com/512/732/732200.png" alt="Mail">
-                <span class="icon-label">Mail</span>
-            </div>
-            <div class="icon icon10">
-                <img src="https://cdn-icons-png.flaticon.com/512/134/134718.png" alt="Messages">
-                <span class="icon-label">Messages</span>
-            </div>
-            <div class="icon icon11">
-                <img src="https://cdn-icons-png.flaticon.com/512/2991/2991235.png" alt="Keynote">
-                <span class="icon-label">Keynote</span>
-            </div>
-            <div class="icon icon12">
-                <img src="https://cdn-icons-png.flaticon.com/512/2702/2702602.png" alt="Apps">
-                <span class="icon-label">Compatible Apps</span>
-            </div>
-        </div>
-
-        <!-- Right Eye -->
-        <div class="eye">
-            <!-- Sidebar -->
-            <div class="icon sidebar">
-                <img src="https://cdn-icons-png.flaticon.com/512/2040/2040504.png" alt="People">
-                <span class="icon-label">People</span>
-            </div>
-            
-            <!-- Row 1 -->
-            <div class="icon icon1">
-                <img src="https://cdn-icons-png.flaticon.com/512/5977/5977575.png" alt="TV">
-                <span class="icon-label">TV</span>
-            </div>
-            <div class="icon icon2">
-                <img src="https://cdn-icons-png.flaticon.com/512/2111/2111624.png" alt="Music">
-                <span class="icon-label">Music</span>
-            </div>
-            <div class="icon icon3">
-                <img src="https://cdn-icons-png.flaticon.com/512/2913/2913133.png" alt="Mindfulness">
-                <span class="icon-label">Mindfulness</span>
-            </div>
-            <div class="icon icon4">
-                <img src="https://cdn-icons-png.flaticon.com/512/2040/2040504.png" alt="Settings">
-                <span class="icon-label">Settings</span>
-            </div>
-
-            <!-- Row 2 -->
-            <div class="icon icon5">
-                <img src="https://cdn-icons-png.flaticon.com/512/5968/5968534.png" alt="Freeform">
-                <span class="icon-label">Freeform</span>
-            </div>
-            <div class="icon icon6">
-                <img src="https://cdn-icons-png.flaticon.com/512/565/565527.png" alt="Safari">
-                <span class="icon-label">Safari</span>
-            </div>
-            <div class="icon icon7">
-                <img src="https://cdn-icons-png.flaticon.com/512/1829/1829589.png" alt="Photos">
-                <span class="icon-label">Photos</span>
-            </div>
-            <div class="icon icon8">
-                <img src="https://cdn-icons-png.flaticon.com/512/2991/2991148.png" alt="Notes">
-                <span class="icon-label">Notes</span>
-            </div>
-
-            <!-- Row 3 -->
-            <div class="icon icon9">
-                <img src="https://cdn-icons-png.flaticon.com/512/732/732200.png" alt="Mail">
-                <span class="icon-label">Mail</span>
-            </div>
-            <div class="icon icon10">
-                <img src="https://cdn-icons-png.flaticon.com/512/134/134718.png" alt="Messages">
-                <span class="icon-label">Messages</span>
-            </div>
-            <div class="icon icon11">
-                <img src="https://cdn-icons-png.flaticon.com/512/2991/2991235.png" alt="Keynote">
-                <span class="icon-label">Keynote</span>
-            </div>
-            <div class="icon icon12">
-                <img src="https://cdn-icons-png.flaticon.com/512/2702/2702602.png" alt="Apps">
-                <span class="icon-label">Compatible Apps</span>
+                <img src="https://cdn-icons-png.flaticon.com/512/5968/5968959.png" alt="Apple Music">
+                <span class="icon-label">Spotify</span>
             </div>
         </div>
     </div>
