@@ -1,13 +1,12 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>My First AR Cube</title>
+  <title>Markerless AR Cube</title>
 
   <!-- A-Frame -->
   <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-
-  <!-- AR.js -->
-  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
+  <!-- WebXR AR hit test -->
+  <script src="https://cdn.jsdelivr.net/npm/aframe-extras@6.1.1/dist/aframe-extras.min.js"></script>
 
   <style>
     body, html {
@@ -42,24 +41,17 @@
 
   <button id="start-button">Start AR</button>
 
-  <a-scene id="ar-scene" embedded arjs="sourceType: webcam; debugUIEnabled: true" style="display:none;">
+  <a-scene id="ar-scene" embedded webxr="optionalFeatures: hit-test" xrweb="xrMode: ar" style="display:none;" vr-mode-ui="enabled: false">
 
-    <!-- Marker -->
-    <a-marker preset="hiro" emitevents="true">
-
-      <!-- 3D Cube -->
-      <a-box 
-        id="cube"
-        position="0 0.5 0" 
-        material="color: red; opacity: 0.8"
-        rotation="0 45 0"
-        animation="property: rotation; to: 0 405 0; loop: true; dur: 8000"
-      ></a-box>
-
-    </a-marker>
+    <!-- Cube placeholder (hidden until placed) -->
+    <a-box id="cube" position="0 0 0" depth="0.3" height="0.3" width="0.3"
+           material="color: red; opacity: 0.8"
+           rotation="0 45 0"
+           visible="false">
+    </a-box>
 
     <!-- Camera -->
-    <a-entity camera></a-entity>
+    <a-entity camera look-controls></a-entity>
 
     <!-- Lighting -->
     <a-light type="ambient" intensity="0.5"></a-light>
@@ -70,9 +62,9 @@
   <script>
     const startButton = document.getElementById('start-button');
     const arScene = document.getElementById('ar-scene');
-    const cube = document.querySelector('#cube');
+    const cube = document.getElementById('cube');
 
-    // Function to go fullscreen (cross-browser)
+    // Request fullscreen
     function goFullscreen() {
       const elem = document.documentElement;
       if (elem.requestFullscreen) elem.requestFullscreen();
@@ -81,18 +73,45 @@
       else if (elem.msRequestFullscreen) elem.msRequestFullscreen();
     }
 
-    // Start AR after user clicks button
-    startButton.addEventListener('click', () => {
-      // Hide start button
+    // Start AR on button click
+    startButton.addEventListener('click', async () => {
       startButton.style.display = 'none';
-
-      // Show AR scene
       arScene.style.display = 'block';
-
-      // Request fullscreen
       goFullscreen();
 
-      // Change cube color on tap
+      // Request AR session
+      if (navigator.xr) {
+        const session = await navigator.xr.requestSession('immersive-ar', {
+          requiredFeatures: ['hit-test', 'dom-overlay'],
+          domOverlay: { root: document.body }
+        });
+
+        const renderer = arScene.renderer;
+        renderer.xr.setSession(session);
+
+        const viewerSpace = await session.requestReferenceSpace('viewer');
+        const hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
+
+        const onXRFrame = (time, frame) => {
+          const referenceSpace = renderer.xr.getReferenceSpace();
+          const hitTestResults = frame.getHitTestResults(hitTestSource);
+
+          if (hitTestResults.length > 0 && !cube.getAttribute('visible')) {
+            const hit = hitTestResults[0];
+            const pose = hit.getPose(referenceSpace);
+
+            cube.setAttribute('position', `${pose.transform.position.x} ${pose.transform.position.y} ${pose.transform.position.z}`);
+            cube.setAttribute('visible', true);
+          }
+
+          session.requestAnimationFrame(onXRFrame);
+        };
+        session.requestAnimationFrame(onXRFrame);
+      } else {
+        alert('WebXR not supported on this device.');
+      }
+
+      // Tap to change cube color
       cube.addEventListener('click', () => {
         const colors = ['red', 'blue', 'green', 'yellow', 'purple', 'cyan'];
         const randomColor = colors[Math.floor(Math.random() * colors.length)];
