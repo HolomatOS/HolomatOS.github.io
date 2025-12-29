@@ -39,6 +39,25 @@
   </a-scene>
 
   <script>
+    // Request fullscreen on page load
+    function goFullscreen() {
+      const elem = document.documentElement;
+      if (elem.requestFullscreen) {
+        elem.requestFullscreen();
+      } else if (elem.mozRequestFullScreen) { /* Firefox */
+        elem.mozRequestFullScreen();
+      } else if (elem.webkitRequestFullscreen) { /* Chrome, Safari & Opera */
+        elem.webkitRequestFullscreen();
+      } else if (elem.msRequestFullscreen) { /* IE/Edge */
+        elem.msRequestFullscreen();
+      }
+    }
+
+    // Try fullscreen automatically
+    window.addEventListener('load', () => {
+      goFullscreen();
+    });
+
     // Change cube color on tap
     const cube = document.querySelector('#cube');
     cube.addEventListener('click', () => {
