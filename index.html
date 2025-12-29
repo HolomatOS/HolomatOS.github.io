@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ARCore Vision Pro Experience</title>
+    <title>AR Vision Pro Experience</title>
     <style>
         * {
             margin: 0;
@@ -14,6 +14,26 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             overflow: hidden;
+        }
+
+        #camera {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 1;
+        }
+
+        #canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
         }
 
         #start-container {
@@ -54,14 +74,6 @@
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
         }
 
-        #ar-canvas {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-        }
-
         .ar-ui {
             position: fixed;
             top: 0;
@@ -70,6 +82,10 @@
             height: 100%;
             pointer-events: none;
             z-index: 10;
+        }
+
+        .ar-ui.hidden {
+            display: none;
         }
 
         .instructions {
@@ -110,10 +126,6 @@
         .icon-preview img {
             width: 50px;
             height: 50px;
-        }
-
-        .icon-preview-text {
-            text-align: left;
         }
 
         .icon-preview-text strong {
@@ -183,6 +195,52 @@
             transform: translateX(-50%);
         }
 
+        .placed-icon {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            transition: transform 0.2s ease;
+            pointer-events: auto;
+        }
+
+        .placed-icon img {
+            width: 100%;
+            height: 100%;
+            filter: drop-shadow(0 5px 10px rgba(0, 0, 0, 0.4));
+        }
+
+        .placed-icon.hovering {
+            transform: scale(1.3);
+        }
+
+        .placed-icon.hovering img {
+            filter: drop-shadow(0 8px 20px rgba(255, 255, 255, 0.8));
+        }
+
+        .cursor {
+            position: fixed;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: rgba(0, 122, 255, 0.8);
+            border: 3px solid white;
+            box-shadow: 0 0 20px rgba(0, 122, 255, 0.8);
+            pointer-events: none;
+            z-index: 20;
+            transform: translate(-50%, -50%);
+            display: none;
+        }
+
+        .cursor.active {
+            display: block;
+        }
+
+        .cursor.pinching {
+            background: rgba(255, 45, 85, 0.9);
+            box-shadow: 0 0 30px rgba(255, 45, 85, 1);
+            transform: translate(-50%, -50%) scale(1.5);
+        }
+
         .complete-screen {
             position: fixed;
             top: 0;
@@ -223,30 +281,6 @@
             font-weight: 600;
             cursor: pointer;
         }
-
-        .cursor {
-            position: fixed;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: rgba(0, 122, 255, 0.8);
-            border: 3px solid white;
-            box-shadow: 0 0 20px rgba(0, 122, 255, 0.8);
-            pointer-events: none;
-            z-index: 20;
-            transform: translate(-50%, -50%);
-            display: none;
-        }
-
-        .cursor.active {
-            display: block;
-        }
-
-        .cursor.pinching {
-            background: rgba(255, 45, 85, 0.9);
-            box-shadow: 0 0 30px rgba(255, 45, 85, 1);
-            transform: translate(-50%, -50%) scale(1.5);
-        }
     </style>
 </head>
 <body>
@@ -255,12 +289,13 @@
         <button class="start-btn" onclick="startAR()">Start AR</button>
     </div>
 
-    <canvas id="ar-canvas"></canvas>
+    <video id="camera" autoplay playsinline></video>
+    <canvas id="canvas"></canvas>
 
     <div class="ar-ui hidden" id="ar-ui">
         <div class="instructions" id="instructions">
             <strong>📍 Place Icon</strong>
-            Point at a surface and tap "Place Here"
+            Position the crosshair and tap "Place Here"
         </div>
 
         <div class="icon-preview" id="icon-preview">
@@ -272,9 +307,10 @@
         </div>
 
         <div class="reticle"></div>
-
         <button class="place-btn" id="place-btn">Place Here</button>
     </div>
+
+    <div id="icons-container" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; pointer-events: none;"></div>
 
     <div class="complete-screen" id="complete-screen">
         <h2>✅ Setup Complete!</h2>
@@ -286,7 +322,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.min.js"></script>
 
     <script>
         const icons = [
@@ -297,78 +332,48 @@
         ];
 
         let currentIconIndex = 0;
-        let xrSession = null;
-        let xrRefSpace = null;
-        let gl = null;
-        let scene, camera, renderer;
         let placedIcons = [];
-        let reticlePosition = null;
         let handTrackingEnabled = false;
         let hands = null;
+        let lastPinchTime = 0;
+        const camera = document.getElementById('camera');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
 
         async function startAR() {
             try {
                 document.getElementById('start-container').classList.add('hidden');
 
-                // Request AR session with camera access
-                xrSession = await navigator.xr.requestSession('immersive-ar', {
-                    requiredFeatures: ['local', 'hit-test'],
-                    optionalFeatures: ['dom-overlay', 'camera-access'],
-                    domOverlay: { root: document.getElementById('ar-ui') }
+                // Start camera
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'environment',
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    }
                 });
 
-                // Setup canvas and WebGL
-                const canvas = document.getElementById('ar-canvas');
-                gl = canvas.getContext('webgl', { 
-                    xrCompatible: true,
-                    alpha: true,
-                    preserveDrawingBuffer: false
+                camera.srcObject = stream;
+
+                await new Promise((resolve) => {
+                    camera.onloadedmetadata = () => {
+                        canvas.width = camera.videoWidth;
+                        canvas.height = camera.videoHeight;
+                        resolve();
+                    };
                 });
-
-                await gl.makeXRCompatible();
-
-                // Create XR layer
-                const xrLayer = new XRWebGLLayer(xrSession, gl, {
-                    alpha: true,
-                    antialias: true
-                });
-
-                await xrSession.updateRenderState({
-                    baseLayer: xrLayer
-                });
-
-                // Setup Three.js
-                renderer = new THREE.WebGLRenderer({ 
-                    canvas, 
-                    context: gl,
-                    alpha: true,
-                    preserveDrawingBuffer: false
-                });
-                renderer.autoClear = false;
-                renderer.xr.enabled = true;
-                renderer.xr.setSession(xrSession);
-
-                scene = new THREE.Scene();
-                camera = new THREE.PerspectiveCamera();
-                camera.matrixAutoUpdate = false;
-
-                // Add lighting
-                const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
-                scene.add(light);
-
-                // Get reference space
-                xrRefSpace = await xrSession.requestReferenceSpace('local');
 
                 // Show UI
                 document.getElementById('ar-ui').classList.remove('hidden');
                 updateIconPreview();
 
-                // Start render loop
-                renderer.setAnimationLoop(render);
+                // Go fullscreen
+                if (document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen();
+                }
 
             } catch (err) {
-                alert('AR Error: ' + err.message);
-                console.error(err);
+                alert('Camera Error: ' + err.message);
                 document.getElementById('start-container').classList.remove('hidden');
             }
         }
@@ -386,31 +391,27 @@
         }
 
         document.getElementById('place-btn').addEventListener('click', () => {
-            if (reticlePosition && currentIconIndex < icons.length) {
-                placeIcon(reticlePosition);
-                currentIconIndex++;
-                updateIconPreview();
-            }
+            placeIcon();
+            currentIconIndex++;
+            updateIconPreview();
         });
 
-        function placeIcon(position) {
+        function placeIcon() {
             const icon = icons[currentIconIndex];
-
-            // Create icon mesh
-            const texture = new THREE.TextureLoader().load(icon.img);
-            const geometry = new THREE.PlaneGeometry(0.15, 0.15);
-            const material = new THREE.MeshBasicMaterial({ 
-                map: texture, 
-                transparent: true,
-                side: THREE.DoubleSide
-            });
-            const mesh = new THREE.Mesh(geometry, material);
             
-            mesh.position.copy(position);
-            mesh.userData = { app: icon.app, name: icon.name };
+            // Create icon element
+            const iconEl = document.createElement('div');
+            iconEl.className = 'placed-icon';
+            iconEl.dataset.app = icon.app;
+            iconEl.innerHTML = `<img src="${icon.img}" alt="${icon.name}">`;
             
-            scene.add(mesh);
-            placedIcons.push(mesh);
+            // Position at center of screen (where reticle is)
+            iconEl.style.left = '50%';
+            iconEl.style.top = '50%';
+            iconEl.style.transform = 'translate(-50%, -50%)';
+            
+            document.getElementById('icons-container').appendChild(iconEl);
+            placedIcons.push({ element: iconEl, app: icon.app, name: icon.name });
 
             // Haptic feedback
             if (navigator.vibrate) {
@@ -421,14 +422,13 @@
         function showCompleteScreen() {
             document.getElementById('icon-preview').style.display = 'none';
             document.getElementById('place-btn').style.display = 'none';
-            document.getElementById('instructions').style.display = 'none';
+            document.querySelector('.reticle').style.display = 'none';
             document.getElementById('complete-screen').classList.add('active');
         }
 
         async function enableHandTracking() {
             document.getElementById('complete-screen').classList.remove('active');
             document.getElementById('instructions').innerHTML = '<strong>👋 Hand Tracking Active</strong>Point and pinch to interact';
-            document.getElementById('instructions').style.display = 'block';
             
             handTrackingEnabled = true;
 
@@ -446,31 +446,30 @@
 
             hands.onResults(onHandResults);
 
-            // Create video for hand tracking
-            const video = document.createElement('video');
-            video.autoplay = true;
-            video.playsInline = true;
-
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'environment' }
-            });
-            video.srcObject = stream;
-
             // Process frames
-            setInterval(async () => {
-                if (handTrackingEnabled) {
-                    await hands.send({ image: video });
-                }
-            }, 100);
+            processHandTracking();
         }
 
-        let lastPinchTime = 0;
+        async function processHandTracking() {
+            if (handTrackingEnabled) {
+                await hands.send({ image: camera });
+                requestAnimationFrame(processHandTracking);
+            }
+        }
+
         function onHandResults(results) {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
             const cursor = document.getElementById('cursor');
 
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 const landmarks = results.multiHandLandmarks[0];
                 
+                // Draw hand skeleton
+                drawConnectors(ctx, landmarks, HAND_CONNECTIONS, { color: 'rgba(0, 255, 255, 0.3)', lineWidth: 2 });
+                drawLandmarks(ctx, landmarks, { color: 'rgba(255, 255, 255, 0.5)', lineWidth: 1, radius: 3 });
+
                 // Get finger positions
                 const indexTip = landmarks[8];
                 const thumbTip = landmarks[4];
@@ -494,69 +493,51 @@
                 
                 if (isPinching) {
                     cursor.classList.add('pinching');
-                    
-                    if (Date.now() - lastPinchTime > 500) {
-                        lastPinchTime = Date.now();
-                        checkIconInteraction(indexX, indexY);
-                    }
                 } else {
                     cursor.classList.remove('pinching');
                 }
+
+                // Check icon interaction
+                placedIcons.forEach(icon => {
+                    const rect = icon.element.getBoundingClientRect();
+                    const isHovering = (
+                        indexX >= rect.left &&
+                        indexX <= rect.right &&
+                        indexY >= rect.top &&
+                        indexY <= rect.bottom
+                    );
+
+                    if (isHovering) {
+                        icon.element.classList.add('hovering');
+                        
+                        if (isPinching && Date.now() - lastPinchTime > 500) {
+                            lastPinchTime = Date.now();
+                            handleIconClick(icon);
+                        }
+                    } else {
+                        icon.element.classList.remove('hovering');
+                    }
+                });
+
             } else {
                 cursor.classList.remove('active');
+                placedIcons.forEach(icon => icon.element.classList.remove('hovering'));
             }
         }
 
-        function checkIconInteraction(x, y) {
-            // This is simplified - in full implementation would raycast from hand position
-            alert('Icon interaction detected!');
+        function handleIconClick(icon) {
+            // Haptic feedback
             if (navigator.vibrate) {
                 navigator.vibrate(50);
             }
-        }
 
-        function render(timestamp, frame) {
-            if (!frame) return;
+            // Visual feedback
+            icon.element.style.transform = icon.element.style.transform + ' scale(0.9)';
+            setTimeout(() => {
+                icon.element.style.transform = icon.element.style.transform.replace(' scale(0.9)', '');
+            }, 200);
 
-            const session = frame.session;
-            const pose = frame.getViewerPose(xrRefSpace);
-            if (!pose) return;
-
-            // Get the XR layer
-            const layer = session.renderState.baseLayer;
-            
-            // Bind framebuffer (this enables camera passthrough)
-            gl.bindFramebuffer(gl.FRAMEBUFFER, layer.framebuffer);
-
-            // Clear with transparent (camera shows through)
-            gl.clearColor(0, 0, 0, 0);
-            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-            // Render each view (typically just one for mobile AR)
-            for (const view of pose.views) {
-                const viewport = layer.getViewport(view);
-                gl.viewport(viewport.x, viewport.y, viewport.width, viewport.height);
-
-                // Update camera matrix
-                camera.matrix.fromArray(view.transform.matrix);
-                camera.projectionMatrix.fromArray(view.projectionMatrix);
-                camera.updateMatrixWorld(true);
-
-                // Simple hit test simulation (center of screen)
-                if (currentIconIndex < icons.length) {
-                    const centerDistance = 1.0; // 1 meter in front
-                    reticlePosition = new THREE.Vector3(0, 0, -centerDistance);
-                    reticlePosition.applyMatrix4(camera.matrixWorld);
-                }
-
-                // Make icons face camera
-                placedIcons.forEach(icon => {
-                    icon.lookAt(camera.position);
-                });
-
-                // Render scene on top of camera
-                renderer.render(scene, camera);
-            }
+            alert(`Opening ${icon.name}!`);
         }
     </script>
 </body>
