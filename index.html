@@ -310,16 +310,41 @@
             try {
                 document.getElementById('start-container').classList.add('hidden');
 
-                // Request AR session
+                // Request AR session with camera access
                 xrSession = await navigator.xr.requestSession('immersive-ar', {
                     requiredFeatures: ['local', 'hit-test'],
-                    optionalFeatures: ['dom-overlay'],
+                    optionalFeatures: ['dom-overlay', 'camera-access'],
                     domOverlay: { root: document.getElementById('ar-ui') }
                 });
 
-                // Setup Three.js
+                // Setup canvas and WebGL
                 const canvas = document.getElementById('ar-canvas');
-                renderer = new THREE.WebGLRenderer({ canvas, alpha: true });
+                gl = canvas.getContext('webgl', { 
+                    xrCompatible: true,
+                    alpha: true,
+                    preserveDrawingBuffer: false
+                });
+
+                await gl.makeXRCompatible();
+
+                // Create XR layer
+                const xrLayer = new XRWebGLLayer(xrSession, gl, {
+                    alpha: true,
+                    antialias: true
+                });
+
+                await xrSession.updateRenderState({
+                    baseLayer: xrLayer
+                });
+
+                // Setup Three.js
+                renderer = new THREE.WebGLRenderer({ 
+                    canvas, 
+                    context: gl,
+                    alpha: true,
+                    preserveDrawingBuffer: false
+                });
+                renderer.autoClear = false;
                 renderer.xr.enabled = true;
                 renderer.xr.setSession(xrSession);
 
@@ -343,6 +368,7 @@
 
             } catch (err) {
                 alert('AR Error: ' + err.message);
+                console.error(err);
                 document.getElementById('start-container').classList.remove('hidden');
             }
         }
@@ -492,30 +518,45 @@
         function render(timestamp, frame) {
             if (!frame) return;
 
+            const session = frame.session;
             const pose = frame.getViewerPose(xrRefSpace);
             if (!pose) return;
 
-            const view = pose.views[0];
+            // Get the XR layer
+            const layer = session.renderState.baseLayer;
             
-            // Update camera
-            camera.matrix.fromArray(view.transform.matrix);
-            camera.projectionMatrix.fromArray(view.projectionMatrix);
-            camera.updateMatrixWorld(true);
+            // Bind framebuffer (this enables camera passthrough)
+            gl.bindFramebuffer(gl.FRAMEBUFFER, layer.framebuffer);
 
-            // Simple hit test simulation (center of screen)
-            if (currentIconIndex < icons.length) {
-                const centerDistance = 1.0; // 1 meter in front
-                reticlePosition = new THREE.Vector3(0, 0, -centerDistance);
-                reticlePosition.applyMatrix4(camera.matrixWorld);
+            // Clear with transparent (camera shows through)
+            gl.clearColor(0, 0, 0, 0);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+            // Render each view (typically just one for mobile AR)
+            for (const view of pose.views) {
+                const viewport = layer.getViewport(view);
+                gl.viewport(viewport.x, viewport.y, viewport.width, viewport.height);
+
+                // Update camera matrix
+                camera.matrix.fromArray(view.transform.matrix);
+                camera.projectionMatrix.fromArray(view.projectionMatrix);
+                camera.updateMatrixWorld(true);
+
+                // Simple hit test simulation (center of screen)
+                if (currentIconIndex < icons.length) {
+                    const centerDistance = 1.0; // 1 meter in front
+                    reticlePosition = new THREE.Vector3(0, 0, -centerDistance);
+                    reticlePosition.applyMatrix4(camera.matrixWorld);
+                }
+
+                // Make icons face camera
+                placedIcons.forEach(icon => {
+                    icon.lookAt(camera.position);
+                });
+
+                // Render scene on top of camera
+                renderer.render(scene, camera);
             }
-
-            // Make icons face camera
-            placedIcons.forEach(icon => {
-                icon.lookAt(camera.position);
-            });
-
-            // Render scene
-            renderer.render(scene, camera);
         }
     </script>
 </body>
