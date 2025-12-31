@@ -6,10 +6,13 @@
   <title>YOLO Scan</title>
   <style>
     html,body{height:100%;margin:0;background:#000;overflow:hidden;font-family:Arial;touch-action:none}
-    .container{width:100%;height:100%;position:relative;display:flex;align-items:center;justify-content:center}
+    .container{width:100%;height:100%;position:relative;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:30px}
     video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:none}
     canvas{position:absolute;top:0;left:0;width:100%;height:100%;display:none}
-    .timer{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#0ff;font-size:60px;font-weight:bold;z-index:10;text-shadow:0 0 20px #0ff}
+    .timer{color:#0ff;font-size:60px;font-weight:bold;z-index:10;text-shadow:0 0 20px #0ff}
+    .fullscreen-btn{background:linear-gradient(135deg,#0ff,#0aa);color:#000;border:none;padding:20px 40px;font-size:18px;font-weight:bold;border-radius:12px;cursor:pointer;box-shadow:0 0 30px rgba(0,255,255,0.8);animation:pulse 2s infinite;z-index:10}
+    .fullscreen-btn:active{transform:scale(0.95)}
+    @keyframes pulse{0%,100%{transform:scale(1);box-shadow:0 0 30px rgba(0,255,255,0.8)}50%{transform:scale(1.05);box-shadow:0 0 50px rgba(0,255,255,1)}}
     .hud-top-left{position:absolute;top:10px;left:10px;width:140px;background:rgba(0,255,255,0.1);border:1px solid #0ff;border-radius:6px;padding:8px;color:#0ff;font-size:10px;display:none;z-index:5;font-family:monospace;flex-direction:column}
     .hud-middle-left{position:absolute;top:50%;left:10px;transform:translateY(-50%);width:140px;background:rgba(0,255,255,0.1);border:1px solid #0ff;border-radius:6px;padding:8px;color:#0ff;font-size:9px;display:none;z-index:5;max-height:200px;overflow-y:auto;font-family:monospace;flex-direction:column}
     .hud-top-left.visible, .hud-middle-left.visible {display:flex;}
@@ -34,8 +37,9 @@
   </style>
 </head>
 <body>
-  <div class="container">
+  <div class="container" id="startContainer">
     <div class="timer" id="timer">10</div>
+    <button class="fullscreen-btn" id="fullscreenBtn">TAP FOR FULLSCREEN</button>
   </div>
   <video id="camera" autoplay muted playsinline></video>
   <canvas id="canvas"></canvas>
@@ -84,6 +88,8 @@
 const canvas = document.getElementById('canvas');
 const camera = document.getElementById('camera');
 const timer = document.getElementById('timer');
+const startContainer = document.getElementById('startContainer');
+const fullscreenBtn = document.getElementById('fullscreenBtn');
 const ctx = canvas.getContext('2d');
 const objectsList = document.getElementById('objectsList');
 const timeDisplay = document.getElementById('timeDisplay');
@@ -95,6 +101,7 @@ let scanComplete = false;
 let audioContext = null;
 let analyser = null;
 let dataArray = null;
+let countdownInterval = null;
 
 // Hardcoded random objects
 const randomObjects = [
@@ -103,11 +110,11 @@ const randomObjects = [
 ];
 
 function getRandomObjects() {
-  const count = Math.floor(Math.random() * 4) + 3; // 3-6 objects
+  const count = Math.floor(Math.random() * 4) + 3;
   const shuffled = [...randomObjects].sort(() => 0.5 - Math.random());
   return shuffled.slice(0, count).map(obj => ({
     name: obj,
-    confidence: Math.floor(Math.random() * 30) + 70 // 70-99%
+    confidence: Math.floor(Math.random() * 30) + 70
   }));
 }
 
@@ -190,9 +197,20 @@ function sweep() {
     
     continueLiveCamera();
     
-    // Refresh objects every 5 seconds
     setInterval(displayRandomObjects, 5000);
   }
+}
+
+function startApp() {
+  startContainer.style.display = 'none';
+  camera.style.display = 'block';
+  canvas.style.display = 'block';
+  sweeping = true;
+  
+  updateTimeDate();
+  setInterval(updateTimeDate, 1000);
+  
+  sweep();
 }
 
 requestCamera();
@@ -284,28 +302,21 @@ function enterFullscreen() {
   }
 }
 
+// Fullscreen button handler
+fullscreenBtn.addEventListener('click', () => {
+  enterFullscreen();
+});
+
 // COUNTDOWN
 let countdown = 10;
 timer.textContent = countdown;
 
-const countdownInterval = setInterval(() => {
+countdownInterval = setInterval(() => {
   countdown--;
   timer.textContent = countdown;
   if (countdown <= 0) {
     clearInterval(countdownInterval);
-    timer.style.display = 'none';
-    
-    // Enter fullscreen
-    enterFullscreen();
-    
-    camera.style.display = 'block';
-    canvas.style.display = 'block';
-    sweeping = true;
-    
-    updateTimeDate();
-    setInterval(updateTimeDate, 1000);
-    
-    sweep();
+    startApp();
   }
 }, 1000);
 </script>
