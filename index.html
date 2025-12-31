@@ -2,62 +2,35 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
   <title>YOLO Scan</title>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4"></script>
-  <script async src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2"></script>
-  <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.4.1633559619"></script>
-  <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1633559619"></script>
-  <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.4.1633559619"></script>
-  <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1633559619"></script>
   <style>
-    html,body{height:100%;margin:0;background:#000;overflow:hidden;font-family:Arial}
+    html,body{height:100%;margin:0;background:#000;overflow:hidden;font-family:Arial;touch-action:none}
     .container{width:100%;height:100%;position:relative;display:flex;align-items:center;justify-content:center}
     video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:none}
     canvas{position:absolute;top:0;left:0;width:100%;height:100%;display:none}
-    .timer{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#0ff;font-size:80px;font-weight:bold;z-index:10;text-shadow:0 0 30px #0ff}
-    .hud-top-left{position:absolute;top:20px;left:20px;width:280px;background:rgba(0,255,255,0.1);border:2px solid #0ff;border-radius:8px;padding:15px;color:#0ff;font-size:14px;display:none;z-index:5;font-family:monospace;flex-direction:column}
-    .hud-middle-left{position:absolute;top:50%;left:20px;transform:translateY(-50%);width:280px;background:rgba(0,255,255,0.1);border:2px solid #0ff;border-radius:8px;padding:15px;color:#0ff;font-size:13px;display:none;z-index:5;max-height:300px;overflow-y:auto;font-family:monospace;flex-direction:column}
+    .timer{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#0ff;font-size:60px;font-weight:bold;z-index:10;text-shadow:0 0 20px #0ff}
+    .hud-top-left{position:absolute;top:10px;left:10px;width:140px;background:rgba(0,255,255,0.1);border:1px solid #0ff;border-radius:6px;padding:8px;color:#0ff;font-size:10px;display:none;z-index:5;font-family:monospace;flex-direction:column}
+    .hud-middle-left{position:absolute;top:50%;left:10px;transform:translateY(-50%);width:140px;background:rgba(0,255,255,0.1);border:1px solid #0ff;border-radius:6px;padding:8px;color:#0ff;font-size:9px;display:none;z-index:5;max-height:200px;overflow-y:auto;font-family:monospace;flex-direction:column}
     .hud-top-left.visible, .hud-middle-left.visible {display:flex;}
-    .hud-title{font-weight:bold;margin-bottom:10px;border-bottom:1px solid #0ff;padding-bottom:8px}
-    .hud-content{line-height:1.6;display:flex;flex-direction:column;gap:5px}
-    .loading{color:#6f6;font-style:italic}
-    .object-box{color:#0f0;margin:5px 0;padding:5px;background:rgba(0,255,0,0.1);border-left:2px solid #0f0;display:flex;align-items:center}
-    .compass-container{position:absolute;bottom:20px;left:20px;width:150px;height:150px;display:none;align-items:center;justify-content:center;z-index:5;filter:drop-shadow(0 0 25px rgba(0,255,255,0.6))}
+    .hud-title{font-weight:bold;margin-bottom:6px;border-bottom:1px solid #0ff;padding-bottom:4px;font-size:11px}
+    .hud-content{line-height:1.4;display:flex;flex-direction:column;gap:3px}
+    .object-box{color:#0f0;margin:3px 0;padding:3px;background:rgba(0,255,0,0.1);border-left:2px solid #0f0;font-size:9px}
+    .compass-container{position:absolute;bottom:10px;left:10px;width:100px;height:100px;display:none;align-items:center;justify-content:center;z-index:5;filter:drop-shadow(0 0 15px rgba(0,255,255,0.6))}
     .compass-container.visible {display:flex;}
-    .compass-dial{position:absolute;width:140px;height:140px;border-radius:50%;background:radial-gradient(circle at 35% 35%,rgba(50,100,150,0.9),rgba(10,30,60,0.95));border:4px solid;border-color:#0ff #00a0c0 #0088aa #0ff;display:flex;align-items:center;justify-content:center;font-size:10px;color:#0ff;font-family:monospace;font-weight:bold;letter-spacing:2px;box-shadow:inset 0 0 20px rgba(0,0,0,0.8),inset 0 2px 5px rgba(255,255,255,0.1),0 0 30px rgba(0,255,255,0.4)}
-    .compass-rings{position:absolute;width:140px;height:140px;border-radius:50%;border:1px solid rgba(0,255,255,0.3)}
-    .compass-rings-outer{width:135px;height:135px;border-radius:50%;border:1px dashed rgba(0,200,255,0.2);position:absolute;top:2.5px;left:2.5px}
-    .compass-ticks{position:absolute;width:140px;height:140px;border-radius:50%}
-    .tick{position:absolute;width:1px;background:#0ff;left:50%;top:2px;transform-origin:0 69px}
-    .tick.major{height:8px;background:#0f0;width:2px}
-    .tick.minor{height:4px;opacity:0.6}
-    .compass-cardinal{position:absolute;width:130px;height:130px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#0f0;font-weight:bold;text-shadow:0 0 8px rgba(0,255,0,0.8);z-index:3}
+    .compass-dial{position:absolute;width:90px;height:90px;border-radius:50%;background:radial-gradient(circle at 35% 35%,rgba(50,100,150,0.9),rgba(10,30,60,0.95));border:2px solid;border-color:#0ff #00a0c0 #0088aa #0ff;display:flex;align-items:center;justify-content:center;font-size:8px;color:#0ff;font-family:monospace;font-weight:bold;box-shadow:inset 0 0 15px rgba(0,0,0,0.8),0 0 20px rgba(0,255,255,0.4)}
+    .compass-cardinal{position:absolute;width:85px;height:85px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#0f0;font-weight:bold;text-shadow:0 0 6px rgba(0,255,0,0.8);z-index:3}
     .compass-cardinal span{position:absolute}
-    .compass-cardinal span:nth-child(1){top:8px;color:#0f0;text-shadow:0 0 10px #0f0}
-    .compass-cardinal span:nth-child(2){left:8px;color:#0ff}
-    .compass-cardinal span:nth-child(3){right:8px;color:#0ff}
-    .compass-cardinal span:nth-child(4){bottom:8px;color:#ff3333}
-    .compass-numbers{position:absolute;width:125px;height:125px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#00ff88;font-family:monospace;font-weight:bold;z-index:2}
-    .degree{position:absolute;width:100%;height:100%}
-    .needle-container{position:absolute;width:140px;height:140px;z-index:6}
-    .compass-needle{position:absolute;width:3px;height:60px;background:linear-gradient(180deg,#0f0 0%,#00ff00 40%,#0099ff 60%,#0077ff 100%);border-radius:2px;left:50%;top:10px;transform-origin:center 60px;box-shadow:0 0 12px rgba(0,255,0,0.9),0 0 25px rgba(0,200,255,0.6);z-index:10;filter:drop-shadow(0 0 5px rgba(0,255,0,0.8))}
-    .compass-center{position:absolute;width:14px;height:14px;background:radial-gradient(circle at 30% 30%,#00ff00,#00aa00);border-radius:50%;border:3px solid #0ff;top:50%;left:50%;transform:translate(-50%,-50%);z-index:11;box-shadow:0 0 15px rgba(0,255,0,0.9),inset 0 0 8px rgba(255,255,255,0.3),0 0 25px rgba(0,200,255,0.6)}
-    .compass-heading{position:absolute;bottom:-40px;left:50%;transform:translateX(-50%);color:#0f0;font-size:12px;font-family:monospace;font-weight:bold;letter-spacing:2px;white-space:nowrap;text-shadow:0 0 10px rgba(0,255,0,0.8)}
-    .audio-visualizer{position:absolute;top:20px;right:20px;width:300px;height:60px;display:none;align-items:center;justify-content:center;z-index:5;background:rgba(0,20,40,0.6);border:2px solid #0ff;border-radius:8px;padding:10px;gap:3px;filter:drop-shadow(0 0 15px rgba(255,0,255,0.5))}
+    .compass-cardinal span:nth-child(1){top:5px;color:#0f0;text-shadow:0 0 8px #0f0}
+    .compass-cardinal span:nth-child(2){left:5px;color:#0ff}
+    .compass-cardinal span:nth-child(3){right:5px;color:#0ff}
+    .compass-cardinal span:nth-child(4){bottom:5px;color:#ff3333}
+    .compass-needle{position:absolute;width:2px;height:40px;background:linear-gradient(180deg,#0f0 0%,#00ff00 40%,#0099ff 60%,#0077ff 100%);border-radius:1px;left:50%;top:8px;transform-origin:center 42px;box-shadow:0 0 8px rgba(0,255,0,0.9);z-index:10}
+    .compass-center{position:absolute;width:10px;height:10px;background:radial-gradient(circle at 30% 30%,#00ff00,#00aa00);border-radius:50%;border:2px solid #0ff;top:50%;left:50%;transform:translate(-50%,-50%);z-index:11;box-shadow:0 0 10px rgba(0,255,0,0.9)}
+    .compass-heading{position:absolute;bottom:-25px;left:50%;transform:translateX(-50%);color:#0f0;font-size:9px;font-family:monospace;font-weight:bold;white-space:nowrap;text-shadow:0 0 8px rgba(0,255,0,0.8)}
+    .audio-visualizer{position:absolute;top:10px;right:10px;width:150px;height:40px;display:none;align-items:center;justify-content:center;z-index:5;background:rgba(0,20,40,0.6);border:1px solid #0ff;border-radius:6px;padding:6px;gap:2px;filter:drop-shadow(0 0 10px rgba(255,0,255,0.5))}
     .audio-visualizer.visible {display:flex;}
-    .audio-bar{width:4px;background:linear-gradient(180deg,#ff00ff,#ff69b4);border-radius:2px;box-shadow:0 0 10px #ff00ff;transition:height 50ms ease-out;min-height:4px}
-    .detail-panel{position:absolute;bottom:20px;right:20px;width:250px;background:rgba(0,20,40,0.95);border:2px solid #0ff;border-radius:8px;padding:15px;color:#0f0;font-family:monospace;font-size:12px;display:none;z-index:10;flex-direction:column;gap:8px;box-shadow:0 0 20px rgba(0,255,255,0.5)}
-    .detail-panel.visible {display:flex;}
-    .detail-title{font-weight:bold;color:#0ff;border-bottom:1px solid #0ff;padding-bottom:8px;font-size:14px}
-    .detail-row{display:flex;justify-content:space-between;border-bottom:1px solid rgba(0,255,255,0.2);padding:5px 0}
-    .detail-label{color:#0ff}
-    .detail-value{color:#0f0;text-align:right}
-    .close-btn{align-self:flex-end;background:#ff3333;color:#fff;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;font-weight:bold;font-size:11px}
-    .hand-canvas{position:absolute;top:0;left:0;width:100%;height:100%;display:none;z-index:4}
-    .pose-canvas{position:absolute;top:0;left:0;width:100%;height:100%;display:none;z-index:4}
-    .crosshair-v{width:2px;height:50px;background:#ff3333;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);box-shadow:0 0 10px #ff3333}
-    @keyframes pulse-target{0%{box-shadow:0 0 15px rgba(255,51,51,0.8);}50%{box-shadow:0 0 30px rgba(255,51,51,1);}100%{box-shadow:0 0 15px rgba(255,51,51,0.8);}}
+    .audio-bar{width:3px;background:linear-gradient(180deg,#ff00ff,#ff69b4);border-radius:1px;box-shadow:0 0 6px #ff00ff;transition:height 50ms ease-out;min-height:3px}
   </style>
 </head>
 <body>
@@ -66,66 +39,35 @@
   </div>
   <video id="camera" autoplay muted playsinline></video>
   <canvas id="canvas"></canvas>
-  <canvas id="handCanvas" class="hand-canvas"></canvas>
   
   <div class="hud-top-left" id="hudTopLeft">
-    <div class="hud-title">YOLO SYSTEM STATUS</div>
+    <div class="hud-title">SYSTEM STATUS</div>
     <div class="hud-content">
       <div>TIME: <span id="timeDisplay">--:--:--</span></div>
       <div>DATE: <span id="dateDisplay">--/--/----</span></div>
-      <div>MODEL: <span id="modelStatus">Loading...</span></div>
+      <div>MODEL: <span id="modelStatus">✓ Ready</span></div>
     </div>
   </div>
   <div class="hud-middle-left" id="hudMiddleLeft">
-    <div class="hud-title">YOLO DETECTIONS</div>
+    <div class="hud-title">DETECTIONS</div>
     <div class="hud-content" id="objectsList">Scanning...</div>
   </div>
 
-  <!-- COMPASS -->
   <div class="compass-container" id="compassContainer">
     <div class="compass-dial">
-      <!-- Decorative rings -->
-      <div class="compass-rings"></div>
-      <div class="compass-rings compass-rings-outer"></div>
-      
-      <!-- Tick marks -->
-      <div class="compass-ticks" id="compassTicks"></div>
-      
-     
-      
-      <!-- Cardinal directions (spinning outer ring) -->
       <div class="compass-cardinal" id="compassCardinal">
         <span>N</span>
         <span>W</span>
         <span>E</span>
         <span>S</span>
       </div>
-      
-      <!-- Needle (fixed, pointing up) -->
-      <div class="needle-container">
-        <div class="compass-needle" id="compassNeedle"></div>
-      </div>
-      
-      <!-- Center point -->
+      <div class="compass-needle" id="compassNeedle"></div>
       <div class="compass-center"></div>
-      
-      <!-- Heading display -->
       <div class="compass-heading" id="compassHeading">0°</div>
     </div>
   </div>
 
-  <!-- AUDIO VISUALIZER -->
   <div class="audio-visualizer" id="audioVisualizer">
-    <div class="audio-bar"></div>
-    <div class="audio-bar"></div>
-    <div class="audio-bar"></div>
-    <div class="audio-bar"></div>
-    <div class="audio-bar"></div>
-    <div class="audio-bar"></div>
-    <div class="audio-bar"></div>
-    <div class="audio-bar"></div>
-    <div class="audio-bar"></div>
-    <div class="audio-bar"></div>
     <div class="audio-bar"></div>
     <div class="audio-bar"></div>
     <div class="audio-bar"></div>
@@ -143,86 +85,30 @@ const canvas = document.getElementById('canvas');
 const camera = document.getElementById('camera');
 const timer = document.getElementById('timer');
 const ctx = canvas.getContext('2d');
-const hudTopLeft = document.getElementById('hudTopLeft');
-const hudMiddleLeft = document.getElementById('hudMiddleLeft');
 const objectsList = document.getElementById('objectsList');
 const timeDisplay = document.getElementById('timeDisplay');
 const dateDisplay = document.getElementById('dateDisplay');
-const modelStatus = document.getElementById('modelStatus');
 
 let sweeping = false;
 let sweepPos = 0;
 let scanComplete = false;
-let yoloSession = null;
-let modelLoaded = false;
 let audioContext = null;
 let analyser = null;
 let dataArray = null;
-let detectedObjects = [];
-let selectedObject = null;
-let hands = null;
-let handCanvasCtx = null;
 
-// YOLO class names (COCO dataset - 80 classes)
-const classNames = [
-  'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light',
-  'fire hydrant', 'stop sign', 'parking meter', 'bench', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant',
-  'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis',
-  'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass',
-  'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli',
-  'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table',
-  'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'microwave', 'oven', 'toaster', 'sink',
-  'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush'
+// Hardcoded random objects
+const randomObjects = [
+  'person', 'chair', 'laptop', 'bottle', 'cup', 'phone', 
+  'book', 'backpack', 'keyboard', 'mouse', 'plant', 'clock'
 ];
 
-// Load YOLO model
-async function loadYOLOModel() {
-  try {
-    modelStatus.textContent = 'Loading YOLO...';
-    console.log('Starting YOLO model load...');
-    console.log('TensorFlow available:', typeof tf !== 'undefined');
-    console.log('COCO-SSD available:', typeof cocoSsd !== 'undefined');
-    
-    // Check if libraries are loaded
-    let tfReady = typeof tf !== 'undefined';
-    let cocoReady = typeof cocoSsd !== 'undefined';
-    
-    // Wait for TensorFlow if not ready
-    if (!tfReady) {
-      console.log('Waiting for TensorFlow...');
-      let attempts = 0;
-      while (!tfReady && attempts < 50) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        tfReady = typeof tf !== 'undefined';
-        attempts++;
-      }
-      if (!tfReady) throw new Error('TensorFlow.js failed to load');
-    }
-    
-    // Wait for COCO-SSD if not ready
-    if (!cocoReady) {
-      console.log('Waiting for COCO-SSD...');
-      let attempts = 0;
-      while (!cocoReady && attempts < 50) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        cocoReady = typeof cocoSsd !== 'undefined';
-        attempts++;
-      }
-      if (!cocoReady) throw new Error('COCO-SSD failed to load');
-    }
-    
-    // Both libraries are ready, load the model
-    console.log('Loading COCO-SSD model...');
-    window.cocoSsdModel = await cocoSsd.load();
-    
-    modelLoaded = true;
-    modelStatus.textContent = '✓ YOLO Ready';
-    console.log('✓ YOLO model loaded successfully');
-    
-  } catch(err) {
-    console.error('Model load error:', err);
-    modelStatus.textContent = 'Error: ' + err.message;
-  }
+function getRandomObjects() {
+  const count = Math.floor(Math.random() * 4) + 3; // 3-6 objects
+  const shuffled = [...randomObjects].sort(() => 0.5 - Math.random());
+  return shuffled.slice(0, count).map(obj => ({
+    name: obj,
+    confidence: Math.floor(Math.random() * 30) + 70 // 70-99%
+  }));
 }
 
 function resizeCanvas() {
@@ -256,118 +142,65 @@ function updateTimeDate() {
   dateDisplay.textContent = `${month}/${day}/${year}`;
 }
 
-// YOLO Object Detection using TensorFlow COCO-SSD
-async function analyzeFrameWithYOLO() {
-  if (!scanComplete || !modelLoaded) return;
-  
-  try {
-    // Run YOLO detection on canvas
-    const predictions = await window.cocoSsdModel.detect(canvas);
-    
-    if (predictions.length === 0) {
-      objectsList.innerHTML = '<span class="loading">No objects detected</span>';
-      return;
-    }
-    
-    // Draw bounding boxes and display results
-    let detectionHTML = '';
-    const drawnBoxes = new Set();
-    
-    predictions.forEach((prediction) => {
-      const [x, y, width, height] = prediction.bbox;
-      const confidence = Math.round(prediction.score * 100);
-      
-      // Don't draw bounding boxes on canvas - only display in HUD
-      
-      // Add to detection list
-      if (!drawnBoxes.has(prediction.class)) {
-        detectionHTML += `<div class="object-box">▪ ${prediction.class} (${confidence}%)</div>`;
-        drawnBoxes.add(prediction.class);
-        
-        // Add to detected objects for tap detection
-        detectedObjects.push({
-          name: prediction.class,
-          x: x,
-          y: y,
-          confidence: confidence
-        });
-      }
-    });
-    
-    objectsList.innerHTML = detectionHTML || '<span class="loading">Detecting...</span>';
-    
-  } catch(err) {
-    objectsList.innerHTML = '<span class="loading">YOLO Error - Check model</span>';
-    console.error('YOLO detection error:', err);
-  }
+function displayRandomObjects() {
+  const objects = getRandomObjects();
+  let html = '';
+  objects.forEach(obj => {
+    html += `<div class="object-box">▪ ${obj.name} (${obj.confidence}%)</div>`;
+  });
+  objectsList.innerHTML = html;
 }
 
 function continueLiveCamera() {
-  // Draw fresh camera feed every frame
   ctx.drawImage(camera, 0, 0, canvas.width, canvas.height);
-  
-  // Keep running YOLO detection continuously
-  if (scanComplete && modelLoaded) {
-    analyzeFrameWithYOLO();
-  }
-  
   requestAnimationFrame(continueLiveCamera);
 }
 
 function sweep() {
   if (!sweeping) return;
   
-  // Draw camera feed clearly
   ctx.drawImage(camera, 0, 0, canvas.width, canvas.height);
   
-  // Draw vertical cyan sweep line only if still sweeping
   if (sweepPos <= canvas.width) {
     ctx.strokeStyle = '#0ff';
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(sweepPos, 0);
     ctx.lineTo(sweepPos, canvas.height);
     ctx.stroke();
     
-    sweepPos += 2;
+    sweepPos += 3;
     requestAnimationFrame(sweep);
   } else {
-    // Sweep complete - line disappears, NOW SHOW HUD AND COMPASS
     sweeping = false;
     scanComplete = true;
     
-    // Show HUD panels and compass AFTER sweep completes
     document.getElementById('hudTopLeft').classList.add('visible');
     document.getElementById('hudMiddleLeft').classList.add('visible');
     document.getElementById('compassContainer').classList.add('visible');
     document.getElementById('audioVisualizer').classList.add('visible');
     
-    objectsList.textContent = 'Detecting objects...';
+    displayRandomObjects();
     
-    // Initialize audio visualizer
     if (!audioContext) {
       initializeAudioVisualizer().then(() => {
         updateAudioVisualizer();
       });
     }
     
-    // Start continuous camera feed and YOLO detection
     continueLiveCamera();
+    
+    // Refresh objects every 5 seconds
+    setInterval(displayRandomObjects, 5000);
   }
 }
 
-// Initialize
 requestCamera();
-loadYOLOModel();
 
-// ============= MAGNETOMETER / COMPASS =============
+// COMPASS
 let currentHeading = 0;
 
 function initializeCompass() {
-  // Create tick marks and numbers
-  createCompassMarkings();
-  
-  // Request permission for iOS 13+
   if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
     DeviceOrientationEvent.requestPermission()
       .then(permissionState => {
@@ -377,64 +210,20 @@ function initializeCompass() {
       })
       .catch(console.error);
   } else {
-    // Non-iOS or older iOS
     window.addEventListener('deviceorientation', updateCompass);
   }
 }
 
-function createCompassMarkings() {
-  const ticksContainer = document.getElementById('compassTicks');
-  const numbersContainer = document.getElementById('compassNumbers');
-  
-  // Create 360 tick marks
-  for (let i = 0; i < 360; i += 2) {
-    const tick = document.createElement('div');
-    tick.className = 'tick ' + (i % 30 === 0 ? 'major' : 'minor');
-    tick.style.transform = `rotate(${i}deg)`;
-    ticksContainer.appendChild(tick);
-  }
-  
-  // Create cardinal direction numbers (N, E, S, W)
-  const cardinals = [
-    { deg: 0, label: 'N' },
-    { deg: 90, label: 'E' },
-    { deg: 180, label: 'S' },
-    { deg: 270, label: 'W' }
-  ];
-  
-  cardinals.forEach(cardinal => {
-    const numEl = document.createElement('div');
-    numEl.textContent = cardinal.label;
-    numEl.style.position = 'absolute';
-    numEl.style.transform = `rotate(${cardinal.deg}deg) translateY(-55px) rotate(-${cardinal.deg}deg)`;
-    numEl.style.width = '100%';
-    numEl.style.textAlign = 'center';
-    numEl.style.fontSize = '10px';
-    numEl.style.color = cardinal.label === 'N' ? '#0f0' : '#0ff';
-    numEl.style.fontWeight = 'bold';
-    numEl.style.textShadow = '0 0 5px rgba(0,255,136,0.8)';
-    numbersContainer.appendChild(numEl);
-  });
-}
-
 function updateCompass(event) {
-  let heading = event.alpha; // 0-360, where 0 is North
-  
+  let heading = event.alpha;
   if (heading === null) return;
   
-  // Ensure heading is between 0-360
   heading = (heading + 360) % 360;
   currentHeading = heading;
   
-  // Rotate the OUTER RING (cardinal directions spin)
   const cardinal = document.getElementById('compassCardinal');
   cardinal.style.transform = `rotate(${heading}deg)`;
   
-  // Needle stays FIXED pointing up - no rotation
-  // The outer ring spins around the fixed needle
-  
-  // Update heading display with direction
-  const headingDisplay = document.getElementById('compassHeading');
   let direction = 'N';
   if (heading > 337.5 || heading <= 22.5) direction = 'N';
   else if (heading > 22.5 && heading <= 67.5) direction = 'NE';
@@ -445,221 +234,57 @@ function updateCompass(event) {
   else if (heading > 247.5 && heading <= 292.5) direction = 'W';
   else if (heading > 292.5 && heading <= 337.5) direction = 'NW';
   
-  headingDisplay.textContent = Math.round(heading) + '° ' + direction;
+  document.getElementById('compassHeading').textContent = Math.round(heading) + '° ' + direction;
 }
 
-// ============= TAP TO SELECT & HAND TRACKING =============
-function getObjectAtPoint(x, y) {
-  for (let obj of detectedObjects) {
-    if (x >= obj.x && x <= obj.x + obj.width && y >= obj.y && y <= obj.y + obj.height) {
-      return obj;
-    }
-  }
-  return null;
-}
-
-function showDetailPanel(obj) {
-  const panel = document.getElementById('detailPanel');
-  document.getElementById('detailName').textContent = '🎯 ' + obj.name.toUpperCase();
-  document.getElementById('detailClass').textContent = obj.name;
-  document.getElementById('detailConfidence').textContent = (obj.confidence * 100).toFixed(1) + '%';
-  document.getElementById('detailX').textContent = Math.round(obj.x);
-  document.getElementById('detailY').textContent = Math.round(obj.y);
-  document.getElementById('detailWidth').textContent = Math.round(obj.width);
-  document.getElementById('detailHeight').textContent = Math.round(obj.height);
-  
-  selectedObject = obj;
-  panel.classList.add('visible');
-}
-
-function closeDetailPanel() {
-  document.getElementById('detailPanel').classList.remove('visible');
-  selectedObject = null;
-}
-
-function detectPinch(hand) {
-  if (!hand || !hand.landmarks) return { isPinch: false, pinchX: 0, pinchY: 0 };
-  
-  const thumb = hand.landmarks[4];   // Thumb tip
-  const index = hand.landmarks[8];   // Index finger tip
-  
-  // Calculate distance between thumb and index
-  const distance = Math.sqrt(
-    Math.pow(thumb.x - index.x, 2) + 
-    Math.pow(thumb.y - index.y, 2)
-  );
-  
-  const isPinch = distance < 0.05; // Threshold for pinch
-  
-  // Get center of pinch
-  const pinchX = (thumb.x + index.x) / 2 * canvas.width;
-  const pinchY = (thumb.y + index.y) / 2 * canvas.height;
-  
-  return { isPinch, pinchX, pinchY };
-}
-
-async function initializeHandTracking() {
-  try {
-    const Hands = window.Hands;
-    
-    hands = new Hands({
-      locateFile: (file) => {
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1633559619/${file}`;
-      }
-    });
-    
-    hands.setOptions({
-      maxNumHands: 2,
-      modelComplexity: 1,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5
-    });
-    
-    hands.onResults(onHandsResults);
-    
-    const handCanvas = document.getElementById('handCanvas');
-    const cameraObj = new window.Camera(camera, {
-      onFrame: async () => {
-        await hands.send({ image: camera });
-      },
-      width: 1280,
-      height: 720
-    });
-    
-    cameraObj.start();
-    handCanvas.style.display = 'block';
-    handCanvasCtx = handCanvas.getContext('2d');
-    
-    console.log('✓ Hand tracking initialized');
-  } catch(err) {
-    console.log('Hand tracking optional:', err.message);
-  }
-}
-
-function onHandsResults(results) {
-  if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
-    const handCanvas = document.getElementById('handCanvas');
-    handCanvasCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
-    return;
-  }
-  
-  const handCanvas = document.getElementById('handCanvas');
-  handCanvasCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
-  
-  for (let hand of results.multiHandLandmarks) {
-    const { isPinch, pinchX, pinchY } = detectPinch({ landmarks: hand });
-    
-    if (isPinch) {
-      // Draw pinch indicator
-      handCanvasCtx.fillStyle = '#ff3333';
-      handCanvasCtx.beginPath();
-      handCanvasCtx.arc(pinchX, pinchY, 15, 0, Math.PI * 2);
-      handCanvasCtx.fill();
-      
-      handCanvasCtx.strokeStyle = '#ffff00';
-      handCanvasCtx.lineWidth = 3;
-      handCanvasCtx.beginPath();
-      handCanvasCtx.arc(pinchX, pinchY, 15, 0, Math.PI * 2);
-      handCanvasCtx.stroke();
-      
-      // Check if pinch is over close button
-      const closeBtn = document.querySelector('.close-btn');
-      if (closeBtn && document.getElementById('detailPanel').classList.contains('visible')) {
-        const btnRect = closeBtn.getBoundingClientRect();
-        if (pinchX >= btnRect.left && pinchX <= btnRect.right &&
-            pinchY >= btnRect.top && pinchY <= btnRect.bottom) {
-          closeDetailPanel();
-          return;
-        }
-      }
-      
-      // Detect object at pinch location
-      const obj = getObjectAtPoint(pinchX, pinchY);
-      if (obj) {
-        showDetailPanel(obj);
-      }
-    }
-  }
-}
-
-// Initialize compass on page load
 window.addEventListener('load', () => {
   initializeCompass();
-  initializeHandTracking();
-  
-  // Add tap-to-select listener
-  canvas.addEventListener('click', (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) * (canvas.width / rect.width);
-    const y = (e.clientY - rect.top) * (canvas.height / rect.height);
-    
-    const obj = getObjectAtPoint(x, y);
-    if (obj) {
-      showDetailPanel(obj);
-    }
-  });
-  
-  // Touch support
-  canvas.addEventListener('touchstart', (e) => {
-    if (e.touches.length > 0) {
-      const touch = e.touches[0];
-      const rect = canvas.getBoundingClientRect();
-      const x = (touch.clientX - rect.left) * (canvas.width / rect.width);
-      const y = (touch.clientY - rect.top) * (canvas.height / rect.height);
-      
-      const obj = getObjectAtPoint(x, y);
-      if (obj) {
-        showDetailPanel(obj);
-      }
-    }
-  });
 });
 
-// ============= AUDIO VISUALIZER =============
+// AUDIO VISUALIZER
 async function initializeAudioVisualizer() {
   try {
-    // Get microphone stream
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    
-    // Create audio context
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
     const source = audioContext.createMediaStreamSource(stream);
-    
-    // Create analyser
     analyser = audioContext.createAnalyser();
-    analyser.fftSize = 256;
+    analyser.fftSize = 128;
     source.connect(analyser);
-    
-    // Setup data array
-    const bufferLength = analyser.frequencyBinCount;
-    dataArray = new Uint8Array(bufferLength);
-    
-    console.log('Audio visualizer initialized');
-    
+    dataArray = new Uint8Array(analyser.frequencyBinCount);
   } catch(err) {
-    console.error('Audio visualizer error:', err);
+    console.error('Audio error:', err);
   }
 }
 
 function updateAudioVisualizer() {
   if (!analyser || !dataArray) return;
   
-  // Get frequency data
   analyser.getByteFrequencyData(dataArray);
-  
   const bars = document.querySelectorAll('.audio-bar');
   const step = Math.floor(dataArray.length / bars.length);
   
   bars.forEach((bar, index) => {
     const value = dataArray[index * step];
-    const height = (value / 255) * 50; // Max height 50px
-    bar.style.height = Math.max(4, height) + 'px';
+    const height = (value / 255) * 35;
+    bar.style.height = Math.max(3, height) + 'px';
   });
   
   requestAnimationFrame(updateAudioVisualizer);
 }
 
-// Start countdown
+// Enter fullscreen function
+function enterFullscreen() {
+  const elem = document.documentElement;
+  if (elem.requestFullscreen) {
+    elem.requestFullscreen();
+  } else if (elem.webkitRequestFullscreen) {
+    elem.webkitRequestFullscreen();
+  } else if (elem.msRequestFullscreen) {
+    elem.msRequestFullscreen();
+  }
+}
+
+// COUNTDOWN
 let countdown = 10;
 timer.textContent = countdown;
 
@@ -670,12 +295,13 @@ const countdownInterval = setInterval(() => {
     clearInterval(countdownInterval);
     timer.style.display = 'none';
     
-    // Show camera and canvas, start sweep
+    // Enter fullscreen
+    enterFullscreen();
+    
     camera.style.display = 'block';
     canvas.style.display = 'block';
     sweeping = true;
     
-    // Update time/date
     updateTimeDate();
     setInterval(updateTimeDate, 1000);
     
