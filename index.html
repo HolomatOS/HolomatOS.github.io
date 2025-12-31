@@ -1,249 +1,687 @@
 <!doctype html>
-<html lang="en">
+<html>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>Horizon Lock — Cardboard</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>YOLO Scan</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4"></script>
+  <script async src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2"></script>
+  <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.4.1633559619"></script>
+  <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1633559619"></script>
+  <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.4.1633559619"></script>
+  <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1633559619"></script>
   <style>
-    html,body{height:100%;margin:0;background:#000;color:#0ff;font-family:Inter,system-ui,Arial}
-    .container{height:100vh;display:flex;flex-direction:column}
-    .topbar{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(0,0,0,.3)}
-    .controls{display:flex;gap:8px;align-items:center}
-    button{background:#062; color:#bff;border:none;padding:8px 10px;border-radius:6px}
-    .hint{color:#6fd;font-size:13px}
-    .vr{flex:1;display:flex;align-items:stretch}
-    canvas{flex:1;display:block;width:50%;height:calc(100vh - 52px);background:#001}
-    .overlay-ui{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:20;color:#7ff;font-weight:700}
-    .big-label{font-size:22px;letter-spacing:4px}
-    .small{font-size:12px;color:#9ff}
-    .center-guide{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none}
-    .reticle{width:110px;height:110px;border:2px solid rgba(0,255,255,.25);border-radius:50%;box-shadow:0 0 16px rgba(0,255,200,.06)}
-    .warning{color:#f66}
-    @media (orientation:portrait){ .big-label{font-size:18px} }
+    html,body{height:100%;margin:0;background:#000;overflow:hidden;font-family:Arial}
+    .container{width:100%;height:100%;position:relative;display:flex;align-items:center;justify-content:center}
+    video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:none}
+    canvas{position:absolute;top:0;left:0;width:100%;height:100%;display:none}
+    .timer{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#0ff;font-size:80px;font-weight:bold;z-index:10;text-shadow:0 0 30px #0ff}
+    .hud-top-left{position:absolute;top:20px;left:20px;width:280px;background:rgba(0,255,255,0.1);border:2px solid #0ff;border-radius:8px;padding:15px;color:#0ff;font-size:14px;display:none;z-index:5;font-family:monospace;flex-direction:column}
+    .hud-middle-left{position:absolute;top:50%;left:20px;transform:translateY(-50%);width:280px;background:rgba(0,255,255,0.1);border:2px solid #0ff;border-radius:8px;padding:15px;color:#0ff;font-size:13px;display:none;z-index:5;max-height:300px;overflow-y:auto;font-family:monospace;flex-direction:column}
+    .hud-top-left.visible, .hud-middle-left.visible {display:flex;}
+    .hud-title{font-weight:bold;margin-bottom:10px;border-bottom:1px solid #0ff;padding-bottom:8px}
+    .hud-content{line-height:1.6;display:flex;flex-direction:column;gap:5px}
+    .loading{color:#6f6;font-style:italic}
+    .object-box{color:#0f0;margin:5px 0;padding:5px;background:rgba(0,255,0,0.1);border-left:2px solid #0f0;display:flex;align-items:center}
+    .compass-container{position:absolute;bottom:20px;left:20px;width:150px;height:150px;display:none;align-items:center;justify-content:center;z-index:5;filter:drop-shadow(0 0 25px rgba(0,255,255,0.6))}
+    .compass-container.visible {display:flex;}
+    .compass-dial{position:absolute;width:140px;height:140px;border-radius:50%;background:radial-gradient(circle at 35% 35%,rgba(50,100,150,0.9),rgba(10,30,60,0.95));border:4px solid;border-color:#0ff #00a0c0 #0088aa #0ff;display:flex;align-items:center;justify-content:center;font-size:10px;color:#0ff;font-family:monospace;font-weight:bold;letter-spacing:2px;box-shadow:inset 0 0 20px rgba(0,0,0,0.8),inset 0 2px 5px rgba(255,255,255,0.1),0 0 30px rgba(0,255,255,0.4)}
+    .compass-rings{position:absolute;width:140px;height:140px;border-radius:50%;border:1px solid rgba(0,255,255,0.3)}
+    .compass-rings-outer{width:135px;height:135px;border-radius:50%;border:1px dashed rgba(0,200,255,0.2);position:absolute;top:2.5px;left:2.5px}
+    .compass-ticks{position:absolute;width:140px;height:140px;border-radius:50%}
+    .tick{position:absolute;width:1px;background:#0ff;left:50%;top:2px;transform-origin:0 69px}
+    .tick.major{height:8px;background:#0f0;width:2px}
+    .tick.minor{height:4px;opacity:0.6}
+    .compass-cardinal{position:absolute;width:130px;height:130px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#0f0;font-weight:bold;text-shadow:0 0 8px rgba(0,255,0,0.8);z-index:3}
+    .compass-cardinal span{position:absolute}
+    .compass-cardinal span:nth-child(1){top:8px;color:#0f0;text-shadow:0 0 10px #0f0}
+    .compass-cardinal span:nth-child(2){left:8px;color:#0ff}
+    .compass-cardinal span:nth-child(3){right:8px;color:#0ff}
+    .compass-cardinal span:nth-child(4){bottom:8px;color:#ff3333}
+    .compass-numbers{position:absolute;width:125px;height:125px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#00ff88;font-family:monospace;font-weight:bold;z-index:2}
+    .degree{position:absolute;width:100%;height:100%}
+    .needle-container{position:absolute;width:140px;height:140px;z-index:6}
+    .compass-needle{position:absolute;width:3px;height:60px;background:linear-gradient(180deg,#0f0 0%,#00ff00 40%,#0099ff 60%,#0077ff 100%);border-radius:2px;left:50%;top:10px;transform-origin:center 60px;box-shadow:0 0 12px rgba(0,255,0,0.9),0 0 25px rgba(0,200,255,0.6);z-index:10;filter:drop-shadow(0 0 5px rgba(0,255,0,0.8))}
+    .compass-center{position:absolute;width:14px;height:14px;background:radial-gradient(circle at 30% 30%,#00ff00,#00aa00);border-radius:50%;border:3px solid #0ff;top:50%;left:50%;transform:translate(-50%,-50%);z-index:11;box-shadow:0 0 15px rgba(0,255,0,0.9),inset 0 0 8px rgba(255,255,255,0.3),0 0 25px rgba(0,200,255,0.6)}
+    .compass-heading{position:absolute;bottom:-40px;left:50%;transform:translateX(-50%);color:#0f0;font-size:12px;font-family:monospace;font-weight:bold;letter-spacing:2px;white-space:nowrap;text-shadow:0 0 10px rgba(0,255,0,0.8)}
+    .audio-visualizer{position:absolute;top:20px;right:20px;width:300px;height:60px;display:none;align-items:center;justify-content:center;z-index:5;background:rgba(0,20,40,0.6);border:2px solid #0ff;border-radius:8px;padding:10px;gap:3px;filter:drop-shadow(0 0 15px rgba(255,0,255,0.5))}
+    .audio-visualizer.visible {display:flex;}
+    .audio-bar{width:4px;background:linear-gradient(180deg,#ff00ff,#ff69b4);border-radius:2px;box-shadow:0 0 10px #ff00ff;transition:height 50ms ease-out;min-height:4px}
+    .detail-panel{position:absolute;bottom:20px;right:20px;width:250px;background:rgba(0,20,40,0.95);border:2px solid #0ff;border-radius:8px;padding:15px;color:#0f0;font-family:monospace;font-size:12px;display:none;z-index:10;flex-direction:column;gap:8px;box-shadow:0 0 20px rgba(0,255,255,0.5)}
+    .detail-panel.visible {display:flex;}
+    .detail-title{font-weight:bold;color:#0ff;border-bottom:1px solid #0ff;padding-bottom:8px;font-size:14px}
+    .detail-row{display:flex;justify-content:space-between;border-bottom:1px solid rgba(0,255,255,0.2);padding:5px 0}
+    .detail-label{color:#0ff}
+    .detail-value{color:#0f0;text-align:right}
+    .close-btn{align-self:flex-end;background:#ff3333;color:#fff;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;font-weight:bold;font-size:11px}
+    .hand-canvas{position:absolute;top:0;left:0;width:100%;height:100%;display:none;z-index:4}
+    .pose-canvas{position:absolute;top:0;left:0;width:100%;height:100%;display:none;z-index:4}
+    .crosshair-v{width:2px;height:50px;background:#ff3333;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);box-shadow:0 0 10px #ff3333}
+    @keyframes pulse-target{0%{box-shadow:0 0 15px rgba(255,51,51,0.8);}50%{box-shadow:0 0 30px rgba(255,51,51,1);}100%{box-shadow:0 0 15px rgba(255,51,51,0.8);}}
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="topbar">
-      <div>
-        <strong>Horizon Lock</strong>
-        <div class="hint">Use in Google Cardboard — allow Motion permission</div>
-      </div>
-      <div class="controls">
-        <button id="requestPerm">Enable Motion</button>
-        <button id="calibrate">Calibrate</button>
-        <button id="fullscreen">VR Fullscreen</button>
-      </div>
+    <div class="timer" id="timer">10</div>
+  </div>
+  <video id="camera" autoplay muted playsinline></video>
+  <canvas id="canvas"></canvas>
+  <canvas id="handCanvas" class="hand-canvas"></canvas>
+  
+  <div class="hud-top-left" id="hudTopLeft">
+    <div class="hud-title">YOLO SYSTEM STATUS</div>
+    <div class="hud-content">
+      <div>TIME: <span id="timeDisplay">--:--:--</span></div>
+      <div>DATE: <span id="dateDisplay">--/--/----</span></div>
+      <div>MODEL: <span id="modelStatus">Loading...</span></div>
     </div>
+  </div>
+  <div class="hud-middle-left" id="hudMiddleLeft">
+    <div class="hud-title">YOLO DETECTIONS</div>
+    <div class="hud-content" id="objectsList">Scanning...</div>
+  </div>
 
-    <div class="vr" id="vr">
-      <canvas id="left"></canvas>
-      <canvas id="right"></canvas>
-
-      <div class="overlay-ui">
-        <div class="big-label">HORIZON LOCK</div>
-        <div class="small">Pitch & Roll locked to world — Tap & calibrate to set reference</div>
+  <!-- COMPASS -->
+  <div class="compass-container" id="compassContainer">
+    <div class="compass-dial">
+      <!-- Decorative rings -->
+      <div class="compass-rings"></div>
+      <div class="compass-rings compass-rings-outer"></div>
+      
+      <!-- Tick marks -->
+      <div class="compass-ticks" id="compassTicks"></div>
+      
+     
+      
+      <!-- Cardinal directions (spinning outer ring) -->
+      <div class="compass-cardinal" id="compassCardinal">
+        <span>N</span>
+        <span>W</span>
+        <span>E</span>
+        <span>S</span>
       </div>
-
-      <div class="center-guide" aria-hidden>
-        <div class="reticle"></div>
+      
+      <!-- Needle (fixed, pointing up) -->
+      <div class="needle-container">
+        <div class="compass-needle" id="compassNeedle"></div>
       </div>
-
+      
+      <!-- Center point -->
+      <div class="compass-center"></div>
+      
+      <!-- Heading display -->
+      <div class="compass-heading" id="compassHeading">0°</div>
     </div>
+  </div>
 
-    <div style="padding:8px 12px;background:rgba(0,0,0,.25);font-size:13px;color:#9ff">Status: <span id="status">waiting</span> — <span id="debug"></span></div>
+  <!-- AUDIO VISUALIZER -->
+  <div class="audio-visualizer" id="audioVisualizer">
+    <div class="audio-bar"></div>
+    <div class="audio-bar"></div>
+    <div class="audio-bar"></div>
+    <div class="audio-bar"></div>
+    <div class="audio-bar"></div>
+    <div class="audio-bar"></div>
+    <div class="audio-bar"></div>
+    <div class="audio-bar"></div>
+    <div class="audio-bar"></div>
+    <div class="audio-bar"></div>
+    <div class="audio-bar"></div>
+    <div class="audio-bar"></div>
+    <div class="audio-bar"></div>
+    <div class="audio-bar"></div>
+    <div class="audio-bar"></div>
+    <div class="audio-bar"></div>
+    <div class="audio-bar"></div>
+    <div class="audio-bar"></div>
+    <div class="audio-bar"></div>
+    <div class="audio-bar"></div>
   </div>
 
 <script>
-// Minimal Horizon Lock for Cardboard
-// Uses DeviceOrientation (alpha,beta,gamma). Calibrate to set current pose as horizon.
+const canvas = document.getElementById('canvas');
+const camera = document.getElementById('camera');
+const timer = document.getElementById('timer');
+const ctx = canvas.getContext('2d');
+const hudTopLeft = document.getElementById('hudTopLeft');
+const hudMiddleLeft = document.getElementById('hudMiddleLeft');
+const objectsList = document.getElementById('objectsList');
+const timeDisplay = document.getElementById('timeDisplay');
+const dateDisplay = document.getElementById('dateDisplay');
+const modelStatus = document.getElementById('modelStatus');
 
-const left = document.getElementById('left');
-const right = document.getElementById('right');
-const status = document.getElementById('status');
-const debug = document.getElementById('debug');
-const reqBtn = document.getElementById('requestPerm');
-const calibBtn = document.getElementById('calibrate');
-const fsBtn = document.getElementById('fullscreen');
+let sweeping = false;
+let sweepPos = 0;
+let scanComplete = false;
+let yoloSession = null;
+let modelLoaded = false;
+let audioContext = null;
+let analyser = null;
+let dataArray = null;
+let detectedObjects = [];
+let selectedObject = null;
+let hands = null;
+let handCanvasCtx = null;
 
-function sizeCanvases() {
-  left.width = left.clientWidth * devicePixelRatio;
-  left.height = left.clientHeight * devicePixelRatio;
-  right.width = right.clientWidth * devicePixelRatio;
-  right.height = right.clientHeight * devicePixelRatio;
-}
-window.addEventListener('resize', sizeCanvases);
-sizeCanvases();
+// YOLO class names (COCO dataset - 80 classes)
+const classNames = [
+  'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light',
+  'fire hydrant', 'stop sign', 'parking meter', 'bench', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant',
+  'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis',
+  'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass',
+  'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli',
+  'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table',
+  'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'microwave', 'oven', 'toaster', 'sink',
+  'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush'
+];
 
-const ctxL = left.getContext('2d');
-const ctxR = right.getContext('2d');
-
-let reference = {roll:0, pitch:0};
-let calibrated = false;
-let last = {roll:0,pitch:0,yaw:0};
-let hasSensor = false;
-let smoothing = 0.12; // simple low-pass
-let sm = {roll:0,pitch:0};
-
-function toRad(d){return d*Math.PI/180}
-
-function drawHorizon(ctx, w, h, rollDeg, pitchDeg) {
-  ctx.clearRect(0,0,w,h);
-  ctx.save();
-  ctx.translate(w/2,h/2);
-  ctx.rotate(-toRad(rollDeg)); // rotate opposite to phone roll so horizon stays level in world
-
-  // vertical shift based on pitch (smaller factor for nicer range)
-  const pxPerDeg = h / 90; // 90deg -> full screen
-  const y = -pitchDeg * pxPerDeg; // negative so pitching up moves horizon down
-
-  // draw sky
-  ctx.fillStyle = '#001f2f';
-  ctx.fillRect(-w, -h*2 + y, w*2, h*2);
-  // draw ground
-  ctx.fillStyle = '#06221a';
-  ctx.fillRect(-w, y, w*2, h*2);
-
-  // horizon line
-  ctx.strokeStyle = '#2ff';
-  ctx.lineWidth = 4 * devicePixelRatio;
-  ctx.beginPath();
-  ctx.moveTo(-w, y);
-  ctx.lineTo(w, y);
-  ctx.stroke();
-
-  // graduations (pitch ticks)
-  ctx.strokeStyle = 'rgba(47,255,255,0.15)';
-  ctx.lineWidth = 1 * devicePixelRatio;
-  for(let deg=-60;deg<=60;deg+=10){
-    const yy = y + deg*pxPerDeg;
-    ctx.beginPath();
-    ctx.moveTo(-40*devicePixelRatio, yy);
-    ctx.lineTo(40*devicePixelRatio, yy);
-    ctx.stroke();
-  }
-
-  // center label
-  ctx.fillStyle = '#9ff';
-  ctx.font = `${18*devicePixelRatio}px sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.fillText(`${Math.round(pitchDeg)}°`, 0, y - 12*devicePixelRatio);
-
-  ctx.restore();
-
-  // vignette
-  const g = ctx.createLinearGradient(0,0,0,h);
-  g.addColorStop(0,'rgba(0,0,0,0)');
-  g.addColorStop(1,'rgba(0,0,0,0.35)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0,0,w,h);
-}
-
-function render() {
-  // smoothing
-  sm.roll += (last.roll - sm.roll) * smoothing;
-  sm.pitch += (last.pitch - sm.pitch) * smoothing;
-
-  // left and right draw (small eye offset)
-  const wL = left.width, hL = left.height;
-  const wR = right.width, hR = right.height;
-
-  // slight stereo offset (no parallax for horizon, but small effect)
-  drawHorizon(ctxL, wL, hL, sm.roll, sm.pitch);
-  drawHorizon(ctxR, wR, hR, sm.roll, sm.pitch);
-
-  requestAnimationFrame(render);
-}
-requestAnimationFrame(render);
-
-// Handle DeviceOrientation
-function handleOrientation(e){
-  // alpha = yaw, beta = pitch (-180..180), gamma = roll (-90..90)
-  let alpha = e.alpha; // compass
-  let beta = e.beta;   // front-back
-  let gamma = e.gamma; // left-right
-
-  if (beta === null || gamma === null) return;
-  hasSensor = true;
-  status.textContent = 'active';
-
-  // define roll and pitch in degrees
-  let roll = gamma;    // device left/right tilt -> roll
-  let pitch = beta;    // device front/back tilt -> pitch
-
-  // normalize to -180..180 for pitch
-  if (pitch > 180) pitch -= 360;
-
-  // apply reference (calibration)
-  if (calibrated) {
-    roll = roll - reference.roll;
-    pitch = pitch - reference.pitch;
-  }
-
-  last.roll = roll;
-  last.pitch = pitch;
-  last.yaw = alpha || 0;
-
-  debug.textContent = `roll:${roll.toFixed(1)}° pitch:${pitch.toFixed(1)}°`;
-}
-
-// permission request for iOS
-async function requestPermission(){
-  if (typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission) {
-    try {
-      const res = await DeviceOrientationEvent.requestPermission();
-      if (res === 'granted') {
-        window.addEventListener('deviceorientation', handleOrientation, true);
-        status.textContent = 'granted';
-      } else {
-        status.textContent = 'denied';
+// Load YOLO model
+async function loadYOLOModel() {
+  try {
+    modelStatus.textContent = 'Loading YOLO...';
+    console.log('Starting YOLO model load...');
+    console.log('TensorFlow available:', typeof tf !== 'undefined');
+    console.log('COCO-SSD available:', typeof cocoSsd !== 'undefined');
+    
+    // Check if libraries are loaded
+    let tfReady = typeof tf !== 'undefined';
+    let cocoReady = typeof cocoSsd !== 'undefined';
+    
+    // Wait for TensorFlow if not ready
+    if (!tfReady) {
+      console.log('Waiting for TensorFlow...');
+      let attempts = 0;
+      while (!tfReady && attempts < 50) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        tfReady = typeof tf !== 'undefined';
+        attempts++;
       }
-    } catch(err) { status.textContent = 'error'; debug.textContent = err.message }
+      if (!tfReady) throw new Error('TensorFlow.js failed to load');
+    }
+    
+    // Wait for COCO-SSD if not ready
+    if (!cocoReady) {
+      console.log('Waiting for COCO-SSD...');
+      let attempts = 0;
+      while (!cocoReady && attempts < 50) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        cocoReady = typeof cocoSsd !== 'undefined';
+        attempts++;
+      }
+      if (!cocoReady) throw new Error('COCO-SSD failed to load');
+    }
+    
+    // Both libraries are ready, load the model
+    console.log('Loading COCO-SSD model...');
+    window.cocoSsdModel = await cocoSsd.load();
+    
+    modelLoaded = true;
+    modelStatus.textContent = '✓ YOLO Ready';
+    console.log('✓ YOLO model loaded successfully');
+    
+  } catch(err) {
+    console.error('Model load error:', err);
+    modelStatus.textContent = 'Error: ' + err.message;
+  }
+}
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+async function requestCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {facingMode: 'environment'}
+    });
+    camera.srcObject = stream;
+  } catch(err) {
+    console.error('Camera error:', err);
+  }
+}
+
+function updateTimeDate() {
+  const now = new Date();
+  const hours = String(now.getHours()).padStart(2, '0');
+  const mins = String(now.getMinutes()).padStart(2, '0');
+  const secs = String(now.getSeconds()).padStart(2, '0');
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const year = now.getFullYear();
+  
+  timeDisplay.textContent = `${hours}:${mins}:${secs}`;
+  dateDisplay.textContent = `${month}/${day}/${year}`;
+}
+
+// YOLO Object Detection using TensorFlow COCO-SSD
+async function analyzeFrameWithYOLO() {
+  if (!scanComplete || !modelLoaded) return;
+  
+  try {
+    // Run YOLO detection on canvas
+    const predictions = await window.cocoSsdModel.detect(canvas);
+    
+    if (predictions.length === 0) {
+      objectsList.innerHTML = '<span class="loading">No objects detected</span>';
+      return;
+    }
+    
+    // Draw bounding boxes and display results
+    let detectionHTML = '';
+    const drawnBoxes = new Set();
+    
+    predictions.forEach((prediction) => {
+      const [x, y, width, height] = prediction.bbox;
+      const confidence = Math.round(prediction.score * 100);
+      
+      // Don't draw bounding boxes on canvas - only display in HUD
+      
+      // Add to detection list
+      if (!drawnBoxes.has(prediction.class)) {
+        detectionHTML += `<div class="object-box">▪ ${prediction.class} (${confidence}%)</div>`;
+        drawnBoxes.add(prediction.class);
+        
+        // Add to detected objects for tap detection
+        detectedObjects.push({
+          name: prediction.class,
+          x: x,
+          y: y,
+          confidence: confidence
+        });
+      }
+    });
+    
+    objectsList.innerHTML = detectionHTML || '<span class="loading">Detecting...</span>';
+    
+  } catch(err) {
+    objectsList.innerHTML = '<span class="loading">YOLO Error - Check model</span>';
+    console.error('YOLO detection error:', err);
+  }
+}
+
+function continueLiveCamera() {
+  // Draw fresh camera feed every frame
+  ctx.drawImage(camera, 0, 0, canvas.width, canvas.height);
+  
+  // Keep running YOLO detection continuously
+  if (scanComplete && modelLoaded) {
+    analyzeFrameWithYOLO();
+  }
+  
+  requestAnimationFrame(continueLiveCamera);
+}
+
+function sweep() {
+  if (!sweeping) return;
+  
+  // Draw camera feed clearly
+  ctx.drawImage(camera, 0, 0, canvas.width, canvas.height);
+  
+  // Draw vertical cyan sweep line only if still sweeping
+  if (sweepPos <= canvas.width) {
+    ctx.strokeStyle = '#0ff';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(sweepPos, 0);
+    ctx.lineTo(sweepPos, canvas.height);
+    ctx.stroke();
+    
+    sweepPos += 2;
+    requestAnimationFrame(sweep);
   } else {
-    // non-iOS: just attach
-    window.addEventListener('deviceorientation', handleOrientation, true);
-    status.textContent = 'listening';
+    // Sweep complete - line disappears, NOW SHOW HUD AND COMPASS
+    sweeping = false;
+    scanComplete = true;
+    
+    // Show HUD panels and compass AFTER sweep completes
+    document.getElementById('hudTopLeft').classList.add('visible');
+    document.getElementById('hudMiddleLeft').classList.add('visible');
+    document.getElementById('compassContainer').classList.add('visible');
+    document.getElementById('audioVisualizer').classList.add('visible');
+    
+    objectsList.textContent = 'Detecting objects...';
+    
+    // Initialize audio visualizer
+    if (!audioContext) {
+      initializeAudioVisualizer().then(() => {
+        updateAudioVisualizer();
+      });
+    }
+    
+    // Start continuous camera feed and YOLO detection
+    continueLiveCamera();
   }
 }
-reqBtn.addEventListener('click', requestPermission);
 
-// calibrate button: set reference to current smoothed orientation
-calibBtn.addEventListener('click', ()=>{
-  reference.roll = last.roll;
-  reference.pitch = last.pitch;
-  calibrated = true;
-  status.textContent = 'calibrated';
-});
+// Initialize
+requestCamera();
+loadYOLOModel();
 
-// fullscreen VR
-fsBtn.addEventListener('click', async ()=>{
-  const el = document.getElementById('vr');
-  if (el.requestFullscreen) await el.requestFullscreen();
-  else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
-});
+// ============= MAGNETOMETER / COMPASS =============
+let currentHeading = 0;
 
-// fallback message if no sensor activity after a short timeout
-setTimeout(()=>{
-  if (!hasSensor) status.textContent = 'no sensor / permission needed';
-},2500);
-
-// initial quick calibration if we get data
-let first = true;
-window.addEventListener('deviceorientation', function initOnce(e){
-  if (first && e.beta!==null && e.gamma!==null){
-    reference.roll = e.gamma; reference.pitch = e.beta; calibrated = true; first=false; status.textContent='calibrated';
+function initializeCompass() {
+  // Create tick marks and numbers
+  createCompassMarkings();
+  
+  // Request permission for iOS 13+
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission()
+      .then(permissionState => {
+        if (permissionState === 'granted') {
+          window.addEventListener('deviceorientation', updateCompass);
+        }
+      })
+      .catch(console.error);
+  } else {
+    // Non-iOS or older iOS
+    window.addEventListener('deviceorientation', updateCompass);
   }
-}, { once:true });
+}
 
-// resize handling
-window.addEventListener('resize', ()=>{
-  sizeCanvases();
+function createCompassMarkings() {
+  const ticksContainer = document.getElementById('compassTicks');
+  const numbersContainer = document.getElementById('compassNumbers');
+  
+  // Create 360 tick marks
+  for (let i = 0; i < 360; i += 2) {
+    const tick = document.createElement('div');
+    tick.className = 'tick ' + (i % 30 === 0 ? 'major' : 'minor');
+    tick.style.transform = `rotate(${i}deg)`;
+    ticksContainer.appendChild(tick);
+  }
+  
+  // Create cardinal direction numbers (N, E, S, W)
+  const cardinals = [
+    { deg: 0, label: 'N' },
+    { deg: 90, label: 'E' },
+    { deg: 180, label: 'S' },
+    { deg: 270, label: 'W' }
+  ];
+  
+  cardinals.forEach(cardinal => {
+    const numEl = document.createElement('div');
+    numEl.textContent = cardinal.label;
+    numEl.style.position = 'absolute';
+    numEl.style.transform = `rotate(${cardinal.deg}deg) translateY(-55px) rotate(-${cardinal.deg}deg)`;
+    numEl.style.width = '100%';
+    numEl.style.textAlign = 'center';
+    numEl.style.fontSize = '10px';
+    numEl.style.color = cardinal.label === 'N' ? '#0f0' : '#0ff';
+    numEl.style.fontWeight = 'bold';
+    numEl.style.textShadow = '0 0 5px rgba(0,255,136,0.8)';
+    numbersContainer.appendChild(numEl);
+  });
+}
+
+function updateCompass(event) {
+  let heading = event.alpha; // 0-360, where 0 is North
+  
+  if (heading === null) return;
+  
+  // Ensure heading is between 0-360
+  heading = (heading + 360) % 360;
+  currentHeading = heading;
+  
+  // Rotate the OUTER RING (cardinal directions spin)
+  const cardinal = document.getElementById('compassCardinal');
+  cardinal.style.transform = `rotate(${heading}deg)`;
+  
+  // Needle stays FIXED pointing up - no rotation
+  // The outer ring spins around the fixed needle
+  
+  // Update heading display with direction
+  const headingDisplay = document.getElementById('compassHeading');
+  let direction = 'N';
+  if (heading > 337.5 || heading <= 22.5) direction = 'N';
+  else if (heading > 22.5 && heading <= 67.5) direction = 'NE';
+  else if (heading > 67.5 && heading <= 112.5) direction = 'E';
+  else if (heading > 112.5 && heading <= 157.5) direction = 'SE';
+  else if (heading > 157.5 && heading <= 202.5) direction = 'S';
+  else if (heading > 202.5 && heading <= 247.5) direction = 'SW';
+  else if (heading > 247.5 && heading <= 292.5) direction = 'W';
+  else if (heading > 292.5 && heading <= 337.5) direction = 'NW';
+  
+  headingDisplay.textContent = Math.round(heading) + '° ' + direction;
+}
+
+// ============= TAP TO SELECT & HAND TRACKING =============
+function getObjectAtPoint(x, y) {
+  for (let obj of detectedObjects) {
+    if (x >= obj.x && x <= obj.x + obj.width && y >= obj.y && y <= obj.y + obj.height) {
+      return obj;
+    }
+  }
+  return null;
+}
+
+function showDetailPanel(obj) {
+  const panel = document.getElementById('detailPanel');
+  document.getElementById('detailName').textContent = '🎯 ' + obj.name.toUpperCase();
+  document.getElementById('detailClass').textContent = obj.name;
+  document.getElementById('detailConfidence').textContent = (obj.confidence * 100).toFixed(1) + '%';
+  document.getElementById('detailX').textContent = Math.round(obj.x);
+  document.getElementById('detailY').textContent = Math.round(obj.y);
+  document.getElementById('detailWidth').textContent = Math.round(obj.width);
+  document.getElementById('detailHeight').textContent = Math.round(obj.height);
+  
+  selectedObject = obj;
+  panel.classList.add('visible');
+}
+
+function closeDetailPanel() {
+  document.getElementById('detailPanel').classList.remove('visible');
+  selectedObject = null;
+}
+
+function detectPinch(hand) {
+  if (!hand || !hand.landmarks) return { isPinch: false, pinchX: 0, pinchY: 0 };
+  
+  const thumb = hand.landmarks[4];   // Thumb tip
+  const index = hand.landmarks[8];   // Index finger tip
+  
+  // Calculate distance between thumb and index
+  const distance = Math.sqrt(
+    Math.pow(thumb.x - index.x, 2) + 
+    Math.pow(thumb.y - index.y, 2)
+  );
+  
+  const isPinch = distance < 0.05; // Threshold for pinch
+  
+  // Get center of pinch
+  const pinchX = (thumb.x + index.x) / 2 * canvas.width;
+  const pinchY = (thumb.y + index.y) / 2 * canvas.height;
+  
+  return { isPinch, pinchX, pinchY };
+}
+
+async function initializeHandTracking() {
+  try {
+    const Hands = window.Hands;
+    
+    hands = new Hands({
+      locateFile: (file) => {
+        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1633559619/${file}`;
+      }
+    });
+    
+    hands.setOptions({
+      maxNumHands: 2,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+    
+    hands.onResults(onHandsResults);
+    
+    const handCanvas = document.getElementById('handCanvas');
+    const cameraObj = new window.Camera(camera, {
+      onFrame: async () => {
+        await hands.send({ image: camera });
+      },
+      width: 1280,
+      height: 720
+    });
+    
+    cameraObj.start();
+    handCanvas.style.display = 'block';
+    handCanvasCtx = handCanvas.getContext('2d');
+    
+    console.log('✓ Hand tracking initialized');
+  } catch(err) {
+    console.log('Hand tracking optional:', err.message);
+  }
+}
+
+function onHandsResults(results) {
+  if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+    const handCanvas = document.getElementById('handCanvas');
+    handCanvasCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
+    return;
+  }
+  
+  const handCanvas = document.getElementById('handCanvas');
+  handCanvasCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
+  
+  for (let hand of results.multiHandLandmarks) {
+    const { isPinch, pinchX, pinchY } = detectPinch({ landmarks: hand });
+    
+    if (isPinch) {
+      // Draw pinch indicator
+      handCanvasCtx.fillStyle = '#ff3333';
+      handCanvasCtx.beginPath();
+      handCanvasCtx.arc(pinchX, pinchY, 15, 0, Math.PI * 2);
+      handCanvasCtx.fill();
+      
+      handCanvasCtx.strokeStyle = '#ffff00';
+      handCanvasCtx.lineWidth = 3;
+      handCanvasCtx.beginPath();
+      handCanvasCtx.arc(pinchX, pinchY, 15, 0, Math.PI * 2);
+      handCanvasCtx.stroke();
+      
+      // Check if pinch is over close button
+      const closeBtn = document.querySelector('.close-btn');
+      if (closeBtn && document.getElementById('detailPanel').classList.contains('visible')) {
+        const btnRect = closeBtn.getBoundingClientRect();
+        if (pinchX >= btnRect.left && pinchX <= btnRect.right &&
+            pinchY >= btnRect.top && pinchY <= btnRect.bottom) {
+          closeDetailPanel();
+          return;
+        }
+      }
+      
+      // Detect object at pinch location
+      const obj = getObjectAtPoint(pinchX, pinchY);
+      if (obj) {
+        showDetailPanel(obj);
+      }
+    }
+  }
+}
+
+// Initialize compass on page load
+window.addEventListener('load', () => {
+  initializeCompass();
+  initializeHandTracking();
+  
+  // Add tap-to-select listener
+  canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+    
+    const obj = getObjectAtPoint(x, y);
+    if (obj) {
+      showDetailPanel(obj);
+    }
+  });
+  
+  // Touch support
+  canvas.addEventListener('touchstart', (e) => {
+    if (e.touches.length > 0) {
+      const touch = e.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      const x = (touch.clientX - rect.left) * (canvas.width / rect.width);
+      const y = (touch.clientY - rect.top) * (canvas.height / rect.height);
+      
+      const obj = getObjectAtPoint(x, y);
+      if (obj) {
+        showDetailPanel(obj);
+      }
+    }
+  });
 });
 
-// instruct user
-if (window.DeviceOrientationEvent === undefined) {
-  status.textContent = 'unsupported';
+// ============= AUDIO VISUALIZER =============
+async function initializeAudioVisualizer() {
+  try {
+    // Get microphone stream
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    
+    // Create audio context
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioContext.createMediaStreamSource(stream);
+    
+    // Create analyser
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    
+    // Setup data array
+    const bufferLength = analyser.frequencyBinCount;
+    dataArray = new Uint8Array(bufferLength);
+    
+    console.log('Audio visualizer initialized');
+    
+  } catch(err) {
+    console.error('Audio visualizer error:', err);
+  }
 }
+
+function updateAudioVisualizer() {
+  if (!analyser || !dataArray) return;
+  
+  // Get frequency data
+  analyser.getByteFrequencyData(dataArray);
+  
+  const bars = document.querySelectorAll('.audio-bar');
+  const step = Math.floor(dataArray.length / bars.length);
+  
+  bars.forEach((bar, index) => {
+    const value = dataArray[index * step];
+    const height = (value / 255) * 50; // Max height 50px
+    bar.style.height = Math.max(4, height) + 'px';
+  });
+  
+  requestAnimationFrame(updateAudioVisualizer);
+}
+
+// Start countdown
+let countdown = 10;
+timer.textContent = countdown;
+
+const countdownInterval = setInterval(() => {
+  countdown--;
+  timer.textContent = countdown;
+  if (countdown <= 0) {
+    clearInterval(countdownInterval);
+    timer.style.display = 'none';
+    
+    // Show camera and canvas, start sweep
+    camera.style.display = 'block';
+    canvas.style.display = 'block';
+    sweeping = true;
+    
+    // Update time/date
+    updateTimeDate();
+    setInterval(updateTimeDate, 1000);
+    
+    sweep();
+  }
+}, 1000);
 </script>
 </body>
 </html>
