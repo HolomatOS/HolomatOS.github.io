@@ -1,927 +1,102 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-  <title>YOLO Scan</title>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4"></script>
-  <script async src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <style>
-    html,body{height:100%;margin:0;background:#000;overflow:hidden;font-family:Arial;touch-action:none}
-    .container{width:100%;height:100%;position:relative;display:flex;align-items:center;justify-content:center;flex-direction:column}
-    video{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:none}
-    canvas{position:absolute;top:0;left:0;width:100%;height:100%;display:none}
-    .timer{color:#0ff;font-size:min(80px,15vw);font-weight:bold;z-index:10;text-shadow:0 0 30px #0ff}
-    .fullscreen-btn{margin-top:30px;padding:15px 40px;background:#0ff;color:#000;border:none;border-radius:8px;font-size:18px;font-weight:bold;cursor:pointer;box-shadow:0 0 20px #0ff;z-index:10;text-transform:uppercase;letter-spacing:2px}
-    .fullscreen-btn:active{background:#0aa;transform:scale(0.95)}
-    .hud-top-left{position:absolute;top:10px;left:10px;width:min(280px,calc(100vw - 40px));background:rgba(0,255,255,0.1);border:2px solid #0ff;border-radius:8px;padding:10px;color:#0ff;font-size:12px;display:none;z-index:5;font-family:monospace;flex-direction:column}
-    .hud-middle-left{position:absolute;top:50%;left:10px;transform:translateY(-50%);width:min(280px,calc(100vw - 40px));background:rgba(0,255,255,0.1);border:2px solid #0ff;border-radius:8px;padding:10px;color:#0ff;font-size:11px;display:none;z-index:5;max-height:40vh;overflow-y:auto;font-family:monospace;flex-direction:column}
-    .hud-top-left.visible, .hud-middle-left.visible {display:flex;}
-    .hud-title{font-weight:bold;margin-bottom:8px;border-bottom:1px solid #0ff;padding-bottom:6px;font-size:13px}
-    .hud-content{line-height:1.6;display:flex;flex-direction:column;gap:5px}
-    .loading{color:#6f6;font-style:italic}
-    .object-box{color:#0f0;margin:5px 0;padding:5px;background:rgba(0,255,0,0.1);border-left:2px solid #0f0;display:flex;align-items:center;font-size:11px}
-    .compass-container{position:absolute;bottom:20px;left:20px;width:min(120px,25vw);height:min(120px,25vw);display:none;align-items:center;justify-content:center;z-index:5;filter:drop-shadow(0 0 25px rgba(0,255,255,0.6))}
-    .compass-container.visible {display:flex;}
-    .compass-dial{position:absolute;width:110px;height:110px;border-radius:50%;background:radial-gradient(circle at 35% 35%,rgba(50,100,150,0.9),rgba(10,30,60,0.95));border:3px solid;border-color:#0ff #00a0c0 #0088aa #0ff;display:flex;align-items:center;justify-content:center;font-size:9px;color:#0ff;font-family:monospace;font-weight:bold;letter-spacing:2px;box-shadow:inset 0 0 20px rgba(0,0,0,0.8),inset 0 2px 5px rgba(255,255,255,0.1),0 0 30px rgba(0,255,255,0.4)}
-    .compass-rings{position:absolute;width:110px;height:110px;border-radius:50%;border:1px solid rgba(0,255,255,0.3)}
-    .compass-rings-outer{width:105px;height:105px;border-radius:50%;border:1px dashed rgba(0,200,255,0.2);position:absolute;top:2.5px;left:2.5px}
-    .compass-ticks{position:absolute;width:110px;height:110px;border-radius:50%}
-    .tick{position:absolute;width:1px;background:#0ff;left:50%;top:2px;transform-origin:0 53px}
-    .tick.major{height:7px;background:#0f0;width:2px}
-    .tick.minor{height:4px;opacity:0.6}
-    .compass-cardinal{position:absolute;width:100px;height:100px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#0f0;font-weight:bold;text-shadow:0 0 8px rgba(0,255,0,0.8);z-index:3}
-    .compass-cardinal span{position:absolute}
-    .compass-cardinal span:nth-child(1){top:6px;color:#0f0;text-shadow:0 0 10px #0f0}
-    .compass-cardinal span:nth-child(2){left:6px;color:#0ff}
-    .compass-cardinal span:nth-child(3){right:6px;color:#0ff}
-    .compass-cardinal span:nth-child(4){bottom:6px;color:#ff3333}
-    .needle-container{position:absolute;width:110px;height:110px;z-index:6}
-    .compass-needle{position:absolute;width:3px;height:50px;background:linear-gradient(180deg,#0f0 0%,#00ff00 40%,#0099ff 60%,#0077ff 100%);border-radius:2px;left:50%;top:8px;transform-origin:center 50px;box-shadow:0 0 12px rgba(0,255,0,0.9),0 0 25px rgba(0,200,255,0.6);z-index:10;filter:drop-shadow(0 0 5px rgba(0,255,0,0.8))}
-    .compass-center{position:absolute;width:12px;height:12px;background:radial-gradient(circle at 30% 30%,#00ff00,#00aa00);border-radius:50%;border:2px solid #0ff;top:50%;left:50%;transform:translate(-50%,-50%);z-index:11;box-shadow:0 0 15px rgba(0,255,0,0.9),inset 0 0 8px rgba(255,255,255,0.3),0 0 25px rgba(0,200,255,0.6)}
-    .compass-heading{position:absolute;bottom:-30px;left:50%;transform:translateX(-50%);color:#0f0;font-size:10px;font-family:monospace;font-weight:bold;letter-spacing:1px;white-space:nowrap;text-shadow:0 0 10px rgba(0,255,0,0.8)}
-    .audio-visualizer{position:absolute;top:10px;right:10px;width:min(200px,40vw);height:40px;display:none;align-items:center;justify-content:center;z-index:5;background:rgba(0,20,40,0.6);border:2px solid #0ff;border-radius:8px;padding:8px;gap:2px;filter:drop-shadow(0 0 15px rgba(255,0,255,0.5))}
-    .audio-visualizer.visible {display:flex;}
-    .audio-bar{width:3px;background:linear-gradient(180deg,#ff00ff,#ff69b4);border-radius:2px;box-shadow:0 0 10px #ff00ff;transition:height 50ms ease-out;min-height:3px}
-    .speech-panel{position:absolute;top:80px;right:10px;width:min(200px,40vw);background:rgba(0,20,40,0.9);border:2px solid #0ff;border-radius:8px;padding:10px;color:#0f0;font-family:monospace;font-size:11px;display:none;z-index:5;flex-direction:column;gap:6px;box-shadow:0 0 20px rgba(0,255,255,0.5);max-height:100px;overflow-y:auto}
-    .speech-panel.visible {display:flex;}
-    .speech-title{font-weight:bold;color:#0ff;border-bottom:1px solid #0ff;padding-bottom:4px;font-size:11px;display:flex;justify-content:space-between;align-items:center}
-    .speech-status{font-size:9px;color:#ff00ff}
-    .speech-text{line-height:1.3;color:#0f0;min-height:15px;font-size:10px}
-    .matrix-panel{position:absolute;top:50%;right:10px;transform:translateY(-50%);width:min(150px,30vw);height:min(120px,25vh);background:rgba(0,20,40,0.9);border:2px solid #0ff;border-radius:8px;padding:8px;color:#0f0;font-family:monospace;font-size:9px;display:none;z-index:5;overflow:hidden;box-shadow:0 0 20px rgba(0,255,255,0.5)}
-    .matrix-panel.visible{display:block}
-    .matrix-content{height:100%;overflow:hidden;line-height:1.3;word-wrap:break-word}
-    .globe-container{position:absolute;bottom:20px;right:20px;width:min(150px,30vw);height:min(150px,30vw);display:none;z-index:5}
-    .globe-container.visible{display:block}
+<meta charset="UTF-8">
+<title>Road Viewer HUD</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    .hand-canvas{position:absolute;top:0;left:0;width:100%;height:100%;display:none;z-index:4}
-    .pose-canvas{position:absolute;top:0;left:0;width:100%;height:100%;display:none;z-index:4}
-  </style>
+<style>
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: black;
+  font-family: Arial, sans-serif;
+}
+
+video, canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#speed {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: white;
+  font-size: 48px;
+  font-weight: bold;
+  opacity: 0.9;
+}
+</style>
 </head>
+
 <body>
-  <div class="container">
-    <div class="timer" id="timer">10</div>
-    <button class="fullscreen-btn" id="fullscreenBtn">Enter Fullscreen</button>
-  </div>
-  <video id="camera" autoplay muted playsinline></video>
-  <canvas id="canvas"></canvas>
-  <canvas id="handCanvas" class="hand-canvas"></canvas>
-  <canvas id="poseCanvas" class="pose-canvas"></canvas>
-  
-  <div class="hud-top-left" id="hudTopLeft">
-    <div class="hud-title">YOLO SYSTEM STATUS</div>
-    <div class="hud-content">
-      <div>TIME: <span id="timeDisplay">--:--:--</span></div>
-      <div>DATE: <span id="dateDisplay">--/--/----</span></div>
-      <div>MODEL: <span id="modelStatus">Loading...</span></div>
-    </div>
-  </div>
-  <div class="hud-middle-left" id="hudMiddleLeft">
-    <div class="hud-title">YOLO DETECTIONS</div>
-    <div class="hud-content" id="objectsList">Scanning...</div>
-  </div>
 
-  <div class="compass-container" id="compassContainer">
-    <div class="compass-dial">
-      <div class="compass-rings"></div>
-      <div class="compass-rings compass-rings-outer"></div>
-      <div class="compass-ticks" id="compassTicks"></div>
-      <div class="compass-cardinal" id="compassCardinal">
-        <span>N</span>
-        <span>W</span>
-        <span>E</span>
-        <span>S</span>
-      </div>
-      <div class="needle-container">
-        <div class="compass-needle" id="compassNeedle"></div>
-      </div>
-      <div class="compass-center"></div>
-      <div class="compass-heading" id="compassHeading">0°</div>
-    </div>
-  </div>
-
-  <div class="audio-visualizer" id="audioVisualizer">
-    <div class="audio-bar"></div>
-    <div class="audio-bar"></div>
-    <div class="audio-bar"></div>
-    <div class="audio-bar"></div>
-    <div class="audio-bar"></div>
-    <div class="audio-bar"></div>
-    <div class="audio-bar"></div>
-    <div class="audio-bar"></div>
-    <div class="audio-bar"></div>
-    <div class="audio-bar"></div>
-    <div class="audio-bar"></div>
-    <div class="audio-bar"></div>
-    <div class="audio-bar"></div>
-    <div class="audio-bar"></div>
-    <div class="audio-bar"></div>
-  </div>
-
-  <div class="speech-panel" id="speechPanel">
-    <div class="speech-title">
-      <span>🎤 VOICE TRANSCRIPTION</span>
-      <span class="speech-status" id="speechStatus">●</span>
-    </div>
-    <div class="speech-text" id="speechText">Listening...</div>
-  </div>
-
-  <div class="matrix-panel" id="matrixPanel">
-    <div class="matrix-content" id="matrixContent"></div>
-  </div>
-
-  <div class="globe-container" id="globeContainer"></div>
-
-
+<div id="speed">65</div>
+<video id="video" autoplay playsinline></video>
+<canvas id="canvas"></canvas>
 
 <script>
-const canvas = document.getElementById('canvas');
-const camera = document.getElementById('camera');
-const timer = document.getElementById('timer');
-const fullscreenBtn = document.getElementById('fullscreenBtn');
-const ctx = canvas.getContext('2d');
-const hudTopLeft = document.getElementById('hudTopLeft');
-const hudMiddleLeft = document.getElementById('hudMiddleLeft');
-const objectsList = document.getElementById('objectsList');
-const timeDisplay = document.getElementById('timeDisplay');
-const dateDisplay = document.getElementById('dateDisplay');
-const modelStatus = document.getElementById('modelStatus');
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
 
-let sweeping = false;
-let sweepPos = 0;
-let scanComplete = false;
-let yoloSession = null;
-let modelLoaded = false;
-let audioContext = null;
-let analyser = null;
-let dataArray = null;
-let detectedObjects = [];
-let selectedObject = null;
-let hands = null;
-let handCanvasCtx = null;
-let pose = null;
-let poseCanvasCtx = null;
-let personDetected = false;
-let lastYOLODetection = 0;
-const YOLO_DETECTION_INTERVAL = 10000; // 10 seconds
-let recognition = null;
-let isListening = false;
-let globeScene, globeCamera, globeRenderer, globeMesh, utahMarker;
-let sweepTrails = [];
-
-// Fullscreen function
-function enterFullscreen() {
-  const elem = document.documentElement;
-  if (elem.requestFullscreen) {
-    elem.requestFullscreen();
-  } else if (elem.webkitRequestFullscreen) {
-    elem.webkitRequestFullscreen();
-  } else if (elem.mozRequestFullScreen) {
-    elem.mozRequestFullScreen();
-  } else if (elem.msRequestFullscreen) {
-    elem.msRequestFullscreen();
-  }
-}
-
-// Fullscreen button click handler
-fullscreenBtn.addEventListener('click', () => {
-  enterFullscreen();
-});
-
-const classNames = [
-  'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light',
-  'fire hydrant', 'stop sign', 'parking meter', 'bench', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant',
-  'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis',
-  'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass',
-  'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange', 'broccoli',
-  'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table',
-  'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'microwave', 'oven', 'toaster', 'sink',
-  'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush'
-];
-
-async function loadYOLOModel() {
-  try {
-    modelStatus.textContent = 'Loading YOLO...';
-    console.log('Starting YOLO model load...');
-    
-    let tfReady = typeof tf !== 'undefined';
-    let cocoReady = typeof cocoSsd !== 'undefined';
-    
-    if (!tfReady) {
-      console.log('Waiting for TensorFlow...');
-      let attempts = 0;
-      while (!tfReady && attempts < 50) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        tfReady = typeof tf !== 'undefined';
-        attempts++;
-      }
-      if (!tfReady) throw new Error('TensorFlow.js failed to load');
-    }
-    
-    if (!cocoReady) {
-      console.log('Waiting for COCO-SSD...');
-      let attempts = 0;
-      while (!cocoReady && attempts < 50) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        cocoReady = typeof cocoSsd !== 'undefined';
-        attempts++;
-      }
-      if (!cocoReady) throw new Error('COCO-SSD failed to load');
-    }
-    
-    console.log('Loading COCO-SSD model...');
-    window.cocoSsdModel = await cocoSsd.load();
-    
-    modelLoaded = true;
-    modelStatus.textContent = '✓ YOLO Ready';
-    console.log('✓ YOLO model loaded successfully');
-    
-  } catch(err) {
-    console.error('Model load error:', err);
-    modelStatus.textContent = 'Error: ' + err.message;
-  }
-}
-
-function resizeCanvas() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-  const handCanvas = document.getElementById('handCanvas');
-  handCanvas.width = window.innerWidth;
-  handCanvas.height = window.innerHeight;
-  const poseCanvas = document.getElementById('poseCanvas');
-  poseCanvas.width = window.innerWidth;
-  poseCanvas.height = window.innerHeight;
-}
-resizeCanvas();
-window.addEventListener('resize', resizeCanvas);
-
-async function requestCamera() {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: {facingMode: 'environment', width: {ideal: 1280}, height: {ideal: 720}}
-    });
-    camera.srcObject = stream;
-  } catch(err) {
-    console.error('Camera error:', err);
-  }
-}
-
-function updateTimeDate() {
-  const now = new Date();
-  const hours = String(now.getHours()).padStart(2, '0');
-  const mins = String(now.getMinutes()).padStart(2, '0');
-  const secs = String(now.getSeconds()).padStart(2, '0');
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const year = now.getFullYear();
-  
-  timeDisplay.textContent = `${hours}:${mins}:${secs}`;
-  dateDisplay.textContent = `${month}/${day}/${year}`;
-}
-
-async function analyzeFrameWithYOLO() {
-  if (!scanComplete || !modelLoaded) return;
-  
-  // Check if enough time has passed since last detection
-  const currentTime = Date.now();
-  if (currentTime - lastYOLODetection < YOLO_DETECTION_INTERVAL) {
-    return;
-  }
-  
-  lastYOLODetection = currentTime;
-  
-  try {
-    const predictions = await window.cocoSsdModel.detect(canvas);
-    
-    if (predictions.length === 0) {
-      objectsList.innerHTML = '<span class="loading">No objects detected</span>';
-      detectedObjects = [];
-      personDetected = false;
-      return;
-    }
-    
-    let detectionHTML = '';
-    const drawnBoxes = new Set();
-    detectedObjects = [];
-    personDetected = false;
-    
-    predictions.forEach((prediction) => {
-      const [x, y, width, height] = prediction.bbox;
-      const confidence = Math.round(prediction.score * 100);
-      
-      // Check if person is detected
-      if (prediction.class === 'person') {
-        personDetected = true;
-      }
-      
-      if (!drawnBoxes.has(prediction.class)) {
-        detectionHTML += `<div class="object-box">▪ ${prediction.class} (${confidence}%)</div>`;
-        drawnBoxes.add(prediction.class);
-      }
-      
-      detectedObjects.push({
-        name: prediction.class,
-        x: x,
-        y: y,
-        width: width,
-        height: height,
-        confidence: confidence
-      });
-    });
-    
-    objectsList.innerHTML = detectionHTML || '<span class="loading">Detecting...</span>';
-    
-    // Initialize pose estimation if person detected and not already initialized
-    if (personDetected && !pose) {
-      initializePoseEstimation();
-    }
-    
-  } catch(err) {
-    objectsList.innerHTML = '<span class="loading">YOLO Error</span>';
-    console.error('YOLO detection error:', err);
-  }
-}
-
-function continueLiveCamera() {
-  ctx.drawImage(camera, 0, 0, canvas.width, canvas.height);
-  
-  if (scanComplete && modelLoaded) {
-    analyzeFrameWithYOLO();
-  }
-  
-  requestAnimationFrame(continueLiveCamera);
-}
-
-function sweep() {
-  if (!sweeping) return;
-  
-  ctx.drawImage(camera, 0, 0, canvas.width, canvas.height);
-  
-  // Draw all previous trail lines with fading opacity
-  sweepTrails.forEach((trail, index) => {
-    const age = sweepTrails.length - index;
-    const opacity = Math.max(0, 1 - (age / 30)); // Fade over 30 frames
-    
-    ctx.strokeStyle = `rgba(0, 255, 255, ${opacity})`;
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(trail, 0);
-    ctx.lineTo(trail, canvas.height);
-    ctx.stroke();
+async function startCamera() {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { exact: "environment" } },
+    audio: false
   });
-  
-  if (sweepPos <= canvas.width) {
-    // Draw current sweep line (brightest)
-    ctx.strokeStyle = '#0ff';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(sweepPos, 0);
-    ctx.lineTo(sweepPos, canvas.height);
-    ctx.stroke();
-    
-    // Add current position to trails
-    sweepTrails.push(sweepPos);
-    
-    // Keep only last 30 trail positions
-    if (sweepTrails.length > 30) {
-      sweepTrails.shift();
-    }
-    
-    sweepPos += 2;
-    requestAnimationFrame(sweep);
-  } else {
-    sweeping = false;
-    scanComplete = true;
-    sweepTrails = []; // Clear trails
-    
-    document.getElementById('hudTopLeft').classList.add('visible');
-    document.getElementById('hudMiddleLeft').classList.add('visible');
-    document.getElementById('compassContainer').classList.add('visible');
-    document.getElementById('audioVisualizer').classList.add('visible');
-    document.getElementById('speechPanel').classList.add('visible');
-    document.getElementById('globeContainer').classList.add('visible');
-    document.getElementById('matrixPanel').classList.add('visible');
-    
-    objectsList.textContent = 'Detecting objects...';
-    
-    // Initialize 3D globe
-    initialize3DGlobe();
-    
-    // Start matrix scrolling text
-    startMatrixScroll();
-    
-    continueLiveCamera();
-  }
+  video.srcObject = stream;
 }
 
-requestCamera();
-loadYOLOModel();
+video.onloadedmetadata = () => {
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  drawHUD();
+};
 
-let currentHeading = 0;
+function drawHUD() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-function initializeCompass() {
-  createCompassMarkings();
-  
-  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-    DeviceOrientationEvent.requestPermission()
-      .then(permissionState => {
-        if (permissionState === 'granted') {
-          window.addEventListener('deviceorientationabsolute', updateCompass, true);
-          window.addEventListener('deviceorientation', updateCompass);
-        }
-      })
-      .catch(console.error);
-  } else {
-    window.addEventListener('deviceorientationabsolute', updateCompass, true);
-    window.addEventListener('deviceorientation', updateCompass);
-  }
+  // Road fade
+  const grad = ctx.createLinearGradient(0, canvas.height, 0, canvas.height * 0.5);
+  grad.addColorStop(0, "rgba(0,0,0,0.8)");
+  grad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, canvas.height * 0.5, canvas.width, canvas.height);
+
+  // Blue guidance lines
+  ctx.strokeStyle = "rgba(0,150,255,0.9)";
+  ctx.lineWidth = 6;
+
+  ctx.beginPath();
+  ctx.moveTo(canvas.width * 0.42, canvas.height);
+  ctx.lineTo(canvas.width * 0.47, canvas.height * 0.55);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(canvas.width * 0.58, canvas.height);
+  ctx.lineTo(canvas.width * 0.53, canvas.height * 0.55);
+  ctx.stroke();
+
+  // Center path
+  ctx.strokeStyle = "rgba(0,200,255,0.6)";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(canvas.width * 0.5, canvas.height);
+  ctx.lineTo(canvas.width * 0.5, canvas.height * 0.55);
+  ctx.stroke();
+
+  requestAnimationFrame(drawHUD);
 }
 
-function createCompassMarkings() {
-  const ticksContainer = document.getElementById('compassTicks');
-  
-  for (let i = 0; i < 360; i += 2) {
-    const tick = document.createElement('div');
-    tick.className = 'tick ' + (i % 30 === 0 ? 'major' : 'minor');
-    tick.style.transform = `rotate(${i}deg)`;
-    ticksContainer.appendChild(tick);
-  }
-}
-
-function updateCompass(event) {
-  let heading = event.alpha;
-  
-  if (heading === null) {
-    heading = event.webkitCompassHeading || 0;
-  }
-  
-  heading = (heading + 360) % 360;
-  currentHeading = heading;
-  
-  const cardinal = document.getElementById('compassCardinal');
-  cardinal.style.transform = `rotate(${heading}deg)`;
-  
-  const headingDisplay = document.getElementById('compassHeading');
-  let direction = 'N';
-  if (heading > 337.5 || heading <= 22.5) direction = 'N';
-  else if (heading > 22.5 && heading <= 67.5) direction = 'NE';
-  else if (heading > 67.5 && heading <= 112.5) direction = 'E';
-  else if (heading > 112.5 && heading <= 157.5) direction = 'SE';
-  else if (heading > 157.5 && heading <= 202.5) direction = 'S';
-  else if (heading > 202.5 && heading <= 247.5) direction = 'SW';
-  else if (heading > 247.5 && heading <= 292.5) direction = 'W';
-  else if (heading > 292.5 && heading <= 337.5) direction = 'NW';
-  
-  headingDisplay.textContent = Math.round(heading) + '° ' + direction;
-}
-
-
-
-window.addEventListener('load', () => {
-  initializeCompass();
-});
-
-// ============= 3D GLOBE =============
-function initialize3DGlobe() {
-  const container = document.getElementById('globeContainer');
-  
-  // Wait for THREE.js to load
-  if (typeof THREE === 'undefined') {
-    console.log('THREE.js not loaded yet, retrying...');
-    setTimeout(initialize3DGlobe, 500);
-    return;
-  }
-  
-  // Get actual container size for responsive rendering
-  const containerWidth = container.offsetWidth;
-  const containerHeight = container.offsetHeight;
-  
-  // Create scene
-  globeScene = new THREE.Scene();
-  
-  // Create camera
-  globeCamera = new THREE.PerspectiveCamera(45, containerWidth / containerHeight, 0.1, 1000);
-  globeCamera.position.z = 2.5;
-  
-  // Create renderer with responsive size
-  globeRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-  globeRenderer.setSize(containerWidth, containerHeight);
-  globeRenderer.setClearColor(0x000000, 0);
-  container.appendChild(globeRenderer.domElement);
-  
-  // Load Earth texture
-  const textureLoader = new THREE.TextureLoader();
-  textureLoader.crossOrigin = 'anonymous';
-  
-  const earthTexture = textureLoader.load(
-    'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/textures/planets/earth_atmos_2048.jpg',
-    () => {
-      console.log('✓ Earth texture loaded');
-    },
-    undefined,
-    (err) => {
-      console.error('Texture load error:', err);
-    }
-  );
-  
-  // Create Earth sphere with real texture
-  const geometry = new THREE.SphereGeometry(1, 64, 64);
-  const material = new THREE.MeshPhongMaterial({
-    map: earthTexture,
-    shininess: 5
-  });
-  globeMesh = new THREE.Mesh(geometry, material);
-  globeScene.add(globeMesh);
-  
-  // Add lighting for realistic Earth
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-  globeScene.add(ambientLight);
-  
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-  directionalLight.position.set(5, 3, 5);
-  globeScene.add(directionalLight);
-  
-  console.log('✓ 3D Globe with real Earth texture initialized');
-  
-  // Handle window resize
-  window.addEventListener('resize', () => {
-    if (globeRenderer && globeCamera && container) {
-      const newWidth = container.offsetWidth;
-      const newHeight = container.offsetHeight;
-      globeCamera.aspect = newWidth / newHeight;
-      globeCamera.updateProjectionMatrix();
-      globeRenderer.setSize(newWidth, newHeight);
-    }
-  });
-  
-  // Start animation
-  animateGlobe();
-}
-
-function animateGlobe() {
-  requestAnimationFrame(animateGlobe);
-  
-  if (globeMesh && globeRenderer && globeScene && globeCamera) {
-    // Rotate the globe faster
-    globeMesh.rotation.y += 0.01;
-    
-    // Render
-    globeRenderer.render(globeScene, globeCamera);
-  }
-}
-
-// ============= MATRIX SCROLLING TEXT =============
-const matrixTexts = [
-  'SYSTEM INITIALIZED',
-  'NEURAL NETWORK ACTIVE',
-  'SCANNING ENVIRONMENT',
-  'OBJECT DETECTION: ONLINE',
-  'POSE TRACKING: ACTIVE',
-  'AUDIO ANALYSIS: RUNNING',
-  'COMPASS CALIBRATED',
-  'SATELLITE LINK: CONNECTED',
-  'QUANTUM ENCRYPTION: ON',
-  'AI CORE: OPERATIONAL',
-  'BIOMETRIC SCAN: READY',
-  'THERMAL IMAGING: STANDBY',
-  'MOTION SENSORS: ACTIVE',
-  'DATA STREAM: SECURE',
-  'NEURAL INTERFACE: SYNCED',
-  'HOLOGRAPHIC DISPLAY: ON',
-  'TACTICAL OVERLAY: ENABLED',
-  'THREAT ASSESSMENT: CLEAR',
-  'ENVIRONMENTAL SCAN: OK',
-  'SYSTEM STATUS: OPTIMAL',
-  'NETWORK HANDSHAKE: OK',
-  'ENCRYPTION KEY: VALID',
-  'POWER LEVELS: NOMINAL',
-  'SENSORS: ALL GREEN',
-  'AWAITING COMMANDS...',
-];
-
-let matrixInterval = null;
-
-function startMatrixScroll() {
-  const matrixContent = document.getElementById('matrixContent');
-  let lines = [];
-  
-  // Add initial lines (fewer for smaller box)
-  for (let i = 0; i < 4; i++) {
-    const randomText = matrixTexts[Math.floor(Math.random() * matrixTexts.length)];
-    lines.push(randomText);
-  }
-  
-  matrixContent.textContent = lines.join('\n');
-  
-  // Scroll new lines every 2 seconds
-  matrixInterval = setInterval(() => {
-    const randomText = matrixTexts[Math.floor(Math.random() * matrixTexts.length)];
-    lines.push(randomText);
-    
-    // Keep only last 6 lines (adjusted for smaller box)
-    if (lines.length > 6) {
-      lines.shift();
-    }
-    
-    matrixContent.textContent = lines.join('\n');
-    
-    // Auto-scroll to bottom
-    matrixContent.scrollTop = matrixContent.scrollHeight;
-  }, 2000);
-}
-
-// ============= POSE ESTIMATION =============
-async function initializePoseEstimation() {
-  try {
-    console.log('Initializing MediaPipe Pose...');
-    
-    // Wait for MediaPipe to load
-    if (typeof Pose === 'undefined') {
-      console.log('MediaPipe Pose not loaded yet, waiting...');
-      setTimeout(initializePoseEstimation, 500);
-      return;
-    }
-    
-    pose = new Pose({
-      locateFile: (file) => {
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
-      }
-    });
-    
-    pose.setOptions({
-      modelComplexity: 1,
-      smoothLandmarks: true,
-      enableSegmentation: false,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5
-    });
-    
-    pose.onResults(onPoseResults);
-    
-    const poseCanvas = document.getElementById('poseCanvas');
-    poseCanvas.style.display = 'block';
-    poseCanvasCtx = poseCanvas.getContext('2d');
-    
-    // Start continuous pose detection
-    detectPose();
-    
-    console.log('✓ MediaPipe Pose estimation initialized');
-  } catch(err) {
-    console.error('Pose estimation error:', err);
-  }
-}
-
-async function detectPose() {
-  if (!pose) {
-    requestAnimationFrame(detectPose);
-    return;
-  }
-  
-  // Only run pose detection if person is detected
-  if (personDetected && camera.readyState === camera.HAVE_ENOUGH_DATA) {
-    try {
-      await pose.send({ image: camera });
-    } catch(err) {
-      console.error('Pose send error:', err);
-    }
-  }
-  
-  requestAnimationFrame(detectPose);
-}
-
-function onPoseResults(results) {
-  if (!poseCanvasCtx) return;
-  
-  const poseCanvas = document.getElementById('poseCanvas');
-  poseCanvasCtx.save();
-  poseCanvasCtx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
-  
-  if (!results.poseLandmarks) {
-    poseCanvasCtx.restore();
-    return;
-  }
-  
-  // Use MediaPipe's drawing utilities if available
-  if (typeof drawConnectors !== 'undefined' && typeof drawLandmarks !== 'undefined') {
-    // Draw using MediaPipe utilities
-    drawConnectors(poseCanvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {
-      color: '#00ffff',
-      lineWidth: 4
-    });
-    drawLandmarks(poseCanvasCtx, results.poseLandmarks, {
-      color: '#00ff00',
-      lineWidth: 2,
-      radius: 6
-    });
-  } else {
-    // Fallback: manual drawing
-    const connections = [
-      [11, 12], // Shoulders
-      [11, 13], [13, 15], // Left arm
-      [12, 14], [14, 16], // Right arm
-      [11, 23], [12, 24], // Torso
-      [23, 24], // Hips
-      [23, 25], [25, 27], [27, 29], [29, 31], // Left leg
-      [24, 26], [26, 28], [28, 30], [30, 32], // Right leg
-      [15, 17], [15, 19], [15, 21], // Left hand
-      [16, 18], [16, 20], [16, 22], // Right hand
-    ];
-    
-    // Draw connections
-    poseCanvasCtx.strokeStyle = '#00ffff';
-    poseCanvasCtx.lineWidth = 4;
-    
-    connections.forEach(([start, end]) => {
-      const startPoint = results.poseLandmarks[start];
-      const endPoint = results.poseLandmarks[end];
-      
-      if (startPoint && endPoint && startPoint.visibility > 0.5 && endPoint.visibility > 0.5) {
-        poseCanvasCtx.beginPath();
-        poseCanvasCtx.moveTo(startPoint.x * poseCanvas.width, startPoint.y * poseCanvas.height);
-        poseCanvasCtx.lineTo(endPoint.x * poseCanvas.width, endPoint.y * poseCanvas.height);
-        poseCanvasCtx.stroke();
-      }
-    });
-    
-    // Draw joints
-    results.poseLandmarks.forEach((landmark, index) => {
-      if (landmark.visibility > 0.5) {
-        const x = landmark.x * poseCanvas.width;
-        const y = landmark.y * poseCanvas.height;
-        
-        // Inner circle (green)
-        poseCanvasCtx.fillStyle = '#00ff00';
-        poseCanvasCtx.beginPath();
-        poseCanvasCtx.arc(x, y, 6, 0, Math.PI * 2);
-        poseCanvasCtx.fill();
-        
-        // Outer glow (cyan)
-        poseCanvasCtx.strokeStyle = '#00ffff';
-        poseCanvasCtx.lineWidth = 2;
-        poseCanvasCtx.beginPath();
-        poseCanvasCtx.arc(x, y, 8, 0, Math.PI * 2);
-        poseCanvasCtx.stroke();
-      }
-    });
-  }
-  
-  poseCanvasCtx.restore();
-}
-
-// ============= SPEECH TO TEXT =============
-function initializeSpeechRecognition() {
-  try {
-    // Check for browser support
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    
-    if (!SpeechRecognition) {
-      console.log('Speech recognition not supported');
-      return;
-    }
-    
-    recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
-    
-    recognition.onstart = () => {
-      isListening = true;
-      const statusEl = document.getElementById('speechStatus');
-      if (statusEl) {
-        statusEl.textContent = '● REC';
-        statusEl.style.color = '#ff0000';
-      }
-      console.log('Speech recognition started');
-    };
-    
-    recognition.onresult = (event) => {
-      let interimTranscript = '';
-      let finalTranscript = '';
-      
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscript += transcript + ' ';
-        } else {
-          interimTranscript += transcript;
-        }
-      }
-      
-      const speechText = document.getElementById('speechText');
-      if (speechText) {
-        if (finalTranscript) {
-          speechText.textContent = finalTranscript;
-          speechText.style.opacity = '1';
-        } else if (interimTranscript) {
-          speechText.textContent = interimTranscript;
-          speechText.style.opacity = '0.7';
-        }
-      }
-    };
-    
-    recognition.onerror = (event) => {
-      console.error('Speech recognition error:', event.error);
-      const speechText = document.getElementById('speechText');
-      if (speechText) {
-        if (event.error === 'no-speech') {
-          speechText.textContent = 'No speech detected...';
-        } else if (event.error === 'not-allowed') {
-          speechText.textContent = 'Microphone access denied';
-          document.getElementById('speechStatus').textContent = '✗';
-          isListening = false;
-        } else {
-          speechText.textContent = 'Error: ' + event.error;
-        }
-      }
-    };
-    
-    recognition.onend = () => {
-      console.log('Speech recognition ended');
-      isListening = false;
-      
-      const statusEl = document.getElementById('speechStatus');
-      if (statusEl) {
-        statusEl.textContent = '○';
-        statusEl.style.color = '#00ff00';
-      }
-    };
-    
-    // Start recognition immediately (during countdown)
-    recognition.start();
-    
-  } catch(err) {
-    console.error('Speech recognition initialization error:', err);
-  }
-}
-
-async function initializeAudioVisualizer() {
-  try {
-    // Only request microphone once for both audio visualizer and speech recognition
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const source = audioContext.createMediaStreamSource(stream);
-    analyser = audioContext.createAnalyser();
-    analyser.fftSize = 256;
-    source.connect(analyser);
-    const bufferLength = analyser.frequencyBinCount;
-    dataArray = new Uint8Array(bufferLength);
-    console.log('Audio visualizer initialized');
-  } catch(err) {
-    console.error('Audio visualizer error:', err);
-  }
-}
-
-function updateAudioVisualizer() {
-  if (!analyser || !dataArray) return;
-  
-  analyser.getByteFrequencyData(dataArray);
-  
-  const bars = document.querySelectorAll('.audio-bar');
-  const step = Math.floor(dataArray.length / bars.length);
-  
-  bars.forEach((bar, index) => {
-    const value = dataArray[index * step];
-    const height = (value / 255) * 30;
-    bar.style.height = Math.max(3, height) + 'px';
-  });
-  
-  requestAnimationFrame(updateAudioVisualizer);
-}
-
-// Start countdown
-let countdown = 10;
-timer.textContent = countdown;
-
-// Request microphone permission and start both speech recognition and audio visualizer during countdown
-initializeSpeechRecognition();
-initializeAudioVisualizer().then(() => {
-  updateAudioVisualizer();
-}).catch(err => {
-  console.log('Audio visualizer error:', err);
-});
-
-const countdownInterval = setInterval(() => {
-  countdown--;
-  timer.textContent = countdown;
-  if (countdown <= 0) {
-    clearInterval(countdownInterval);
-    timer.style.display = 'none';
-    fullscreenBtn.style.display = 'none';
-    
-    camera.style.display = 'block';
-    canvas.style.display = 'block';
-    sweeping = true;
-    
-    updateTimeDate();
-    setInterval(updateTimeDate, 1000);
-    
-    sweep();
-  }
-}, 1000);
+startCamera();
 </script>
+
 </body>
 </html>
