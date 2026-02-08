@@ -1,102 +1,930 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Road Viewer HUD</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>AR Path Navigator - VR Mode</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-<style>
-html, body {
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  background: black;
-  font-family: Arial, sans-serif;
-}
+        body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background: #000;
+            font-family: 'Courier New', monospace;
+            position: relative;
+        }
 
-video, canvas {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-}
+        #container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            display: flex;
+        }
 
-#speed {
-  position: absolute;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  color: white;
-  font-size: 48px;
-  font-weight: bold;
-  opacity: 0.9;
-}
-</style>
+        /* Camera video background */
+        #videoElement {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 1;
+        }
+
+        /* Canvas for path detection visualization */
+        #segmentationCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            opacity: 0.4;
+            pointer-events: none;
+        }
+
+        /* Three.js renderer for 3D arrows - will be split for VR */
+        #threejsCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 3;
+        }
+
+        /* Controls overlay */
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            display: flex;
+            gap: 15px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px 25px;
+            border-radius: 50px;
+            backdrop-filter: blur(10px);
+        }
+
+        .control-btn {
+            background: linear-gradient(135deg, #00d4ff, #0099ff);
+            border: none;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 212, 255, 0.4);
+        }
+
+        .control-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 212, 255, 0.6);
+        }
+
+        .control-btn:active {
+            transform: translateY(0);
+        }
+
+        .control-btn.active {
+            background: linear-gradient(135deg, #00ff88, #00cc66);
+            box-shadow: 0 4px 15px rgba(0, 255, 136, 0.4);
+        }
+
+        /* Status display */
+        #status {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.8);
+            color: #00ff88;
+            padding: 15px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            max-width: 300px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+        }
+
+        .status-item {
+            margin: 5px 0;
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+        }
+
+        .status-label {
+            color: #00d4ff;
+        }
+
+        /* Loading overlay */
+        #loading {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #00d4ff;
+        }
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(0, 212, 255, 0.2);
+            border-top: 4px solid #00d4ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            font-size: 18px;
+            margin: 10px 0;
+        }
+
+        .loading-progress {
+            font-size: 14px;
+            color: #00ff88;
+        }
+
+        /* VR Split screen indicator */
+        .vr-divider {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            width: 2px;
+            height: 100%;
+            background: rgba(0, 212, 255, 0.3);
+            z-index: 5;
+            display: none;
+        }
+
+        .vr-mode .vr-divider {
+            display: block;
+        }
+
+        /* Calibration overlay */
+        #calibration {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 15;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 30px;
+            border-radius: 15px;
+            color: white;
+            text-align: center;
+            display: none;
+            border: 2px solid #00d4ff;
+        }
+
+        #calibration.show {
+            display: block;
+        }
+
+        .calibration-icon {
+            font-size: 60px;
+            margin-bottom: 20px;
+        }
+
+        /* Fullscreen prompt overlay */
+        #fullscreenPrompt {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #000000 0%, #001a33 100%);
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.5s ease;
+        }
+
+        #fullscreenPrompt.hidden {
+            animation: fadeOut 0.5s ease forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        .fullscreen-content {
+            text-align: center;
+            padding: 40px;
+            max-width: 500px;
+        }
+
+        .fullscreen-icon {
+            font-size: 100px;
+            margin-bottom: 30px;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+
+        .fullscreen-content h1 {
+            color: #00d4ff;
+            font-size: 42px;
+            margin-bottom: 20px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+        }
+
+        .fullscreen-content p {
+            color: #ffffff;
+            font-size: 18px;
+            margin-bottom: 40px;
+            line-height: 1.6;
+        }
+
+        .fullscreen-btn {
+            background: linear-gradient(135deg, #00d4ff, #0099ff);
+            border: none;
+            color: white;
+            padding: 20px 50px;
+            border-radius: 50px;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 30px rgba(0, 212, 255, 0.5);
+            display: inline-flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .fullscreen-btn:hover {
+            transform: translateY(-5px) scale(1.05);
+            box-shadow: 0 12px 40px rgba(0, 212, 255, 0.7);
+        }
+
+        .fullscreen-btn:active {
+            transform: translateY(-2px) scale(1.02);
+        }
+
+        .btn-icon {
+            font-size: 28px;
+        }
+
+        .countdown {
+            margin-top: 30px;
+            color: #00ff88;
+            font-size: 16px;
+            opacity: 0.8;
+        }
+
+        .countdown span {
+            font-weight: bold;
+            font-size: 20px;
+            color: #00d4ff;
+        }
+    </style>
 </head>
-
 <body>
+    <div id="loading">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Initializing AR Path Navigator</div>
+        <div class="loading-progress">Loading AI models...</div>
+    </div>
 
-<div id="speed">65</div>
-<video id="video" autoplay playsinline></video>
-<canvas id="canvas"></canvas>
+    <div id="container">
+        <!-- Camera feed -->
+        <video id="videoElement" autoplay playsinline></video>
+        
+        <!-- Path detection visualization -->
+        <canvas id="segmentationCanvas"></canvas>
+        
+        <!-- 3D arrows overlay -->
+        <canvas id="threejsCanvas"></canvas>
 
-<script>
-const video = document.getElementById("video");
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
+        <!-- VR split divider -->
+        <div class="vr-divider"></div>
+    </div>
 
-async function startCamera() {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: { exact: "environment" } },
-    audio: false
-  });
-  video.srcObject = stream;
-}
+    <!-- Status display -->
+    <div id="status">
+        <div class="status-item">
+            <span class="status-label">Mode:</span>
+            <span id="modeStatus">Normal</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Detection:</span>
+            <span id="detectionStatus">Inactive</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">FPS:</span>
+            <span id="fpsStatus">0</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Path:</span>
+            <span id="pathStatus">No path</span>
+        </div>
+    </div>
 
-video.onloadedmetadata = () => {
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  drawHUD();
-};
+    <!-- Controls -->
+    <div id="controls">
+        <button class="control-btn" id="startBtn">Start Camera</button>
+        <button class="control-btn" id="detectionBtn">Enable Detection</button>
+        <button class="control-btn" id="vrBtn">VR Mode</button>
+        <button class="control-btn" id="calibrateBtn">Calibrate</button>
+    </div>
 
-function drawHUD() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+    <!-- Calibration overlay -->
+    <div id="calibration">
+        <div class="calibration-icon">📱</div>
+        <h2>Point camera at ground</h2>
+        <p>Look down at the floor/ground to calibrate path detection</p>
+        <button class="control-btn" onclick="closeCalibration()">Done</button>
+    </div>
 
-  // Road fade
-  const grad = ctx.createLinearGradient(0, canvas.height, 0, canvas.height * 0.5);
-  grad.addColorStop(0, "rgba(0,0,0,0.8)");
-  grad.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, canvas.height * 0.5, canvas.width, canvas.height);
+    <!-- Fullscreen prompt overlay -->
+    <div id="fullscreenPrompt">
+        <div class="fullscreen-content">
+            <div class="fullscreen-icon">📱</div>
+            <h1>AR Path Navigator</h1>
+            <p>For the best VR experience, enable fullscreen mode</p>
+            <button class="fullscreen-btn" id="enterFullscreenBtn">
+                <span class="btn-icon">⛶</span>
+                Enter Fullscreen
+            </button>
+            <div class="countdown">Auto-dismiss in <span id="countdown">5</span>s</div>
+        </div>
+    </div>
 
-  // Blue guidance lines
-  ctx.strokeStyle = "rgba(0,150,255,0.9)";
-  ctx.lineWidth = 6;
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- TensorFlow.js and BodyPix for segmentation -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix@2.2.0"></script>
 
-  ctx.beginPath();
-  ctx.moveTo(canvas.width * 0.42, canvas.height);
-  ctx.lineTo(canvas.width * 0.47, canvas.height * 0.55);
-  ctx.stroke();
+    <script>
+        // Global variables
+        let video, segCanvas, segCtx, threeCanvas;
+        let scene, camera, renderer, leftCamera, rightCamera;
+        let arrows = [];
+        let bodyPixNet;
+        let isVRMode = false;
+        let isDetectionActive = false;
+        let isCameraActive = false;
+        let pathPoints = [];
+        let deviceOrientation = { alpha: 0, beta: 0, gamma: 0 };
+        let lastFrameTime = Date.now();
+        let fps = 0;
+        let countdownTimer;
+        let countdownValue = 5;
 
-  ctx.beginPath();
-  ctx.moveTo(canvas.width * 0.58, canvas.height);
-  ctx.lineTo(canvas.width * 0.53, canvas.height * 0.55);
-  ctx.stroke();
+        // Configuration
+        const config = {
+            arrowCount: 12,
+            arrowSpacing: 1.5,
+            arrowHeight: 0.3,
+            arrowWidth: 1.2,
+            pathWidth: 2,
+            detectionInterval: 3, // Process every 3rd frame for performance
+            segmentationResolution: 0.5, // Lower resolution for speed
+        };
 
-  // Center path
-  ctx.strokeStyle = "rgba(0,200,255,0.6)";
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(canvas.width * 0.5, canvas.height);
-  ctx.lineTo(canvas.width * 0.5, canvas.height * 0.55);
-  ctx.stroke();
+        // Initialize everything
+        async function init() {
+            setupElements();
+            setupEventListeners();
+            setupThreeJS();
+            await loadAIModels();
+            setupDeviceOrientation();
+            hideLoading();
+            startFullscreenTimer();
+        }
 
-  requestAnimationFrame(drawHUD);
-}
+        function startFullscreenTimer() {
+            const fullscreenPrompt = document.getElementById('fullscreenPrompt');
+            const countdownElement = document.getElementById('countdown');
+            const enterBtn = document.getElementById('enterFullscreenBtn');
 
-startCamera();
-</script>
+            // Show the prompt
+            fullscreenPrompt.style.display = 'flex';
 
+            // Setup fullscreen button click
+            enterBtn.addEventListener('click', enterFullscreen);
+
+            // Start countdown
+            countdownTimer = setInterval(() => {
+                countdownValue--;
+                countdownElement.textContent = countdownValue;
+
+                if (countdownValue <= 0) {
+                    clearInterval(countdownTimer);
+                    hideFullscreenPrompt();
+                }
+            }, 1000);
+        }
+
+        function enterFullscreen() {
+            const elem = document.documentElement;
+
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen();
+            } else if (elem.webkitRequestFullscreen) { // Safari
+                elem.webkitRequestFullscreen();
+            } else if (elem.msRequestFullscreen) { // IE11
+                elem.msRequestFullscreen();
+            }
+
+            // Clear timer and hide prompt
+            clearInterval(countdownTimer);
+            hideFullscreenPrompt();
+        }
+
+        function hideFullscreenPrompt() {
+            const fullscreenPrompt = document.getElementById('fullscreenPrompt');
+            fullscreenPrompt.classList.add('hidden');
+            
+            setTimeout(() => {
+                fullscreenPrompt.style.display = 'none';
+            }, 500);
+        }
+
+        function setupElements() {
+            video = document.getElementById('videoElement');
+            segCanvas = document.getElementById('segmentationCanvas');
+            segCtx = segCanvas.getContext('2d');
+            threeCanvas = document.getElementById('threejsCanvas');
+        }
+
+        function setupEventListeners() {
+            document.getElementById('startBtn').addEventListener('click', toggleCamera);
+            document.getElementById('detectionBtn').addEventListener('click', toggleDetection);
+            document.getElementById('vrBtn').addEventListener('click', toggleVRMode);
+            document.getElementById('calibrateBtn').addEventListener('click', showCalibration);
+        }
+
+        function setupThreeJS() {
+            // Create scene
+            scene = new THREE.Scene();
+
+            // Setup cameras
+            const aspect = window.innerWidth / window.innerHeight;
+            camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 100);
+            camera.position.set(0, 1.6, 0); // Eye level height
+
+            // VR cameras (for stereoscopic view)
+            leftCamera = new THREE.PerspectiveCamera(75, aspect / 2, 0.1, 100);
+            rightCamera = new THREE.PerspectiveCamera(75, aspect / 2, 0.1, 100);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ 
+                canvas: threeCanvas, 
+                alpha: true,
+                antialias: true 
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0x000000, 0); // Transparent background
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(0, 10, 5);
+            scene.add(directionalLight);
+
+            // Create arrow path
+            createArrowPath();
+
+            // Start render loop
+            animate();
+        }
+
+        function createArrowPath() {
+            // Clear existing arrows
+            arrows.forEach(arrow => scene.remove(arrow));
+            arrows = [];
+
+            // Create arrow geometry (triangle)
+            const arrowShape = new THREE.Shape();
+            arrowShape.moveTo(0, 0.5);
+            arrowShape.lineTo(-0.5, -0.5);
+            arrowShape.lineTo(0.5, -0.5);
+            arrowShape.lineTo(0, 0.5);
+
+            const extrudeSettings = {
+                depth: 0.15,
+                bevelEnabled: true,
+                bevelThickness: 0.02,
+                bevelSize: 0.02,
+                bevelSegments: 2
+            };
+
+            const geometry = new THREE.ExtrudeGeometry(arrowShape, extrudeSettings);
+
+            // Create arrows along path
+            for (let i = 0; i < config.arrowCount; i++) {
+                const material = new THREE.MeshPhongMaterial({
+                    color: 0x00d4ff,
+                    emissive: 0x0088ff,
+                    emissiveIntensity: 0.3,
+                    shininess: 100,
+                    transparent: true,
+                    opacity: 1.0 - (i / config.arrowCount * 0.6) // Fade out in distance
+                });
+
+                const arrow = new THREE.Mesh(geometry, material);
+                
+                // Position arrows
+                const distance = (i + 1) * config.arrowSpacing;
+                arrow.position.set(0, 0.05, -distance);
+                arrow.rotation.x = -Math.PI / 2; // Lay flat on ground
+                arrow.scale.set(config.arrowWidth, config.arrowWidth, 1);
+
+                // Add glow effect
+                const glowGeometry = geometry.clone();
+                const glowMaterial = new THREE.MeshBasicMaterial({
+                    color: 0x00ffff,
+                    transparent: true,
+                    opacity: 0.3,
+                    side: THREE.BackSide
+                });
+                const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+                glow.scale.set(1.2, 1.2, 1.2);
+                arrow.add(glow);
+
+                scene.add(arrow);
+                arrows.push(arrow);
+            }
+
+            // Add pulsing animation
+            animateArrows();
+        }
+
+        function animateArrows() {
+            const time = Date.now() * 0.001;
+            
+            arrows.forEach((arrow, index) => {
+                // Pulsing effect
+                const pulse = Math.sin(time * 2 + index * 0.3) * 0.1 + 1;
+                arrow.scale.y = config.arrowWidth * pulse;
+                
+                // Wave motion
+                const wave = Math.sin(time * 1.5 - index * 0.5) * 0.05;
+                arrow.position.y = 0.05 + wave;
+
+                // Opacity wave
+                const fade = 1.0 - (index / config.arrowCount * 0.6);
+                const opacityMod = Math.sin(time * 2 - index * 0.4) * 0.2;
+                arrow.material.opacity = fade + opacityMod;
+            });
+
+            requestAnimationFrame(animateArrows);
+        }
+
+        async function loadAIModels() {
+            updateLoadingProgress('Loading BodyPix model...');
+            
+            try {
+                // Load BodyPix for person segmentation (we'll use it for floor detection)
+                bodyPixNet = await bodyPix.load({
+                    architecture: 'MobileNetV1',
+                    outputStride: 16,
+                    multiplier: 0.75,
+                    quantBytes: 2
+                });
+                
+                updateLoadingProgress('AI models loaded!');
+                console.log('BodyPix loaded successfully');
+            } catch (error) {
+                console.error('Error loading AI models:', error);
+                updateLoadingProgress('Error loading models - using fallback');
+            }
+        }
+
+        async function toggleCamera() {
+            if (!isCameraActive) {
+                await startCamera();
+            } else {
+                stopCamera();
+            }
+        }
+
+        async function startCamera() {
+            try {
+                const constraints = {
+                    video: {
+                        facingMode: 'environment', // Rear camera
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                };
+
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                
+                video.onloadedmetadata = () => {
+                    segCanvas.width = video.videoWidth;
+                    segCanvas.height = video.videoHeight;
+                };
+
+                isCameraActive = true;
+                updateButton('startBtn', 'Stop Camera', true);
+                updateStatus('modeStatus', 'Camera Active');
+                
+            } catch (error) {
+                console.error('Error accessing camera:', error);
+                alert('Cannot access camera. Please grant permission.');
+            }
+        }
+
+        function stopCamera() {
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+            }
+            isCameraActive = false;
+            updateButton('startBtn', 'Start Camera', false);
+            updateStatus('modeStatus', 'Camera Inactive');
+        }
+
+        function toggleDetection() {
+            isDetectionActive = !isDetectionActive;
+            
+            if (isDetectionActive) {
+                updateButton('detectionBtn', 'Disable Detection', true);
+                updateStatus('detectionStatus', 'Active');
+                if (isCameraActive) {
+                    processFrame();
+                }
+            } else {
+                updateButton('detectionBtn', 'Enable Detection', false);
+                updateStatus('detectionStatus', 'Inactive');
+                clearSegmentation();
+            }
+        }
+
+        let frameCount = 0;
+        async function processFrame() {
+            if (!isDetectionActive || !isCameraActive) return;
+
+            frameCount++;
+            
+            // Process every Nth frame for performance
+            if (frameCount % config.detectionInterval === 0) {
+                await detectPath();
+            }
+
+            // Calculate FPS
+            const now = Date.now();
+            fps = Math.round(1000 / (now - lastFrameTime));
+            lastFrameTime = now;
+            updateStatus('fpsStatus', fps);
+
+            requestAnimationFrame(processFrame);
+        }
+
+        async function detectPath() {
+            if (!bodyPixNet || !video.videoWidth) return;
+
+            try {
+                // Perform segmentation
+                const segmentation = await bodyPixNet.segmentPerson(video, {
+                    flipHorizontal: false,
+                    internalResolution: 'medium',
+                    segmentationThreshold: 0.7
+                });
+
+                // Draw segmentation (inverted - we want the floor, not the person)
+                const imageData = segCtx.createImageData(segCanvas.width, segCanvas.height);
+                const data = imageData.data;
+
+                // Create path visualization
+                for (let i = 0; i < segmentation.data.length; i++) {
+                    const isPerson = segmentation.data[i];
+                    const isFloor = !isPerson; // Invert
+                    
+                    // Bottom half of screen is more likely to be floor
+                    const y = Math.floor(i / segmentation.width);
+                    const isBottomHalf = y > segmentation.height * 0.4;
+                    
+                    const index = i * 4;
+                    if (isFloor && isBottomHalf) {
+                        // Blue for walkable path
+                        data[index] = 0;
+                        data[index + 1] = 212;
+                        data[index + 2] = 255;
+                        data[index + 3] = 100;
+                    } else {
+                        data[index + 3] = 0; // Transparent
+                    }
+                }
+
+                segCtx.putImageData(imageData, 0, 0);
+
+                // Analyze path and update arrow positioning
+                analyzePath(segmentation);
+                
+                updateStatus('pathStatus', 'Detected');
+
+            } catch (error) {
+                console.error('Error in path detection:', error);
+                updateStatus('pathStatus', 'Error');
+            }
+        }
+
+        function analyzePath(segmentation) {
+            // Simple path analysis - find center of walkable area
+            let leftBound = segmentation.width;
+            let rightBound = 0;
+            let centerX = segmentation.width / 2;
+
+            // Scan bottom third of image
+            const startY = Math.floor(segmentation.height * 0.6);
+            const scanY = Math.floor(segmentation.height * 0.8);
+
+            for (let x = 0; x < segmentation.width; x++) {
+                const index = scanY * segmentation.width + x;
+                if (!segmentation.data[index]) { // Is floor
+                    leftBound = Math.min(leftBound, x);
+                    rightBound = Math.max(rightBound, x);
+                }
+            }
+
+            if (rightBound > leftBound) {
+                centerX = (leftBound + rightBound) / 2;
+                const offset = (centerX / segmentation.width - 0.5) * 4; // Convert to world units
+                
+                // Update arrow positions based on detected path
+                arrows.forEach(arrow => {
+                    arrow.position.x = offset;
+                });
+            }
+        }
+
+        function clearSegmentation() {
+            segCtx.clearRect(0, 0, segCanvas.width, segCanvas.height);
+        }
+
+        function toggleVRMode() {
+            isVRMode = !isVRMode;
+            document.body.classList.toggle('vr-mode', isVRMode);
+            
+            if (isVRMode) {
+                updateButton('vrBtn', 'Normal Mode', true);
+                updateStatus('modeStatus', 'VR Mode');
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            } else {
+                updateButton('vrBtn', 'VR Mode', false);
+                updateStatus('modeStatus', 'Normal Mode');
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+        }
+
+        function setupDeviceOrientation() {
+            // Request permission for iOS 13+
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === 'granted') {
+                            window.addEventListener('deviceorientation', handleOrientation);
+                        }
+                    })
+                    .catch(console.error);
+            } else {
+                window.addEventListener('deviceorientation', handleOrientation);
+            }
+        }
+
+        function handleOrientation(event) {
+            deviceOrientation.alpha = event.alpha || 0; // Z-axis (compass)
+            deviceOrientation.beta = event.beta || 0;   // X-axis (tilt forward/back)
+            deviceOrientation.gamma = event.gamma || 0; // Y-axis (tilt left/right)
+
+            // Update camera orientation
+            const betaRad = THREE.MathUtils.degToRad(deviceOrientation.beta - 90);
+            const gammaRad = THREE.MathUtils.degToRad(deviceOrientation.gamma);
+            
+            camera.rotation.x = betaRad;
+            camera.rotation.z = gammaRad;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (isVRMode) {
+                renderVR();
+            } else {
+                renderer.render(scene, camera);
+            }
+        }
+
+        function renderVR() {
+            // Stereoscopic rendering for cardboard VR
+            const eyeSeparation = 0.064; // Average eye separation in meters
+
+            // Left eye
+            leftCamera.position.copy(camera.position);
+            leftCamera.position.x -= eyeSeparation / 2;
+            leftCamera.rotation.copy(camera.rotation);
+            leftCamera.updateMatrixWorld();
+
+            renderer.setViewport(0, 0, window.innerWidth / 2, window.innerHeight);
+            renderer.setScissor(0, 0, window.innerWidth / 2, window.innerHeight);
+            renderer.setScissorTest(true);
+            renderer.render(scene, leftCamera);
+
+            // Right eye
+            rightCamera.position.copy(camera.position);
+            rightCamera.position.x += eyeSeparation / 2;
+            rightCamera.rotation.copy(camera.rotation);
+            rightCamera.updateMatrixWorld();
+
+            renderer.setViewport(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
+            renderer.setScissor(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight);
+            renderer.setScissorTest(true);
+            renderer.render(scene, rightCamera);
+
+            renderer.setScissorTest(false);
+        }
+
+        function showCalibration() {
+            document.getElementById('calibration').classList.add('show');
+        }
+
+        function closeCalibration() {
+            document.getElementById('calibration').classList.remove('show');
+        }
+
+        function updateButton(id, text, active) {
+            const btn = document.getElementById(id);
+            btn.textContent = text;
+            btn.classList.toggle('active', active);
+        }
+
+        function updateStatus(id, value) {
+            document.getElementById(id).textContent = value;
+        }
+
+        function updateLoadingProgress(text) {
+            document.querySelector('.loading-progress').textContent = text;
+        }
+
+        function hideLoading() {
+            setTimeout(() => {
+                document.getElementById('loading').style.display = 'none';
+            }, 1000);
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            const aspect = window.innerWidth / window.innerHeight;
+            camera.aspect = aspect;
+            camera.updateProjectionMatrix();
+            leftCamera.aspect = aspect / 2;
+            leftCamera.updateProjectionMatrix();
+            rightCamera.aspect = aspect / 2;
+            rightCamera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Initialize on load
+        window.addEventListener('load', init);
+    </script>
 </body>
 </html>
