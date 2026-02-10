@@ -39,7 +39,7 @@
   </style>
 </head>
 <body>
-  <div id="info">Tap "Enter AR". Move phone to detect a surface. Tap to place a panel. Gaze at a panel to select (dwell).</div>
+  <div id="info">Tap "Enter AR". Move phone to detect a surface. Tap to place a panel. Gaze to select, tap to drop.</div>
   <div id="hud">
     <div class="reticle"></div>
     <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
@@ -62,6 +62,7 @@
     let lastSelectTime = 0;
     const dwellMs = 1100;
     const selectCooldownMs = 600;
+    let activePanel = null;
 
     init();
     animate();
@@ -100,6 +101,11 @@
 
     function onSelect() {
       if (!reticle.visible) return;
+
+      if (activePanel) {
+        activePanel = null;
+        return;
+      }
 
       const hud = makeHudPanel();
       hud.position.setFromMatrixPosition(reticle.matrix);
@@ -179,11 +185,24 @@
         }
       }
 
+      if (activePanel && reticle.visible) {
+        activePanel.position.setFromMatrixPosition(reticle.matrix);
+        activePanel.quaternion.setFromRotationMatrix(reticle.matrix);
+      }
+
       renderer.render(scene, camera);
     }
 
     function updateGazeSelection(timestamp) {
       if (!renderer.xr.isPresenting || panels.length === 0) return;
+
+      if (activePanel) {
+        dwell.style.opacity = "0";
+        dwell.style.setProperty("--dwell", "0deg");
+        hoveredPanel = null;
+        hoverStart = 0;
+        return;
+      }
 
       const origin = new THREE.Vector3();
       const direction = new THREE.Vector3();
@@ -207,8 +226,9 @@
 
         if (progress >= 1 && (timestamp - lastSelectTime) > selectCooldownMs) {
           lastSelectTime = timestamp;
-          hoveredPanel.userData.selected = !hoveredPanel.userData.selected;
-          hoveredPanel.scale.setScalar(hoveredPanel.userData.selected ? 1.08 : 1);
+          activePanel = hoveredPanel;
+          activePanel.userData.selected = true;
+          activePanel.scale.setScalar(1.08);
           hoverStart = timestamp;
         }
       } else {
