@@ -28,7 +28,7 @@
   </style>
 </head>
 <body>
-  <div id="info">Tap "Enter AR". Tap to spawn a time panel. Tap a panel to pick up, tap again to drop. Double-tap to spawn a video panel. Drag panels into the recycle bin to delete.</div>
+  <div id="info">Tap "Enter AR". Tap to spawn a time panel. Tap a panel to pick up, tap again to drop. Double-tap to spawn a video panel. Triple-tap to spawn a voice orb. Drag panels into the recycle bin to delete.</div>
   <div id="hud">
     <div class="reticle"></div>
     <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
@@ -45,12 +45,20 @@
     const panels = [];
     const raycaster = new THREE.Raycaster();
     let activePanel = null;
-    let lastTapTime = 0;
-    const tapCooldownMs = 250;
     let videoEl = null;
     let videoTexture = null;
     let recycleBin = null;
     let recycleBinPlaced = false;
+
+    let tapCount = 0;
+    let tapTimer = null;
+    const tapWindowMs = 400;
+
+    let voiceOrb = null;
+    let audioCtx = null;
+    let analyser = null;
+    let audioData = null;
+    let micReady = false;
 
     init();
     animate();
@@ -78,8 +86,6 @@
       controller.addEventListener("select", onSelect);
       scene.add(controller);
 
-      renderer.domElement.addEventListener("dblclick", onDoubleClick);
-
       document.body.appendChild(ARButton.createButton(renderer, {
         requiredFeatures: ["hit-test"],
         optionalFeatures: ["dom-overlay"],
@@ -90,10 +96,27 @@
     }
 
     function onSelect() {
-      const now = performance.now();
-      if (now - lastTapTime < tapCooldownMs) return;
-      lastTapTime = now;
+      tapCount += 1;
 
+      if (tapTimer) clearTimeout(tapTimer);
+
+      if (tapCount === 3) {
+        tapCount = 0;
+        spawnVoiceOrb();
+        return;
+      }
+
+      tapTimer = setTimeout(() => {
+        if (tapCount === 1) {
+          handleSingleTap();
+        } else if (tapCount === 2) {
+          handleDoubleTap();
+        }
+        tapCount = 0;
+      }, tapWindowMs);
+    }
+
+    function handleSingleTap() {
       if (recycleBin && isGazingAt(recycleBin)) {
         recycleBin.userData.movable = !recycleBin.userData.movable;
         recycleBin.userData.highlight = recycleBin.userData.movable;
@@ -127,7 +150,7 @@
       panels.push(hud);
     }
 
-    function onDoubleClick() {
+    function handleDoubleTap() {
       if (!reticle.visible) return;
       if (!videoEl) initVideo();
 
@@ -138,6 +161,19 @@
       panels.push(vidPanel);
 
       videoEl.play().catch(() => {});
+    }
+
+    function spawnVoiceOrb() {
+      if (!reticle.visible) return;
+
+      if (!voiceOrb) {
+        voiceOrb = makeVoiceOrb();
+        scene.add(voiceOrb);
+      }
+
+      voiceOrb.position.setFromMatrixPosition(reticle.matrix);
+      voiceOrb.quaternion.setFromRotationMatrix(reticle.matrix);
+      initMic();
     }
 
     function initVideo() {
@@ -152,6 +188,22 @@
       videoTexture.minFilter = THREE.LinearFilter;
       videoTexture.magFilter = THREE.LinearFilter;
       videoTexture.encoding = THREE.sRGBEncoding;
+    }
+
+    function initMic() {
+      if (micReady) return;
+
+      navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 2048;
+        const source = audioCtx.createMediaStreamSource(stream);
+        source.connect(analyser);
+        audioData = new Uint8Array(analyser.fftSize);
+        micReady = true;
+      }).catch(() => {
+        micReady = false;
+      });
     }
 
     function isGazingAt(object3d) {
@@ -228,7 +280,7 @@
       const group = new THREE.Group();
 
       const panelGeom = new THREE.PlaneGeometry(0.9, 0.5);
-      const panelMat = new THREE.MeshBasicMaterial({ color: 0x0b2033, transparent: true, opacity: 0.9 });
+      const panelMat = new THREE.MeshBasicMaterial({ color: 0x0b2033, transparent: true, opacity: 0.75 });
       const panel = new THREE.Mesh(panelGeom, panelMat);
       group.add(panel);
 
@@ -280,6 +332,36 @@
       return group;
     }
 
+    function makeVoiceOrb() {
+      const group = new THREE.Group();
+
+      const sphere = new THREE.Mesh(
+        new THREE.SphereGeometry(0.08, 32, 24),
+        new THREE.MeshStandardMaterial({
+          color: 0x3fd1ff,
+          emissive: 0x1a5a7a,
+          emissiveIntensity: 0.6,
+          metalness: 0.2,
+          roughness: 0.15,
+          transparent: true,
+          opacity: 0.9
+        })
+      );
+      group.add(sphere);
+
+      const glow = new THREE.Mesh(
+        new THREE.SphereGeometry(0.11, 24, 18),
+        new THREE.MeshBasicMaterial({ color: 0x8cdcff, transparent: true, opacity: 0.2 })
+      );
+      group.add(glow);
+
+      group.userData.core = sphere;
+      group.userData.glow = glow;
+      group.scale.setScalar(1);
+
+      return group;
+    }
+
     function updateRecycleBin() {
       if (!recycleBin) return;
 
@@ -312,6 +394,32 @@
       ctx.textBaseline = "middle";
       ctx.fillText(timeText, 256, 128);
       tex.needsUpdate = true;
+    }
+
+    function updateVoiceOrb() {
+      if (!voiceOrb || !micReady) return;
+
+      analyser.getByteTimeDomainData(audioData);
+      let sum = 0;
+      for (let i = 0; i < audioData.length; i += 1) {
+        const v = (audioData[i] - 128) / 128;
+        sum += v * v;
+      }
+      const rms = Math.sqrt(sum / audioData.length);
+      const level = Math.min(1, rms * 4);
+
+      const baseScale = 1;
+      const pulse = 1 + level * 0.6;
+      voiceOrb.scale.setScalar(baseScale * pulse);
+
+      const core = voiceOrb.userData.core;
+      const glow = voiceOrb.userData.glow;
+      if (core && core.material) {
+        core.material.emissiveIntensity = 0.6 + level * 1.2;
+      }
+      if (glow && glow.material) {
+        glow.material.opacity = 0.2 + level * 0.4;
+      }
     }
 
     function onWindowResize() {
@@ -371,6 +479,7 @@
       }
 
       updateRecycleBin();
+      updateVoiceOrb();
 
       for (let i = panels.length - 1; i >= 0; i -= 1) {
         const panel = panels[i];
