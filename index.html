@@ -41,7 +41,7 @@
   </style>
 </head>
 <body>
-  <div id="info">Tap "Enter AR". Tap to spawn a time panel. Tap a panel to pick up, tap again to drop. Double-tap to spawn a video panel. Triple-tap to spawn a voice orb. Long-press to scan and capture a snapshot panel. Drag panels into the recycle bin to delete.</div>
+  <div id="info">Tap "Enter AR". Tap to spawn a time panel. Tap a panel to pick up, tap again to drop. Double-tap to spawn a video panel. Long-press to scan and capture a snapshot panel. Drag panels into the recycle bin to delete.</div>
   <div id="hud">
     <div class="reticle"></div>
     <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
@@ -50,9 +50,6 @@
   <script type="module">
     import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
     import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js";
-    import { EffectComposer } from "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js";
-    import { RenderPass } from "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js";
-    import { UnrealBloomPass } from "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js";
 
     let camera, scene, renderer;
     let reticle, controller;
@@ -69,16 +66,6 @@
     let tapCount = 0;
     let tapTimer = null;
     const tapWindowMs = 400;
-
-    let voiceOrb = null;
-    let audioCtx = null;
-    let analyser = null;
-    let audioData = null;
-    let micReady = false;
-
-    let composer = null;
-    let renderPass = null;
-    let bloomPass = null;
 
     let scanRing = null;
     let scanning = false;
@@ -99,8 +86,6 @@
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.1;
       document.body.appendChild(renderer.domElement);
-
-      setupPostprocessing();
 
       const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
       scene.add(light);
@@ -129,16 +114,6 @@
       window.addEventListener("resize", onWindowResize);
     }
 
-    function setupPostprocessing() {
-      composer = new EffectComposer(renderer);
-      renderPass = new RenderPass(scene, camera);
-      composer.addPass(renderPass);
-
-      const res = new THREE.Vector2(window.innerWidth, window.innerHeight);
-      bloomPass = new UnrealBloomPass(res, 0.85, 0.5, 0.9);
-      composer.addPass(bloomPass);
-    }
-
     function onSelectStart() {
       if (pressTimer) clearTimeout(pressTimer);
       pressTimer = setTimeout(() => {
@@ -155,12 +130,6 @@
       tapCount += 1;
 
       if (tapTimer) clearTimeout(tapTimer);
-
-      if (tapCount === 3) {
-        tapCount = 0;
-        spawnVoiceOrb();
-        return;
-      }
 
       tapTimer = setTimeout(() => {
         if (tapCount === 1) {
@@ -182,7 +151,6 @@
       const hitPanel = getPanelUnderGaze();
 
       if (activePanel) {
-        // Drop current panel on tap anywhere
         activePanel.userData.selected = false;
         activePanel.scale.setScalar(1);
         activePanel = null;
@@ -190,7 +158,6 @@
       }
 
       if (hitPanel) {
-        // Pick up panel if gazing at one
         activePanel = hitPanel;
         activePanel.userData.selected = true;
         activePanel.scale.setScalar(1.08);
@@ -219,19 +186,6 @@
       videoEl.play().catch(() => {});
     }
 
-    function spawnVoiceOrb() {
-      if (!reticle.visible) return;
-
-      if (!voiceOrb) {
-        voiceOrb = makeVoiceOrb();
-        scene.add(voiceOrb);
-      }
-
-      voiceOrb.position.setFromMatrixPosition(reticle.matrix);
-      voiceOrb.quaternion.setFromRotationMatrix(reticle.matrix);
-      initMic();
-    }
-
     function startScan() {
       if (!reticle.visible || scanning) return;
       scanning = true;
@@ -241,7 +195,6 @@
       }
 
       scanRing.visible = true;
-      scanRing.userData.progress = 0;
       scanRing.userData.startTime = performance.now();
       scanRing.position.setFromMatrixPosition(reticle.matrix);
       scanRing.quaternion.setFromRotationMatrix(reticle.matrix);
@@ -276,22 +229,6 @@
       videoTexture.minFilter = THREE.LinearFilter;
       videoTexture.magFilter = THREE.LinearFilter;
       videoTexture.colorSpace = THREE.SRGBColorSpace;
-    }
-
-    function initMic() {
-      if (micReady) return;
-
-      navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 2048;
-        const source = audioCtx.createMediaStreamSource(stream);
-        source.connect(analyser);
-        audioData = new Uint8Array(analyser.fftSize);
-        micReady = true;
-      }).catch(() => {
-        micReady = false;
-      });
     }
 
     function isGazingAt(object3d) {
@@ -446,71 +383,6 @@
       return group;
     }
 
-    function makeVoiceOrb() {
-      const group = new THREE.Group();
-
-      const core = new THREE.Mesh(
-        new THREE.SphereGeometry(0.08, 48, 32),
-        new THREE.MeshPhysicalMaterial({
-          color: 0x3fd1ff,
-          transmission: 0.9,
-          thickness: 0.6,
-          roughness: 0.05,
-          metalness: 0.1,
-          ior: 1.2,
-          transparent: true,
-          opacity: 0.9,
-          clearcoat: 1,
-          clearcoatRoughness: 0.1
-        })
-      );
-      group.add(core);
-
-      const glowMat = new THREE.ShaderMaterial({
-        uniforms: {
-          uColor: { value: new THREE.Color(0x8cdcff) },
-          uBias: { value: 0.15 },
-          uScale: { value: 1.2 },
-          uPower: { value: 2.2 }
-        },
-        vertexShader: `
-          varying vec3 vNormal;
-          varying vec3 vWorldPos;
-          void main() {
-            vNormal = normalize(normalMatrix * normal);
-            vec4 worldPos = modelMatrix * vec4(position, 1.0);
-            vWorldPos = worldPos.xyz;
-            gl_Position = projectionMatrix * viewMatrix * worldPos;
-          }
-        `,
-        fragmentShader: `
-          uniform vec3 uColor;
-          uniform float uBias;
-          uniform float uScale;
-          uniform float uPower;
-          varying vec3 vNormal;
-          varying vec3 vWorldPos;
-          void main() {
-            vec3 viewDir = normalize(cameraPosition - vWorldPos);
-            float fresnel = uBias + uScale * pow(1.0 + dot(vNormal, viewDir), uPower);
-            gl_FragColor = vec4(uColor, fresnel);
-          }
-        `,
-        transparent: true,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
-      });
-
-      const glow = new THREE.Mesh(new THREE.SphereGeometry(0.12, 32, 24), glowMat);
-      group.add(glow);
-
-      group.userData.core = core;
-      group.userData.glow = glow;
-      group.scale.setScalar(1);
-
-      return group;
-    }
-
     function makeScanRing() {
       const ring = new THREE.Mesh(
         new THREE.RingGeometry(0.05, 0.065, 48),
@@ -518,7 +390,6 @@
       );
       ring.rotation.x = -Math.PI / 2;
       ring.visible = false;
-      ring.userData.progress = 0;
       ring.userData.startTime = 0;
       return ring;
     }
@@ -568,37 +439,10 @@
       tex.needsUpdate = true;
     }
 
-    function updateVoiceOrb() {
-      if (!voiceOrb || !micReady) return;
-
-      analyser.getByteTimeDomainData(audioData);
-      let sum = 0;
-      for (let i = 0; i < audioData.length; i += 1) {
-        const v = (audioData[i] - 128) / 128;
-        sum += v * v;
-      }
-      const rms = Math.sqrt(sum / audioData.length);
-      const level = Math.min(1, rms * 4);
-
-      const baseScale = 1;
-      const pulse = 1 + level * 0.6;
-      voiceOrb.scale.setScalar(baseScale * pulse);
-
-      const core = voiceOrb.userData.core;
-      const glow = voiceOrb.userData.glow;
-      if (core && core.material) {
-        core.material.emissiveIntensity = 0.6 + level * 1.2;
-      }
-      if (glow && glow.material && glow.material.uniforms) {
-        glow.material.uniforms.uScale.value = 1.2 + level * 1.5;
-      }
-    }
-
     function onWindowResize() {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
-      if (composer) composer.setSize(window.innerWidth, window.innerHeight);
     }
 
     function animate() {
@@ -653,7 +497,6 @@
 
       updateScanRing();
       updateRecycleBin();
-      updateVoiceOrb();
 
       for (let i = panels.length - 1; i >= 0; i -= 1) {
         const panel = panels[i];
@@ -665,12 +508,7 @@
         }
       }
 
-      if (composer && renderPass) {
-        renderPass.camera = renderer.xr.isPresenting ? renderer.xr.getCamera(camera) : camera;
-        composer.render();
-      } else {
-        renderer.render(scene, camera);
-      }
+      renderer.render(scene, camera);
     }
 
     function isPanelOverBin(panel) {
