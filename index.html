@@ -9,7 +9,7 @@
     #info {
       position: absolute; left: 0; right: 0; top: 0;
       color: #9cf; font: 14px/1.4 system-ui, sans-serif;
-      background: rgba(0,0,0,0.5); padding: 8px 12px; z-index: 3;
+      background: rgba(0,0,0,0.5); padding: 8px 12px; z-index: 2;
     }
     #hud {
       position: absolute; inset: 0; pointer-events: none; z-index: 2;
@@ -25,23 +25,10 @@
     .tick.t2 { left: 50%; top: calc(50% + 32px); transform: translateX(-50%); }
     .tick.t3 { top: 50%; left: calc(50% - 50px); transform: translateY(-50%); }
     .tick.t4 { top: 50%; left: calc(50% + 48px); transform: translateY(-50%); }
-    #enter-ar {
-      position: absolute !important;
-      right: 14px;
-      top: 14px;
-      z-index: 4;
-      background: rgba(10, 20, 30, 0.85) !important;
-      color: #8cdcff !important;
-      border: 1px solid rgba(140,220,255,0.6) !important;
-      padding: 8px 12px !important;
-      border-radius: 6px !important;
-      font: 600 12px/1.2 system-ui, sans-serif !important;
-    }
-    #enter-ar[disabled] { opacity: 0.5; }
   </style>
 </head>
 <body>
-  <div id="info">Tap "Enter AR". Tap to spawn a time panel. Tap a panel to pick up, tap again to drop. Double-tap to spawn a video panel. Long-press to scan and capture a snapshot panel. Drag panels into the recycle bin to delete.</div>
+  <div id="info">Tap "Enter AR". Tap to spawn a time panel. Tap a panel to pick up, tap again to drop. Double-tap to spawn a video panel.</div>
   <div id="hud">
     <div class="reticle"></div>
     <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
@@ -60,17 +47,8 @@
     let activePanel = null;
     let videoEl = null;
     let videoTexture = null;
-    let recycleBin = null;
-    let recycleBinPlaced = false;
-
-    let tapCount = 0;
-    let tapTimer = null;
-    const tapWindowMs = 400;
-
-    let scanRing = null;
-    let scanning = false;
-    let pressTimer = null;
-    const longPressMs = 650;
+    let lastTapTime = 0;
+    const tapCooldownMs = 250;
 
     init();
     animate();
@@ -79,12 +57,9 @@
       scene = new THREE.Scene();
       camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.xr.enabled = true;
-      renderer.outputColorSpace = THREE.SRGBColorSpace;
-      renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.1;
       document.body.appendChild(renderer.domElement);
 
       const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
@@ -99,54 +74,23 @@
 
       controller = renderer.xr.getController(0);
       controller.addEventListener("select", onSelect);
-      controller.addEventListener("selectstart", onSelectStart);
-      controller.addEventListener("selectend", onSelectEnd);
       scene.add(controller);
 
-      const arBtn = ARButton.createButton(renderer, {
+      renderer.domElement.addEventListener("dblclick", onDoubleClick);
+
+      document.body.appendChild(ARButton.createButton(renderer, {
         requiredFeatures: ["hit-test"],
         optionalFeatures: ["dom-overlay"],
         domOverlay: { root: document.body }
-      });
-      arBtn.id = "enter-ar";
-      document.body.appendChild(arBtn);
+      }));
 
       window.addEventListener("resize", onWindowResize);
     }
 
-    function onSelectStart() {
-      if (pressTimer) clearTimeout(pressTimer);
-      pressTimer = setTimeout(() => {
-        startScan();
-      }, longPressMs);
-    }
-
-    function onSelectEnd() {
-      if (pressTimer) clearTimeout(pressTimer);
-    }
-
     function onSelect() {
-      if (scanning) return;
-      tapCount += 1;
-
-      if (tapTimer) clearTimeout(tapTimer);
-
-      tapTimer = setTimeout(() => {
-        if (tapCount === 1) {
-          handleSingleTap();
-        } else if (tapCount === 2) {
-          handleDoubleTap();
-        }
-        tapCount = 0;
-      }, tapWindowMs);
-    }
-
-    function handleSingleTap() {
-      if (recycleBin && isGazingAt(recycleBin)) {
-        recycleBin.userData.movable = !recycleBin.userData.movable;
-        recycleBin.userData.highlight = recycleBin.userData.movable;
-        return;
-      }
+      const now = performance.now();
+      if (now - lastTapTime < tapCooldownMs) return;
+      lastTapTime = now;
 
       const hitPanel = getPanelUnderGaze();
 
@@ -173,7 +117,7 @@
       panels.push(hud);
     }
 
-    function handleDoubleTap() {
+    function onDoubleClick() {
       if (!reticle.visible) return;
       if (!videoEl) initVideo();
 
@@ -184,37 +128,6 @@
       panels.push(vidPanel);
 
       videoEl.play().catch(() => {});
-    }
-
-    function startScan() {
-      if (!reticle.visible || scanning) return;
-      scanning = true;
-      if (!scanRing) {
-        scanRing = makeScanRing();
-        scene.add(scanRing);
-      }
-
-      scanRing.visible = true;
-      scanRing.userData.startTime = performance.now();
-      scanRing.position.setFromMatrixPosition(reticle.matrix);
-      scanRing.quaternion.setFromRotationMatrix(reticle.matrix);
-    }
-
-    function finishScan() {
-      if (!scanRing) return;
-      scanRing.visible = false;
-      scanning = false;
-      spawnSnapshotPanel();
-    }
-
-    function spawnSnapshotPanel() {
-      if (!reticle.visible) return;
-      const image = renderer.domElement.toDataURL("image/png");
-      const panel = makeImagePanel(image);
-      panel.position.setFromMatrixPosition(reticle.matrix);
-      panel.quaternion.setFromRotationMatrix(reticle.matrix);
-      scene.add(panel);
-      panels.push(panel);
     }
 
     function initVideo() {
@@ -229,16 +142,6 @@
       videoTexture.minFilter = THREE.LinearFilter;
       videoTexture.magFilter = THREE.LinearFilter;
       videoTexture.colorSpace = THREE.SRGBColorSpace;
-    }
-
-    function isGazingAt(object3d) {
-      const origin = new THREE.Vector3();
-      const direction = new THREE.Vector3();
-      camera.getWorldPosition(origin);
-      camera.getWorldDirection(direction);
-      raycaster.set(origin, direction);
-      const hits = raycaster.intersectObject(object3d, true);
-      return hits.length > 0;
     }
 
     function getPanelUnderGaze() {
@@ -301,32 +204,6 @@
       return group;
     }
 
-    function makeImagePanel(imageUrl) {
-      const group = new THREE.Group();
-
-      const panelGeom = new THREE.PlaneGeometry(0.8, 0.45);
-      const panelMat = new THREE.MeshBasicMaterial({ color: 0x0b2033, transparent: true, opacity: 0.75 });
-      const panel = new THREE.Mesh(panelGeom, panelMat);
-      group.add(panel);
-
-      const borderGeom = new THREE.EdgesGeometry(panelGeom);
-      const borderMat = new THREE.LineBasicMaterial({ color: 0x8cdcff });
-      const border = new THREE.LineSegments(borderGeom, borderMat);
-      group.add(border);
-
-      const texture = new THREE.TextureLoader().load(imageUrl);
-      const imageMat = new THREE.MeshBasicMaterial({ map: texture });
-      const imagePlane = new THREE.Mesh(new THREE.PlaneGeometry(0.74, 0.41), imageMat);
-      imagePlane.position.set(0, 0, 0.002);
-      group.add(imagePlane);
-
-      group.userData.isHudPanel = true;
-      group.userData.selected = false;
-      group.scale.setScalar(1);
-
-      return group;
-    }
-
     function makeVideoPanel() {
       const group = new THREE.Group();
 
@@ -350,73 +227,6 @@
       group.scale.setScalar(1);
 
       return group;
-    }
-
-    function makeRecycleBin() {
-      const group = new THREE.Group();
-
-      const binBody = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.12, 0.14, 0.28, 24),
-        new THREE.MeshStandardMaterial({ color: 0x2a2f36, metalness: 0.3, roughness: 0.5 })
-      );
-      group.add(binBody);
-
-      const binRim = new THREE.Mesh(
-        new THREE.TorusGeometry(0.14, 0.015, 12, 24),
-        new THREE.MeshStandardMaterial({ color: 0x8cdcff, metalness: 0.6, roughness: 0.2 })
-      );
-      binRim.rotation.x = Math.PI / 2;
-      binRim.position.y = 0.14;
-      group.add(binRim);
-
-      const binBase = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.13, 0.13, 0.02, 24),
-        new THREE.MeshStandardMaterial({ color: 0x1b1f25, metalness: 0.2, roughness: 0.6 })
-      );
-      binBase.position.y = -0.14;
-      group.add(binBase);
-
-      group.userData.isRecycleBin = true;
-      group.userData.movable = false;
-      group.userData.highlight = false;
-
-      return group;
-    }
-
-    function makeScanRing() {
-      const ring = new THREE.Mesh(
-        new THREE.RingGeometry(0.05, 0.065, 48),
-        new THREE.MeshBasicMaterial({ color: 0x8cdcff, transparent: true, opacity: 0.9, side: THREE.DoubleSide })
-      );
-      ring.rotation.x = -Math.PI / 2;
-      ring.visible = false;
-      ring.userData.startTime = 0;
-      return ring;
-    }
-
-    function updateScanRing() {
-      if (!scanRing || !scanRing.visible) return;
-      const elapsed = performance.now() - scanRing.userData.startTime;
-      const t = Math.min(1, elapsed / 800);
-      scanRing.scale.setScalar(1 + t * 6);
-      scanRing.material.opacity = 0.9 - t * 0.8;
-      if (t >= 1) {
-        finishScan();
-      }
-    }
-
-    function updateRecycleBin() {
-      if (!recycleBin) return;
-
-      if (recycleBin.userData.movable && reticle.visible) {
-        recycleBin.position.setFromMatrixPosition(reticle.matrix);
-        recycleBin.quaternion.setFromRotationMatrix(reticle.matrix);
-      }
-
-      const rim = recycleBin.children[1];
-      if (rim && rim.material) {
-        rim.material.color.set(recycleBin.userData.highlight ? 0xff4d4d : 0x8cdcff);
-      }
     }
 
     function updatePanelTime(panel, force) {
@@ -476,14 +286,6 @@
             const pose = hit.getPose(referenceSpace);
             reticle.visible = true;
             reticle.matrix.fromArray(pose.transform.matrix);
-
-            if (!recycleBinPlaced) {
-              recycleBin = makeRecycleBin();
-              recycleBin.position.setFromMatrixPosition(reticle.matrix);
-              recycleBin.quaternion.setFromRotationMatrix(reticle.matrix);
-              scene.add(recycleBin);
-              recycleBinPlaced = true;
-            }
           } else {
             reticle.visible = false;
           }
@@ -495,28 +297,11 @@
         activePanel.quaternion.setFromRotationMatrix(reticle.matrix);
       }
 
-      updateScanRing();
-      updateRecycleBin();
-
-      for (let i = panels.length - 1; i >= 0; i -= 1) {
-        const panel = panels[i];
+      for (const panel of panels) {
         if (panel.userData.timeCtx) updatePanelTime(panel, false);
-        if (recycleBin && isPanelOverBin(panel)) {
-          scene.remove(panel);
-          panels.splice(i, 1);
-          if (activePanel === panel) activePanel = null;
-        }
       }
 
       renderer.render(scene, camera);
-    }
-
-    function isPanelOverBin(panel) {
-      const panelPos = new THREE.Vector3();
-      const binPos = new THREE.Vector3();
-      panel.getWorldPosition(panelPos);
-      recycleBin.getWorldPosition(binPos);
-      return panelPos.distanceTo(binPos) < 0.2;
     }
   </script>
 </body>
