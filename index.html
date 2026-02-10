@@ -28,7 +28,7 @@
   </style>
 </head>
 <body>
-  <div id="info">Tap "Enter AR". Tap to spawn a time panel. Tap a panel to pick up, tap again to drop. Double-tap to spawn a video panel.</div>
+  <div id="info">Tap "Enter AR". Tap to spawn a time panel. Tap a panel to pick up, tap again to drop. Double-tap to spawn a video panel. Drag panels into the recycle bin to delete.</div>
   <div id="hud">
     <div class="reticle"></div>
     <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
@@ -49,6 +49,8 @@
     const tapCooldownMs = 250;
     let videoEl = null;
     let videoTexture = null;
+    let recycleBin = null;
+    let recycleBinPlaced = false;
 
     init();
     animate();
@@ -91,6 +93,12 @@
       const now = performance.now();
       if (now - lastTapTime < tapCooldownMs) return;
       lastTapTime = now;
+
+      if (recycleBin && isGazingAt(recycleBin)) {
+        recycleBin.userData.movable = !recycleBin.userData.movable;
+        recycleBin.userData.highlight = recycleBin.userData.movable;
+        return;
+      }
 
       const hitPanel = getPanelUnderGaze();
 
@@ -137,13 +145,23 @@
       videoEl.src = "video.mp4";
       videoEl.crossOrigin = "anonymous";
       videoEl.loop = true;
-      videoEl.muted = false;
+      videoEl.muted = true;
       videoEl.playsInline = true;
 
       videoTexture = new THREE.VideoTexture(videoEl);
       videoTexture.minFilter = THREE.LinearFilter;
       videoTexture.magFilter = THREE.LinearFilter;
       videoTexture.encoding = THREE.sRGBEncoding;
+    }
+
+    function isGazingAt(object3d) {
+      const origin = new THREE.Vector3();
+      const direction = new THREE.Vector3();
+      camera.getWorldPosition(origin);
+      camera.getWorldDirection(direction);
+      raycaster.set(origin, direction);
+      const hits = raycaster.intersectObject(object3d, true);
+      return hits.length > 0;
     }
 
     function getPanelUnderGaze() {
@@ -231,6 +249,51 @@
       return group;
     }
 
+    function makeRecycleBin() {
+      const group = new THREE.Group();
+
+      const binBody = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.12, 0.14, 0.28, 24),
+        new THREE.MeshStandardMaterial({ color: 0x2a2f36, metalness: 0.3, roughness: 0.5 })
+      );
+      group.add(binBody);
+
+      const binRim = new THREE.Mesh(
+        new THREE.TorusGeometry(0.14, 0.015, 12, 24),
+        new THREE.MeshStandardMaterial({ color: 0x8cdcff, metalness: 0.6, roughness: 0.2 })
+      );
+      binRim.rotation.x = Math.PI / 2;
+      binRim.position.y = 0.14;
+      group.add(binRim);
+
+      const binBase = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.13, 0.13, 0.02, 24),
+        new THREE.MeshStandardMaterial({ color: 0x1b1f25, metalness: 0.2, roughness: 0.6 })
+      );
+      binBase.position.y = -0.14;
+      group.add(binBase);
+
+      group.userData.isRecycleBin = true;
+      group.userData.movable = false;
+      group.userData.highlight = false;
+
+      return group;
+    }
+
+    function updateRecycleBin() {
+      if (!recycleBin) return;
+
+      if (recycleBin.userData.movable && reticle.visible) {
+        recycleBin.position.setFromMatrixPosition(reticle.matrix);
+        recycleBin.quaternion.setFromRotationMatrix(reticle.matrix);
+      }
+
+      const rim = recycleBin.children[1];
+      if (rim && rim.material) {
+        rim.material.color.set(recycleBin.userData.highlight ? 0xff4d4d : 0x8cdcff);
+      }
+    }
+
     function updatePanelTime(panel, force) {
       const now = new Date();
       const timeText = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -288,6 +351,14 @@
             const pose = hit.getPose(referenceSpace);
             reticle.visible = true;
             reticle.matrix.fromArray(pose.transform.matrix);
+
+            if (!recycleBinPlaced) {
+              recycleBin = makeRecycleBin();
+              recycleBin.position.setFromMatrixPosition(reticle.matrix);
+              recycleBin.quaternion.setFromRotationMatrix(reticle.matrix);
+              scene.add(recycleBin);
+              recycleBinPlaced = true;
+            }
           } else {
             reticle.visible = false;
           }
@@ -299,11 +370,27 @@
         activePanel.quaternion.setFromRotationMatrix(reticle.matrix);
       }
 
-      for (const panel of panels) {
+      updateRecycleBin();
+
+      for (let i = panels.length - 1; i >= 0; i -= 1) {
+        const panel = panels[i];
         if (panel.userData.timeCtx) updatePanelTime(panel, false);
+        if (recycleBin && isPanelOverBin(panel)) {
+          scene.remove(panel);
+          panels.splice(i, 1);
+          if (activePanel === panel) activePanel = null;
+        }
       }
 
       renderer.render(scene, camera);
+    }
+
+    function isPanelOverBin(panel) {
+      const panelPos = new THREE.Vector3();
+      const binPos = new THREE.Vector3();
+      panel.getWorldPosition(panelPos);
+      recycleBin.getWorldPosition(binPos);
+      return panelPos.distanceTo(binPos) < 0.2;
     }
   </script>
 </body>
