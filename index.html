@@ -28,7 +28,7 @@
   </style>
 </head>
 <body>
-  <div id="info">Tap "Enter AR". Tap to spawn at reticle. Tap a panel to pick up, tap again to drop.</div>
+  <div id="info">Tap "Enter AR". Tap to spawn a time panel. Tap a panel to pick up, tap again to drop. Double-tap to spawn a video panel.</div>
   <div id="hud">
     <div class="reticle"></div>
     <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
@@ -47,6 +47,8 @@
     let activePanel = null;
     let lastTapTime = 0;
     const tapCooldownMs = 250;
+    let videoEl = null;
+    let videoTexture = null;
 
     init();
     animate();
@@ -73,6 +75,8 @@
       controller = renderer.xr.getController(0);
       controller.addEventListener("select", onSelect);
       scene.add(controller);
+
+      renderer.domElement.addEventListener("dblclick", onDoubleClick);
 
       document.body.appendChild(ARButton.createButton(renderer, {
         requiredFeatures: ["hit-test"],
@@ -113,6 +117,33 @@
       hud.quaternion.setFromRotationMatrix(reticle.matrix);
       scene.add(hud);
       panels.push(hud);
+    }
+
+    function onDoubleClick() {
+      if (!reticle.visible) return;
+      if (!videoEl) initVideo();
+
+      const vidPanel = makeVideoPanel();
+      vidPanel.position.setFromMatrixPosition(reticle.matrix);
+      vidPanel.quaternion.setFromRotationMatrix(reticle.matrix);
+      scene.add(vidPanel);
+      panels.push(vidPanel);
+
+      videoEl.play().catch(() => {});
+    }
+
+    function initVideo() {
+      videoEl = document.createElement("video");
+      videoEl.src = "video.mp4";
+      videoEl.crossOrigin = "anonymous";
+      videoEl.loop = true;
+      videoEl.muted = false;
+      videoEl.playsInline = true;
+
+      videoTexture = new THREE.VideoTexture(videoEl);
+      videoTexture.minFilter = THREE.LinearFilter;
+      videoTexture.magFilter = THREE.LinearFilter;
+      videoTexture.encoding = THREE.sRGBEncoding;
     }
 
     function getPanelUnderGaze() {
@@ -171,6 +202,31 @@
       group.scale.setScalar(1);
 
       updatePanelTime(group, true);
+
+      return group;
+    }
+
+    function makeVideoPanel() {
+      const group = new THREE.Group();
+
+      const panelGeom = new THREE.PlaneGeometry(0.9, 0.5);
+      const panelMat = new THREE.MeshBasicMaterial({ color: 0x0b2033, transparent: true, opacity: 0.9 });
+      const panel = new THREE.Mesh(panelGeom, panelMat);
+      group.add(panel);
+
+      const borderGeom = new THREE.EdgesGeometry(panelGeom);
+      const borderMat = new THREE.LineBasicMaterial({ color: 0x8cdcff });
+      const border = new THREE.LineSegments(borderGeom, borderMat);
+      group.add(border);
+
+      const videoMat = new THREE.MeshBasicMaterial({ map: videoTexture });
+      const videoPlane = new THREE.Mesh(new THREE.PlaneGeometry(0.82, 0.46), videoMat);
+      videoPlane.position.set(0, 0, 0.002);
+      group.add(videoPlane);
+
+      group.userData.isHudPanel = true;
+      group.userData.selected = false;
+      group.scale.setScalar(1);
 
       return group;
     }
@@ -244,7 +300,7 @@
       }
 
       for (const panel of panels) {
-        updatePanelTime(panel, false);
+        if (panel.userData.timeCtx) updatePanelTime(panel, false);
       }
 
       renderer.render(scene, camera);
