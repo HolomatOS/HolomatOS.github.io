@@ -28,7 +28,7 @@
   </style>
 </head>
 <body>
-  <div id="info">Tap "Enter AR". Tap to spawn a time panel. Tap a panel to pick up, tap again to drop. Double-tap to spawn a video panel. Triple-tap to spawn a voice orb. Drag panels into the recycle bin to delete.</div>
+  <div id="info">Tap "Enter AR". Tap to spawn a time panel. Tap a panel to pick up, tap again to drop. Double-tap to spawn a video panel.</div>
   <div id="hud">
     <div class="reticle"></div>
     <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
@@ -37,9 +37,6 @@
   <script type="module">
     import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
     import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js";
-    import { EffectComposer } from "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js";
-    import { RenderPass } from "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js";
-    import { UnrealBloomPass } from "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js";
 
     let camera, scene, renderer;
     let reticle, controller;
@@ -48,24 +45,10 @@
     const panels = [];
     const raycaster = new THREE.Raycaster();
     let activePanel = null;
+    let lastTapTime = 0;
+    const tapCooldownMs = 250;
     let videoEl = null;
     let videoTexture = null;
-    let recycleBin = null;
-    let recycleBinPlaced = false;
-
-    let tapCount = 0;
-    let tapTimer = null;
-    const tapWindowMs = 400;
-
-    let voiceOrb = null;
-    let audioCtx = null;
-    let analyser = null;
-    let audioData = null;
-    let micReady = false;
-
-    let composer = null;
-    let renderPass = null;
-    let bloomPass = null;
 
     init();
     animate();
@@ -77,12 +60,7 @@
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.xr.enabled = true;
-      renderer.outputColorSpace = THREE.SRGBColorSpace;
-      renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.1;
       document.body.appendChild(renderer.domElement);
-
-      setupPostprocessing();
 
       const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
       scene.add(light);
@@ -98,6 +76,8 @@
       controller.addEventListener("select", onSelect);
       scene.add(controller);
 
+      renderer.domElement.addEventListener("dblclick", onDoubleClick);
+
       document.body.appendChild(ARButton.createButton(renderer, {
         requiredFeatures: ["hit-test"],
         optionalFeatures: ["dom-overlay"],
@@ -107,43 +87,10 @@
       window.addEventListener("resize", onWindowResize);
     }
 
-    function setupPostprocessing() {
-      composer = new EffectComposer(renderer);
-      renderPass = new RenderPass(scene, camera);
-      composer.addPass(renderPass);
-
-      const res = new THREE.Vector2(window.innerWidth, window.innerHeight);
-      bloomPass = new UnrealBloomPass(res, 0.85, 0.5, 0.9);
-      composer.addPass(bloomPass);
-    }
-
     function onSelect() {
-      tapCount += 1;
-
-      if (tapTimer) clearTimeout(tapTimer);
-
-      if (tapCount === 3) {
-        tapCount = 0;
-        spawnVoiceOrb();
-        return;
-      }
-
-      tapTimer = setTimeout(() => {
-        if (tapCount === 1) {
-          handleSingleTap();
-        } else if (tapCount === 2) {
-          handleDoubleTap();
-        }
-        tapCount = 0;
-      }, tapWindowMs);
-    }
-
-    function handleSingleTap() {
-      if (recycleBin && isGazingAt(recycleBin)) {
-        recycleBin.userData.movable = !recycleBin.userData.movable;
-        recycleBin.userData.highlight = recycleBin.userData.movable;
-        return;
-      }
+      const now = performance.now();
+      if (now - lastTapTime < tapCooldownMs) return;
+      lastTapTime = now;
 
       const hitPanel = getPanelUnderGaze();
 
@@ -172,7 +119,7 @@
       panels.push(hud);
     }
 
-    function handleDoubleTap() {
+    function onDoubleClick() {
       if (!reticle.visible) return;
       if (!videoEl) initVideo();
 
@@ -185,60 +132,21 @@
       videoEl.play().catch(() => {});
     }
 
-    function spawnVoiceOrb() {
-      if (!reticle.visible) return;
-
-      if (!voiceOrb) {
-        voiceOrb = makeVoiceOrb();
-        scene.add(voiceOrb);
-      }
-
-      voiceOrb.position.setFromMatrixPosition(reticle.matrix);
-      voiceOrb.quaternion.setFromRotationMatrix(reticle.matrix);
-      initMic();
-    }
-
     function initVideo() {
       videoEl = document.createElement("video");
       videoEl.src = "video.mp4";
       videoEl.crossOrigin = "anonymous";
       videoEl.loop = true;
-      videoEl.muted = true;
+      videoEl.muted = false;
       videoEl.playsInline = true;
 
       videoTexture = new THREE.VideoTexture(videoEl);
       videoTexture.minFilter = THREE.LinearFilter;
       videoTexture.magFilter = THREE.LinearFilter;
-      videoTexture.colorSpace = THREE.SRGBColorSpace;
+      videoTexture.encoding = THREE.sRGBEncoding;
     }
 
-    function initMic() {
-      if (micReady) return;
-
-      navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 2048;
-        const source = audioCtx.createMediaStreamSource(stream);
-        source.connect(analyser);
-        audioData = new Uint8Array(analyser.fftSize);
-        micReady = true;
-      }).catch(() => {
-        micReady = false;
-      });
-    }
-
-    function isGazingAt(object3d) {
-      const origin = new THREE.Vector3();
-      const direction = new THREE.Vector3();
-      camera.getWorldPosition(origin);
-      camera.getWorldDirection(direction);
-      raycaster.set(origin, direction);
-      const hits = raycaster.intersectObject(object3d, true);
-      return hits.length > 0;
-    }
-
-    function getPanelUnderGaze() {
+    function getPanelUnderGaze() {  
       if (panels.length === 0) return null;
 
       const origin = new THREE.Vector3();
@@ -302,7 +210,7 @@
       const group = new THREE.Group();
 
       const panelGeom = new THREE.PlaneGeometry(0.9, 0.5);
-      const panelMat = new THREE.MeshBasicMaterial({ color: 0x0b2033, transparent: true, opacity: 0.75 });
+      const panelMat = new THREE.MeshBasicMaterial({ color: 0x0b2033, transparent: true, opacity: 0.9 });
       const panel = new THREE.Mesh(panelGeom, panelMat);
       group.add(panel);
 
@@ -321,116 +229,6 @@
       group.scale.setScalar(1);
 
       return group;
-    }
-
-    function makeRecycleBin() {
-      const group = new THREE.Group();
-
-      const binBody = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.12, 0.14, 0.28, 24),
-        new THREE.MeshStandardMaterial({ color: 0x2a2f36, metalness: 0.3, roughness: 0.5 })
-      );
-      group.add(binBody);
-
-      const binRim = new THREE.Mesh(
-        new THREE.TorusGeometry(0.14, 0.015, 12, 24),
-        new THREE.MeshStandardMaterial({ color: 0x8cdcff, metalness: 0.6, roughness: 0.2 })
-      );
-      binRim.rotation.x = Math.PI / 2;
-      binRim.position.y = 0.14;
-      group.add(binRim);
-
-      const binBase = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.13, 0.13, 0.02, 24),
-        new THREE.MeshStandardMaterial({ color: 0x1b1f25, metalness: 0.2, roughness: 0.6 })
-      );
-      binBase.position.y = -0.14;
-      group.add(binBase);
-
-      group.userData.isRecycleBin = true;
-      group.userData.movable = false;
-      group.userData.highlight = false;
-
-      return group;
-    }
-
-    function makeVoiceOrb() {
-      const group = new THREE.Group();
-
-      const core = new THREE.Mesh(
-        new THREE.SphereGeometry(0.08, 48, 32),
-        new THREE.MeshPhysicalMaterial({
-          color: 0x3fd1ff,
-          transmission: 0.9,
-          thickness: 0.6,
-          roughness: 0.05,
-          metalness: 0.1,
-          ior: 1.2,
-          transparent: true,
-          opacity: 0.9,
-          clearcoat: 1,
-          clearcoatRoughness: 0.1
-        })
-      );
-      group.add(core);
-
-      const glowMat = new THREE.ShaderMaterial({
-        uniforms: {
-          uColor: { value: new THREE.Color(0x8cdcff) },
-          uBias: { value: 0.15 },
-          uScale: { value: 1.2 },
-          uPower: { value: 2.2 }
-        },
-        vertexShader: `
-          varying vec3 vNormal;
-          varying vec3 vWorldPos;
-          void main() {
-            vNormal = normalize(normalMatrix * normal);
-            vec4 worldPos = modelMatrix * vec4(position, 1.0);
-            vWorldPos = worldPos.xyz;
-            gl_Position = projectionMatrix * viewMatrix * worldPos;
-          }
-        `,
-        fragmentShader: `
-          uniform vec3 uColor;
-          uniform float uBias;
-          uniform float uScale;
-          uniform float uPower;
-          varying vec3 vNormal;
-          varying vec3 vWorldPos;
-          void main() {
-            vec3 viewDir = normalize(cameraPosition - vWorldPos);
-            float fresnel = uBias + uScale * pow(1.0 + dot(vNormal, viewDir), uPower);
-            gl_FragColor = vec4(uColor, fresnel);
-          }
-        `,
-        transparent: true,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
-      });
-
-      const glow = new THREE.Mesh(new THREE.SphereGeometry(0.12, 32, 24), glowMat);
-      group.add(glow);
-
-      group.userData.core = core;
-      group.userData.glow = glow;
-      group.scale.setScalar(1);
-
-      return group;
-    }
-
-    function updateRecycleBin() {
-      if (!recycleBin) return;
-
-      if (recycleBin.userData.movable && reticle.visible) {
-        recycleBin.position.setFromMatrixPosition(reticle.matrix);
-        recycleBin.quaternion.setFromRotationMatrix(reticle.matrix);
-      }
-
-      const rim = recycleBin.children[1];
-      if (rim && rim.material) {
-        rim.material.color.set(recycleBin.userData.highlight ? 0xff4d4d : 0x8cdcff);
-      }
     }
 
     function updatePanelTime(panel, force) {
@@ -453,37 +251,10 @@
       tex.needsUpdate = true;
     }
 
-    function updateVoiceOrb() {
-      if (!voiceOrb || !micReady) return;
-
-      analyser.getByteTimeDomainData(audioData);
-      let sum = 0;
-      for (let i = 0; i < audioData.length; i += 1) {
-        const v = (audioData[i] - 128) / 128;
-        sum += v * v;
-      }
-      const rms = Math.sqrt(sum / audioData.length);
-      const level = Math.min(1, rms * 4);
-
-      const baseScale = 1;
-      const pulse = 1 + level * 0.6;
-      voiceOrb.scale.setScalar(baseScale * pulse);
-
-      const core = voiceOrb.userData.core;
-      const glow = voiceOrb.userData.glow;
-      if (core && core.material) {
-        core.material.emissiveIntensity = 0.6 + level * 1.2;
-      }
-      if (glow && glow.material && glow.material.uniforms) {
-        glow.material.uniforms.uScale.value = 1.2 + level * 1.5;
-      }
-    }
-
     function onWindowResize() {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
-      if (composer) composer.setSize(window.innerWidth, window.innerHeight);
     }
 
     function animate() {
@@ -517,14 +288,6 @@
             const pose = hit.getPose(referenceSpace);
             reticle.visible = true;
             reticle.matrix.fromArray(pose.transform.matrix);
-
-            if (!recycleBinPlaced) {
-              recycleBin = makeRecycleBin();
-              recycleBin.position.setFromMatrixPosition(reticle.matrix);
-              recycleBin.quaternion.setFromRotationMatrix(reticle.matrix);
-              scene.add(recycleBin);
-              recycleBinPlaced = true;
-            }
           } else {
             reticle.visible = false;
           }
@@ -536,33 +299,11 @@
         activePanel.quaternion.setFromRotationMatrix(reticle.matrix);
       }
 
-      updateRecycleBin();
-      updateVoiceOrb();
-
-      for (let i = panels.length - 1; i >= 0; i -= 1) {
-        const panel = panels[i];
+      for (const panel of panels) {
         if (panel.userData.timeCtx) updatePanelTime(panel, false);
-        if (recycleBin && isPanelOverBin(panel)) {
-          scene.remove(panel);
-          panels.splice(i, 1);
-          if (activePanel === panel) activePanel = null;
-        }
       }
 
-      if (composer && renderPass) {
-        renderPass.camera = renderer.xr.isPresenting ? renderer.xr.getCamera(camera) : camera;
-        composer.render();
-      } else {
-        renderer.render(scene, camera);
-      }
-    }
-
-    function isPanelOverBin(panel) {
-      const panelPos = new THREE.Vector3();
-      const binPos = new THREE.Vector3();
-      panel.getWorldPosition(panelPos);
-      recycleBin.getWorldPosition(binPos);
-      return panelPos.distanceTo(binPos) < 0.2;
+      renderer.render(scene, camera);
     }
   </script>
 </body>
