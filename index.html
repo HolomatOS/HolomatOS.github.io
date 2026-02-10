@@ -25,25 +25,13 @@
     .tick.t2 { left: 50%; top: calc(50% + 32px); transform: translateX(-50%); }
     .tick.t3 { top: 50%; left: calc(50% - 50px); transform: translateY(-50%); }
     .tick.t4 { top: 50%; left: calc(50% + 48px); transform: translateY(-50%); }
-    #dwell {
-      position: absolute; left: 50%; top: 50%; width: 74px; height: 74px;
-      transform: translate(-50%,-50%);
-      border-radius: 50%;
-      background: conic-gradient(rgba(140,220,255,0.9) var(--dwell, 0deg), rgba(140,220,255,0.15) 0deg);
-      mask: radial-gradient(transparent 60%, #000 61%);
-      -webkit-mask: radial-gradient(transparent 60%, #000 61%);
-      box-shadow: 0 0 10px rgba(140,220,255,0.35);
-      opacity: 0;
-      transition: opacity 0.2s ease;
-    }
   </style>
 </head>
 <body>
-  <div id="info">Tap "Enter AR". Move phone to detect a surface. Tap to place a panel. Gaze to select, tap to drop.</div>
+  <div id="info">Tap "Enter AR". Tap to spawn at reticle. Tap a panel to pick up, tap again to drop.</div>
   <div id="hud">
     <div class="reticle"></div>
     <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
-    <div id="dwell"></div>
   </div>
 
   <script type="module">
@@ -56,13 +44,9 @@
     let hitTestSourceRequested = false;
     const panels = [];
     const raycaster = new THREE.Raycaster();
-    const dwell = document.getElementById("dwell");
-    let hoveredPanel = null;
-    let hoverStart = 0;
-    let lastSelectTime = 0;
-    const dwellMs = 1100;
-    const selectCooldownMs = 600;
     let activePanel = null;
+    let lastTapTime = 0;
+    const tapCooldownMs = 250;
 
     init();
     animate();
@@ -100,18 +84,51 @@
     }
 
     function onSelect() {
-      if (!reticle.visible) return;
+      const now = performance.now();
+      if (now - lastTapTime < tapCooldownMs) return;
+      lastTapTime = now;
+
+      const hitPanel = getPanelUnderGaze();
 
       if (activePanel) {
+        // Drop current panel on tap anywhere
+        activePanel.userData.selected = false;
+        activePanel.scale.setScalar(1);
         activePanel = null;
         return;
       }
+
+      if (hitPanel) {
+        // Pick up panel if gazing at one
+        activePanel = hitPanel;
+        activePanel.userData.selected = true;
+        activePanel.scale.setScalar(1.08);
+        return;
+      }
+
+      if (!reticle.visible) return;
 
       const hud = makeHudPanel();
       hud.position.setFromMatrixPosition(reticle.matrix);
       hud.quaternion.setFromRotationMatrix(reticle.matrix);
       scene.add(hud);
       panels.push(hud);
+    }
+
+    function getPanelUnderGaze() {
+      if (panels.length === 0) return null;
+
+      const origin = new THREE.Vector3();
+      const direction = new THREE.Vector3();
+      camera.getWorldPosition(origin);
+      camera.getWorldDirection(direction);
+      raycaster.set(origin, direction);
+
+      const hits = raycaster.intersectObjects(panels, true);
+      if (!hits.length) return null;
+
+      const candidate = hits[0].object.parent;
+      return candidate && candidate.userData && candidate.userData.isHudPanel ? candidate : null;
     }
 
     function makeHudPanel() {
@@ -127,6 +144,19 @@
       const border = new THREE.LineSegments(borderGeom, borderMat);
       group.add(border);
 
+      const timeCanvas = document.createElement("canvas");
+      timeCanvas.width = 512;
+      timeCanvas.height = 256;
+      const timeCtx = timeCanvas.getContext("2d");
+      const timeTexture = new THREE.CanvasTexture(timeCanvas);
+      timeTexture.minFilter = THREE.LinearFilter;
+      timeTexture.magFilter = THREE.LinearFilter;
+
+      const timeMat = new THREE.MeshBasicMaterial({ map: timeTexture, transparent: true });
+      const timePlane = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.2), timeMat);
+      timePlane.position.set(0, 0, 0.002);
+      group.add(timePlane);
+
       const dotGeom = new THREE.CircleGeometry(0.01, 16);
       const dotMat = new THREE.MeshBasicMaterial({ color: 0x8cdcff });
       const dot = new THREE.Mesh(dotGeom, dotMat);
@@ -135,9 +165,34 @@
 
       group.userData.isHudPanel = true;
       group.userData.selected = false;
+      group.userData.timeCtx = timeCtx;
+      group.userData.timeTexture = timeTexture;
+      group.userData.lastTimeText = "";
       group.scale.setScalar(1);
 
+      updatePanelTime(group, true);
+
       return group;
+    }
+
+    function updatePanelTime(panel, force) {
+      const now = new Date();
+      const timeText = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      if (!force && panel.userData.lastTimeText === timeText) return;
+
+      panel.userData.lastTimeText = timeText;
+      const ctx = panel.userData.timeCtx;
+      const tex = panel.userData.timeTexture;
+
+      ctx.clearRect(0, 0, 512, 256);
+      ctx.fillStyle = "rgba(0,0,0,0)";
+      ctx.fillRect(0, 0, 512, 256);
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 80px system-ui";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(timeText, 256, 128);
+      tex.needsUpdate = true;
     }
 
     function onWindowResize() {
@@ -151,8 +206,6 @@
     }
 
     function render(timestamp, frame) {
-      updateGazeSelection(timestamp);
-
       if (frame) {
         const referenceSpace = renderer.xr.getReferenceSpace();
         const session = renderer.xr.getSession();
@@ -190,53 +243,11 @@
         activePanel.quaternion.setFromRotationMatrix(reticle.matrix);
       }
 
+      for (const panel of panels) {
+        updatePanelTime(panel, false);
+      }
+
       renderer.render(scene, camera);
-    }
-
-    function updateGazeSelection(timestamp) {
-      if (!renderer.xr.isPresenting || panels.length === 0) return;
-
-      if (activePanel) {
-        dwell.style.opacity = "0";
-        dwell.style.setProperty("--dwell", "0deg");
-        hoveredPanel = null;
-        hoverStart = 0;
-        return;
-      }
-
-      const origin = new THREE.Vector3();
-      const direction = new THREE.Vector3();
-      camera.getWorldPosition(origin);
-      camera.getWorldDirection(direction);
-      raycaster.set(origin, direction);
-
-      const hits = raycaster.intersectObjects(panels, true);
-      const topHit = hits.length ? hits[0].object.parent : null;
-
-      if (topHit && topHit.userData && topHit.userData.isHudPanel) {
-        if (hoveredPanel !== topHit) {
-          hoveredPanel = topHit;
-          hoverStart = timestamp;
-        }
-
-        const elapsed = timestamp - hoverStart;
-        const progress = Math.min(1, elapsed / dwellMs);
-        dwell.style.setProperty("--dwell", `${progress * 360}deg`);
-        dwell.style.opacity = "1";
-
-        if (progress >= 1 && (timestamp - lastSelectTime) > selectCooldownMs) {
-          lastSelectTime = timestamp;
-          activePanel = hoveredPanel;
-          activePanel.userData.selected = true;
-          activePanel.scale.setScalar(1.08);
-          hoverStart = timestamp;
-        }
-      } else {
-        hoveredPanel = null;
-        hoverStart = 0;
-        dwell.style.opacity = "0";
-        dwell.style.setProperty("--dwell", "0deg");
-      }
     }
   </script>
 </body>
