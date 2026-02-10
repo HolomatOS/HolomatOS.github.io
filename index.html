@@ -25,13 +25,25 @@
     .tick.t2 { left: 50%; top: calc(50% + 32px); transform: translateX(-50%); }
     .tick.t3 { top: 50%; left: calc(50% - 50px); transform: translateY(-50%); }
     .tick.t4 { top: 50%; left: calc(50% + 48px); transform: translateY(-50%); }
+    #dwell {
+      position: absolute; left: 50%; top: 50%; width: 74px; height: 74px;
+      transform: translate(-50%,-50%);
+      border-radius: 50%;
+      background: conic-gradient(rgba(140,220,255,0.9) var(--dwell, 0deg), rgba(140,220,255,0.15) 0deg);
+      mask: radial-gradient(transparent 60%, #000 61%);
+      -webkit-mask: radial-gradient(transparent 60%, #000 61%);
+      box-shadow: 0 0 10px rgba(140,220,255,0.35);
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
   </style>
 </head>
 <body>
-  <div id="info">Tap “Enter AR”. Move phone to detect a surface. Tap to place a floating HUD panel.</div>
+  <div id="info">Tap "Enter AR". Move phone to detect a surface. Tap to place a panel. Gaze at a panel to select (dwell).</div>
   <div id="hud">
     <div class="reticle"></div>
     <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
+    <div id="dwell"></div>
   </div>
 
   <script type="module">
@@ -42,6 +54,14 @@
     let reticle, controller;
     let hitTestSource = null;
     let hitTestSourceRequested = false;
+    const panels = [];
+    const raycaster = new THREE.Raycaster();
+    const dwell = document.getElementById("dwell");
+    let hoveredPanel = null;
+    let hoverStart = 0;
+    let lastSelectTime = 0;
+    const dwellMs = 1100;
+    const selectCooldownMs = 600;
 
     init();
     animate();
@@ -85,12 +105,13 @@
       hud.position.setFromMatrixPosition(reticle.matrix);
       hud.quaternion.setFromRotationMatrix(reticle.matrix);
       scene.add(hud);
+      panels.push(hud);
     }
 
     function makeHudPanel() {
       const group = new THREE.Group();
 
-      const panelGeom = new THREE.PlaneGeometry(0.4, 0.2);
+      const panelGeom = new THREE.PlaneGeometry(0.7, 0.35);
       const panelMat = new THREE.MeshBasicMaterial({ color: 0x0b2033, transparent: true, opacity: 0.75 });
       const panel = new THREE.Mesh(panelGeom, panelMat);
       group.add(panel);
@@ -103,8 +124,12 @@
       const dotGeom = new THREE.CircleGeometry(0.01, 16);
       const dotMat = new THREE.MeshBasicMaterial({ color: 0x8cdcff });
       const dot = new THREE.Mesh(dotGeom, dotMat);
-      dot.position.set(-0.16, 0.06, 0.001);
+      dot.position.set(-0.28, 0.11, 0.001);
       group.add(dot);
+
+      group.userData.isHudPanel = true;
+      group.userData.selected = false;
+      group.scale.setScalar(1);
 
       return group;
     }
@@ -120,6 +145,8 @@
     }
 
     function render(timestamp, frame) {
+      updateGazeSelection(timestamp);
+
       if (frame) {
         const referenceSpace = renderer.xr.getReferenceSpace();
         const session = renderer.xr.getSession();
@@ -153,6 +180,43 @@
       }
 
       renderer.render(scene, camera);
+    }
+
+    function updateGazeSelection(timestamp) {
+      if (!renderer.xr.isPresenting || panels.length === 0) return;
+
+      const origin = new THREE.Vector3();
+      const direction = new THREE.Vector3();
+      camera.getWorldPosition(origin);
+      camera.getWorldDirection(direction);
+      raycaster.set(origin, direction);
+
+      const hits = raycaster.intersectObjects(panels, true);
+      const topHit = hits.length ? hits[0].object.parent : null;
+
+      if (topHit && topHit.userData && topHit.userData.isHudPanel) {
+        if (hoveredPanel !== topHit) {
+          hoveredPanel = topHit;
+          hoverStart = timestamp;
+        }
+
+        const elapsed = timestamp - hoverStart;
+        const progress = Math.min(1, elapsed / dwellMs);
+        dwell.style.setProperty("--dwell", `${progress * 360}deg`);
+        dwell.style.opacity = "1";
+
+        if (progress >= 1 && (timestamp - lastSelectTime) > selectCooldownMs) {
+          lastSelectTime = timestamp;
+          hoveredPanel.userData.selected = !hoveredPanel.userData.selected;
+          hoveredPanel.scale.setScalar(hoveredPanel.userData.selected ? 1.08 : 1);
+          hoverStart = timestamp;
+        }
+      } else {
+        hoveredPanel = null;
+        hoverStart = 0;
+        dwell.style.opacity = "0";
+        dwell.style.setProperty("--dwell", "0deg");
+      }
     }
   </script>
 </body>
