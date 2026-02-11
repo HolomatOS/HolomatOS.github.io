@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>AR HUD Prototype</title>
+  <title>AR Clock + Video</title>
   <style>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
     #info {
@@ -11,24 +11,6 @@
       color: #9cf; font: 14px/1.4 system-ui, sans-serif;
       background: rgba(0,0,0,0.5); padding: 8px 12px; z-index: 2;
     }
-    #overlay {
-      position: absolute; left: 12px; top: 48px; z-index: 3;
-      color: #cfe9ff; font: 13px/1.4 system-ui, sans-serif;
-      background: rgba(0,0,0,0.6); padding: 10px 12px; border: 1px solid rgba(140,220,255,0.4);
-      border-radius: 8px; max-width: calc(100vw - 24px);
-    }
-    #overlay .row { margin: 6px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    #overlay label { min-width: 70px; color: #9cf; }
-    #overlay input {
-      background: rgba(5,15,25,0.9); color: #e6f4ff; border: 1px solid rgba(140,220,255,0.4);
-      padding: 4px 6px; border-radius: 4px; min-width: 180px;
-    }
-    #overlay button {
-      background: rgba(10,30,45,0.9); color: #e6f4ff; border: 1px solid rgba(140,220,255,0.5);
-      padding: 5px 8px; border-radius: 5px; cursor: pointer;
-    }
-    #overlay button:disabled { opacity: 0.5; cursor: default; }
-    #status { color: #7fd0ff; }
     #hud {
       position: absolute; inset: 0; pointer-events: none; z-index: 2;
     }
@@ -46,22 +28,7 @@
   </style>
 </head>
 <body>
-  <div id="info">Tap "Enter AR". Triple-tap/click to spawn a translucent clock panel. Tap a panel to pick up, tap again to drop.</div>
-  <div id="overlay">
-    <div class="row">
-      <label for="wsUrl">Signal WS</label>
-      <input id="wsUrl" value="ws://192.168.1.2:8080" />
-    </div>
-    <div class="row">
-      <label for="roomId">Room</label>
-      <input id="roomId" value="ar" />
-    </div>
-    <div class="row">
-      <button id="connectBtn">Connect PC Stream</button>
-      <button id="disconnectBtn" disabled>Disconnect</button>
-      <span id="status">Not connected</span>
-    </div>
-  </div>
+  <div id="info">Tap "Enter AR". Single click spawns a translucent clock. Double click spawns a video panel. Tap a panel to pick up, tap again to drop.</div>
   <div id="hud">
     <div class="reticle"></div>
     <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
@@ -78,17 +45,12 @@
     const panels = [];
     const raycaster = new THREE.Raycaster();
     let activePanel = null;
-    let screenVideoEl = null;
-    let screenTexture = null;
-    let remoteStream = null;
-    let peer = null;
-    let ws = null;
-    let connecting = false;
+    let videoEl = null;
+    let videoTexture = null;
     let lastTapTime = 0;
     const tapCooldownMs = 250;
-    let clickCount = 0;
-    let lastClickTime = 0;
-    const tripleClickWindowMs = 500;
+    let singleClickTimer = null;
+    const doubleClickDelayMs = 260;
 
     init();
     animate();
@@ -118,8 +80,6 @@
 
       renderer.domElement.addEventListener("click", onCanvasClick);
       renderer.domElement.addEventListener("dblclick", onDoubleClick);
-      document.getElementById("connectBtn").addEventListener("click", connectToPc);
-      document.getElementById("disconnectBtn").addEventListener("click", disconnectFromPc);
 
       document.body.appendChild(ARButton.createButton(renderer, {
         requiredFeatures: ["hit-test"],
@@ -153,14 +113,11 @@
     }
 
     function onCanvasClick() {
-      const now = performance.now();
-      if (now - lastClickTime > tripleClickWindowMs) clickCount = 0;
-      clickCount += 1;
-      lastClickTime = now;
-
-      if (clickCount !== 3) return;
-      clickCount = 0;
-      spawnClockPanel();
+      if (singleClickTimer) clearTimeout(singleClickTimer);
+      singleClickTimer = setTimeout(() => {
+        spawnClockPanel();
+        singleClickTimer = null;
+      }, doubleClickDelayMs);
     }
 
     function spawnClockPanel() {
@@ -173,121 +130,39 @@
     }
 
     function onDoubleClick() {
+      if (singleClickTimer) {
+        clearTimeout(singleClickTimer);
+        singleClickTimer = null;
+      }
       if (!reticle.visible) return;
-      if (!screenTexture) {
-        setStatus("No PC stream yet. Tap Connect first.");
-        return;
+
+      if (!videoTexture) {
+        videoTexture = createVideoTexture("video.mp4");
       }
-
-      const screenPanel = makeScreenPanel(screenTexture);
-      screenPanel.position.setFromMatrixPosition(reticle.matrix);
-      screenPanel.quaternion.setFromRotationMatrix(reticle.matrix);
-      scene.add(screenPanel);
-      panels.push(screenPanel);
-    }
-
-    function connectToPc() {
-      if (connecting || screenTexture) return;
-      const wsUrl = document.getElementById("wsUrl").value.trim();
-      const roomId = document.getElementById("roomId").value.trim();
-      if (!wsUrl || !roomId) {
-        setStatus("Enter Signal WS and Room.");
-        return;
+      if (videoEl && videoEl.paused) {
+        videoEl.play().catch(() => {});
       }
-
-      connecting = true;
-      setStatus("Connecting...");
-      const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
-      peer = pc;
-
-      pc.ontrack = (ev) => {
-        if (!remoteStream) remoteStream = new MediaStream();
-        remoteStream.addTrack(ev.track);
-        setupRemoteVideo(remoteStream);
-      };
-
-      pc.onicecandidate = (ev) => {
-        if (ev.candidate) sendSignal({ type: "candidate", candidate: ev.candidate });
-      };
-
-      ws = new WebSocket(wsUrl);
-      ws.onopen = () => {
-        ws.send(JSON.stringify({ room: roomId, data: { type: "join", role: "receiver" } }));
-        setStatus("Waiting for PC...");
-        document.getElementById("connectBtn").disabled = true;
-        document.getElementById("disconnectBtn").disabled = false;
-      };
-      ws.onmessage = async (msg) => {
-        const payload = safeParse(msg.data);
-        if (!payload || payload.room !== roomId) return;
-        const data = payload.data || {};
-        if (data.type === "offer") {
-          await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          sendSignal({ type: "answer", answer });
-        } else if (data.type === "candidate" && data.candidate) {
-          try { await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); } catch {}
-        }
-      };
-      ws.onclose = () => {
-        setStatus("Disconnected");
-        connecting = false;
-        cleanupConnection();
-      };
-      ws.onerror = () => {
-        setStatus("Signal error");
-        connecting = false;
-      };
-
-      function sendSignal(data) {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ room: roomId, data }));
-        }
-      }
+      const videoPanel = makeScreenPanel(videoTexture);
+      videoPanel.position.setFromMatrixPosition(reticle.matrix);
+      videoPanel.quaternion.setFromRotationMatrix(reticle.matrix);
+      scene.add(videoPanel);
+      panels.push(videoPanel);
     }
 
-    function disconnectFromPc() {
-      cleanupConnection();
-      setStatus("Disconnected");
-    }
-
-    function cleanupConnection() {
-      if (ws) { ws.close(); ws = null; }
-      if (peer) { peer.close(); peer = null; }
-      if (screenVideoEl) { screenVideoEl.pause(); screenVideoEl = null; }
-      screenTexture = null;
-      remoteStream = null;
-      connecting = false;
-      document.getElementById("connectBtn").disabled = false;
-      document.getElementById("disconnectBtn").disabled = true;
-    }
-
-    function setupRemoteVideo(stream) {
-      if (screenTexture) return;
+    function createVideoTexture(src) {
       const video = document.createElement("video");
-      video.srcObject = stream;
+      video.src = src;
+      video.loop = true;
       video.muted = true;
       video.playsInline = true;
-      video.addEventListener("loadedmetadata", () => {
-        video.play().catch(() => {});
-      });
+      video.crossOrigin = "anonymous";
+      videoEl = video;
 
-      screenVideoEl = video;
-      screenTexture = new THREE.VideoTexture(video);
-      screenTexture.minFilter = THREE.LinearFilter;
-      screenTexture.magFilter = THREE.LinearFilter;
-      screenTexture.colorSpace = THREE.SRGBColorSpace;
-      setStatus("PC stream connected");
-    }
-
-    function setStatus(text) {
-      const el = document.getElementById("status");
-      if (el) el.textContent = text;
-    }
-
-    function safeParse(value) {
-      try { return JSON.parse(value); } catch { return null; }
+      const texture = new THREE.VideoTexture(video);
+      texture.minFilter = THREE.LinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      texture.colorSpace = THREE.SRGBColorSpace;
+      return texture;
     }
 
     function getPanelUnderGaze() {
