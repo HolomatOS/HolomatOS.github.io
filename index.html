@@ -11,6 +11,24 @@
       color: #9cf; font: 14px/1.4 system-ui, sans-serif;
       background: rgba(0,0,0,0.5); padding: 8px 12px; z-index: 2;
     }
+    #overlay {
+      position: absolute; left: 12px; top: 48px; z-index: 3;
+      color: #cfe9ff; font: 13px/1.4 system-ui, sans-serif;
+      background: rgba(0,0,0,0.6); padding: 10px 12px; border: 1px solid rgba(140,220,255,0.4);
+      border-radius: 8px; max-width: calc(100vw - 24px);
+    }
+    #overlay .row { margin: 6px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    #overlay label { min-width: 70px; color: #9cf; }
+    #overlay input {
+      background: rgba(5,15,25,0.9); color: #e6f4ff; border: 1px solid rgba(140,220,255,0.4);
+      padding: 4px 6px; border-radius: 4px; min-width: 180px;
+    }
+    #overlay button {
+      background: rgba(10,30,45,0.9); color: #e6f4ff; border: 1px solid rgba(140,220,255,0.5);
+      padding: 5px 8px; border-radius: 5px; cursor: pointer;
+    }
+    #overlay button:disabled { opacity: 0.5; cursor: default; }
+    #status { color: #7fd0ff; }
     #hud {
       position: absolute; inset: 0; pointer-events: none; z-index: 2;
     }
@@ -28,7 +46,22 @@
   </style>
 </head>
 <body>
-  <div id="info">Tap "Enter AR". Tap to spawn a time panel. Tap a panel to pick up, tap again to drop. Double-tap to spawn a video panel.</div>
+  <div id="info">Tap "Enter AR". Tap to spawn a time panel. Tap a panel to pick up, tap again to drop. Double-tap to place your PC screen panel (after connecting below).</div>
+  <div id="overlay">
+    <div class="row">
+      <label for="wsUrl">Signal WS</label>
+      <input id="wsUrl" value="ws://192.168.1.2:8080" />
+    </div>
+    <div class="row">
+      <label for="roomId">Room</label>
+      <input id="roomId" value="ar" />
+    </div>
+    <div class="row">
+      <button id="connectBtn">Connect PC Stream</button>
+      <button id="disconnectBtn" disabled>Disconnect</button>
+      <span id="status">Not connected</span>
+    </div>
+  </div>
   <div id="hud">
     <div class="reticle"></div>
     <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
@@ -45,8 +78,12 @@
     const panels = [];
     const raycaster = new THREE.Raycaster();
     let activePanel = null;
-    let videoEl = null;
-    let videoTexture = null;
+    let screenVideoEl = null;
+    let screenTexture = null;
+    let remoteStream = null;
+    let peer = null;
+    let ws = null;
+    let connecting = false;
     let lastTapTime = 0;
     const tapCooldownMs = 250;
 
@@ -77,6 +114,8 @@
       scene.add(controller);
 
       renderer.domElement.addEventListener("dblclick", onDoubleClick);
+      document.getElementById("connectBtn").addEventListener("click", connectToPc);
+      document.getElementById("disconnectBtn").addEventListener("click", disconnectFromPc);
 
       document.body.appendChild(ARButton.createButton(renderer, {
         requiredFeatures: ["hit-test"],
@@ -119,29 +158,120 @@
 
     function onDoubleClick() {
       if (!reticle.visible) return;
-      if (!videoEl) initVideo();
+      if (!screenTexture) {
+        setStatus("No PC stream yet. Tap Connect first.");
+        return;
+      }
 
-      const vidPanel = makeVideoPanel();
-      vidPanel.position.setFromMatrixPosition(reticle.matrix);
-      vidPanel.quaternion.setFromRotationMatrix(reticle.matrix);
-      scene.add(vidPanel);
-      panels.push(vidPanel);
-
-      videoEl.play().catch(() => {});
+      const screenPanel = makeScreenPanel(screenTexture);
+      screenPanel.position.setFromMatrixPosition(reticle.matrix);
+      screenPanel.quaternion.setFromRotationMatrix(reticle.matrix);
+      scene.add(screenPanel);
+      panels.push(screenPanel);
     }
 
-    function initVideo() {
-      videoEl = document.createElement("video");
-      videoEl.src = "video.mp4";
-      videoEl.crossOrigin = "anonymous";
-      videoEl.loop = true;
-      videoEl.muted = true;
-      videoEl.playsInline = true;
+    function connectToPc() {
+      if (connecting || screenTexture) return;
+      const wsUrl = document.getElementById("wsUrl").value.trim();
+      const roomId = document.getElementById("roomId").value.trim();
+      if (!wsUrl || !roomId) {
+        setStatus("Enter Signal WS and Room.");
+        return;
+      }
 
-      videoTexture = new THREE.VideoTexture(videoEl);
-      videoTexture.minFilter = THREE.LinearFilter;
-      videoTexture.magFilter = THREE.LinearFilter;
-      videoTexture.colorSpace = THREE.SRGBColorSpace;
+      connecting = true;
+      setStatus("Connecting...");
+      const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+      peer = pc;
+
+      pc.ontrack = (ev) => {
+        if (!remoteStream) remoteStream = new MediaStream();
+        remoteStream.addTrack(ev.track);
+        setupRemoteVideo(remoteStream);
+      };
+
+      pc.onicecandidate = (ev) => {
+        if (ev.candidate) sendSignal({ type: "candidate", candidate: ev.candidate });
+      };
+
+      ws = new WebSocket(wsUrl);
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ room: roomId, data: { type: "join", role: "receiver" } }));
+        setStatus("Waiting for PC...");
+        document.getElementById("connectBtn").disabled = true;
+        document.getElementById("disconnectBtn").disabled = false;
+      };
+      ws.onmessage = async (msg) => {
+        const payload = safeParse(msg.data);
+        if (!payload || payload.room !== roomId) return;
+        const data = payload.data || {};
+        if (data.type === "offer") {
+          await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          sendSignal({ type: "answer", answer });
+        } else if (data.type === "candidate" && data.candidate) {
+          try { await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); } catch {}
+        }
+      };
+      ws.onclose = () => {
+        setStatus("Disconnected");
+        connecting = false;
+        cleanupConnection();
+      };
+      ws.onerror = () => {
+        setStatus("Signal error");
+        connecting = false;
+      };
+
+      function sendSignal(data) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ room: roomId, data }));
+        }
+      }
+    }
+
+    function disconnectFromPc() {
+      cleanupConnection();
+      setStatus("Disconnected");
+    }
+
+    function cleanupConnection() {
+      if (ws) { ws.close(); ws = null; }
+      if (peer) { peer.close(); peer = null; }
+      if (screenVideoEl) { screenVideoEl.pause(); screenVideoEl = null; }
+      screenTexture = null;
+      remoteStream = null;
+      connecting = false;
+      document.getElementById("connectBtn").disabled = false;
+      document.getElementById("disconnectBtn").disabled = true;
+    }
+
+    function setupRemoteVideo(stream) {
+      if (screenTexture) return;
+      const video = document.createElement("video");
+      video.srcObject = stream;
+      video.muted = true;
+      video.playsInline = true;
+      video.addEventListener("loadedmetadata", () => {
+        video.play().catch(() => {});
+      });
+
+      screenVideoEl = video;
+      screenTexture = new THREE.VideoTexture(video);
+      screenTexture.minFilter = THREE.LinearFilter;
+      screenTexture.magFilter = THREE.LinearFilter;
+      screenTexture.colorSpace = THREE.SRGBColorSpace;
+      setStatus("PC stream connected");
+    }
+
+    function setStatus(text) {
+      const el = document.getElementById("status");
+      if (el) el.textContent = text;
+    }
+
+    function safeParse(value) {
+      try { return JSON.parse(value); } catch { return null; }
     }
 
     function getPanelUnderGaze() {
@@ -204,7 +334,7 @@
       return group;
     }
 
-    function makeVideoPanel() {
+    function makeScreenPanel(texture) {
       const group = new THREE.Group();
 
       const panelGeom = new THREE.PlaneGeometry(0.9, 0.5);
@@ -217,7 +347,7 @@
       const border = new THREE.LineSegments(borderGeom, borderMat);
       group.add(border);
 
-      const videoMat = new THREE.MeshBasicMaterial({ map: videoTexture });
+      const videoMat = new THREE.MeshBasicMaterial({ map: texture });
       const videoPlane = new THREE.Mesh(new THREE.PlaneGeometry(0.82, 0.46), videoMat);
       videoPlane.position.set(0, 0, 0.002);
       group.add(videoPlane);
