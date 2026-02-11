@@ -46,7 +46,7 @@
   </style>
 </head>
 <body>
-  <div id="info">Tap "Enter AR". Tap to spawn a time panel. Tap a panel to pick up, tap again to drop. Double-tap to place your PC screen panel (after connecting below).</div>
+  <div id="info">Tap "Enter AR". Triple-tap/click to spawn a translucent clock panel. Tap a panel to pick up, tap again to drop.</div>
   <div id="overlay">
     <div class="row">
       <label for="wsUrl">Signal WS</label>
@@ -86,6 +86,9 @@
     let connecting = false;
     let lastTapTime = 0;
     const tapCooldownMs = 250;
+    let clickCount = 0;
+    let lastClickTime = 0;
+    const tripleClickWindowMs = 500;
 
     init();
     animate();
@@ -113,6 +116,7 @@
       controller.addEventListener("select", onSelect);
       scene.add(controller);
 
+      renderer.domElement.addEventListener("click", onCanvasClick);
       renderer.domElement.addEventListener("dblclick", onDoubleClick);
       document.getElementById("connectBtn").addEventListener("click", connectToPc);
       document.getElementById("disconnectBtn").addEventListener("click", disconnectFromPc);
@@ -146,9 +150,21 @@
         activePanel.scale.setScalar(1.08);
         return;
       }
+    }
 
+    function onCanvasClick() {
+      const now = performance.now();
+      if (now - lastClickTime > tripleClickWindowMs) clickCount = 0;
+      clickCount += 1;
+      lastClickTime = now;
+
+      if (clickCount !== 3) return;
+      clickCount = 0;
+      spawnClockPanel();
+    }
+
+    function spawnClockPanel() {
       if (!reticle.visible) return;
-
       const hud = makeHudPanel();
       hud.position.setFromMatrixPosition(reticle.matrix);
       hud.quaternion.setFromRotationMatrix(reticle.matrix);
