@@ -203,7 +203,7 @@
       timeTexture.magFilter = THREE.LinearFilter;
 
       const timeMat = new THREE.MeshBasicMaterial({ map: timeTexture, transparent: true });
-      const timePlane = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.2), timeMat);
+      const timePlane = new THREE.Mesh(new THREE.PlaneGeometry(0.28, 0.28), timeMat);
       timePlane.position.set(0, 0, 0.002);
       group.add(timePlane);
 
@@ -217,7 +217,6 @@
       group.userData.selected = false;
       group.userData.timeCtx = timeCtx;
       group.userData.timeTexture = timeTexture;
-      group.userData.lastTimeText = "";
       group.scale.setScalar(1);
 
       updatePanelTime(group, true);
@@ -252,22 +251,66 @@
 
     function updatePanelTime(panel, force) {
       const now = new Date();
-      const timeText = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-      if (!force && panel.userData.lastTimeText === timeText) return;
-
-      panel.userData.lastTimeText = timeText;
       const ctx = panel.userData.timeCtx;
       const tex = panel.userData.timeTexture;
-
-      ctx.clearRect(0, 0, 512, 256);
-      ctx.fillStyle = "rgba(0,0,0,0)";
-      ctx.fillRect(0, 0, 512, 256);
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 80px system-ui";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(timeText, 256, 128);
+      drawAnalogClock(ctx, now);
       tex.needsUpdate = true;
+    }
+
+    function drawAnalogClock(ctx, now) {
+      const w = 512;
+      const h = 256;
+      const cx = w * 0.5;
+      const cy = h * 0.5;
+      const r = 100;
+
+      ctx.clearRect(0, 0, w, h);
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(10, 26, 40, 0.55)";
+      ctx.fill();
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = "rgba(140, 220, 255, 0.9)";
+      ctx.stroke();
+
+      for (let i = 0; i < 60; i++) {
+        const a = (i / 60) * Math.PI * 2 - Math.PI / 2;
+        const isHour = i % 5 === 0;
+        const tickOuter = r - 8;
+        const tickInner = isHour ? r - 22 : r - 15;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a) * tickInner, cy + Math.sin(a) * tickInner);
+        ctx.lineTo(cx + Math.cos(a) * tickOuter, cy + Math.sin(a) * tickOuter);
+        ctx.lineWidth = isHour ? 3 : 1.5;
+        ctx.strokeStyle = isHour ? "rgba(220, 242, 255, 0.95)" : "rgba(140, 220, 255, 0.75)";
+        ctx.stroke();
+      }
+
+      const ms = now.getMilliseconds();
+      const sec = now.getSeconds() + ms / 1000;
+      const min = now.getMinutes() + sec / 60;
+      const hour = (now.getHours() % 12) + min / 60;
+
+      drawClockHand(ctx, cx, cy, hour / 12, 50, 5, "rgba(255,255,255,0.95)");
+      drawClockHand(ctx, cx, cy, min / 60, 72, 4, "rgba(200,235,255,0.95)");
+      drawClockHand(ctx, cx, cy, sec / 60, 84, 2, "rgba(255,120,120,0.95)");
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255,255,255,0.95)";
+      ctx.fill();
+    }
+
+    function drawClockHand(ctx, cx, cy, unit, len, width, color) {
+      const angle = unit * Math.PI * 2 - Math.PI / 2;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(angle) * len, cy + Math.sin(angle) * len);
+      ctx.lineWidth = width;
+      ctx.lineCap = "round";
+      ctx.strokeStyle = color;
+      ctx.stroke();
     }
 
     function onWindowResize() {
