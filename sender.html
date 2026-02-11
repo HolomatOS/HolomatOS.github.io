@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PC Screen Sender</title>
+  <style>
+    body { margin: 0; font: 14px/1.4 system-ui, sans-serif; background: #0a0f14; color: #e6f4ff; }
+    .wrap { max-width: 820px; margin: 24px auto; padding: 0 16px; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+    label { min-width: 80px; color: #9cf; }
+    input {
+      background: #0c1822; color: #e6f4ff; border: 1px solid rgba(140,220,255,0.4);
+      padding: 6px 8px; border-radius: 4px; min-width: 240px;
+    }
+    button {
+      background: #102332; color: #e6f4ff; border: 1px solid rgba(140,220,255,0.5);
+      padding: 6px 10px; border-radius: 5px; cursor: pointer;
+    }
+    button:disabled { opacity: 0.6; cursor: default; }
+    #status { color: #7fd0ff; }
+    video { width: 100%; max-height: 60vh; background: #000; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h2>PC Screen Sender</h2>
+    <div class="row">
+      <label for="wsUrl">Signal WS</label>
+      <input id="wsUrl" value="ws://0.0.0.0:8080" />
+    </div>
+    <div class="row">
+      <label for="roomId">Room</label>
+      <input id="roomId" value="ar" />
+    </div>
+    <div class="row">
+      <button id="startBtn">Start Screen Share</button>
+      <button id="stopBtn" disabled>Stop</button>
+      <span id="status">Idle</span>
+    </div>
+    <video id="preview" autoplay muted playsinline></video>
+  </div>
+
+  <script>
+    let ws = null;
+    let peer = null;
+    let stream = null;
+    let connecting = false;
+
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
+    const statusEl = document.getElementById("status");
+    const preview = document.getElementById("preview");
+
+    startBtn.addEventListener("click", startShare);
+    stopBtn.addEventListener("click", stopShare);
+
+    async function startShare() {
+      if (connecting || stream) return;
+      const wsUrl = document.getElementById("wsUrl").value.trim();
+      const roomId = document.getElementById("roomId").value.trim();
+      if (!wsUrl || !roomId) {
+        setStatus("Enter Signal WS and Room.");
+        return;
+      }
+
+      connecting = true;
+      setStatus("Requesting screen...");
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      preview.srcObject = stream;
+
+      setStatus("Connecting...");
+      const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+      peer = pc;
+
+      stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+      pc.onicecandidate = (ev) => {
+        if (ev.candidate) sendSignal({ type: "candidate", candidate: ev.candidate });
+      };
+
+      ws = new WebSocket(wsUrl);
+      ws.onopen = async () => {
+        ws.send(JSON.stringify({ room: roomId, data: { type: "join", role: "sender" } }));
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        sendSignal({ type: "offer", offer });
+        setStatus("Waiting for phone...");
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+      };
+      ws.onmessage = async (msg) => {
+        const payload = safeParse(msg.data);
+        if (!payload || payload.room !== roomId) return;
+        const data = payload.data || {};
+        if (data.type === "answer") {
+          await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+          setStatus("Streaming");
+        } else if (data.type === "candidate" && data.candidate) {
+          try { await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); } catch {}
+        }
+      };
+      ws.onclose = () => {
+        setStatus("Disconnected");
+        connecting = false;
+        cleanup();
+      };
+      ws.onerror = () => {
+        setStatus("Signal error");
+        connecting = false;
+      };
+
+      stream.getTracks().forEach((t) => {
+        t.addEventListener("ended", () => stopShare());
+      });
+
+      function sendSignal(data) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ room: roomId, data }));
+        }
+      }
+    }
+
+    function stopShare() {
+      if (stream) {
+        stream.getTracks().forEach((t) => t.stop());
+        stream = null;
+      }
+      cleanup();
+      setStatus("Idle");
+    }
+
+    function cleanup() {
+      if (ws) { ws.close(); ws = null; }
+      if (peer) { peer.close(); peer = null; }
+      preview.srcObject = null;
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+    }
+
+    function setStatus(text) { statusEl.textContent = text; }
+    function safeParse(value) { try { return JSON.parse(value); } catch { return null; } }
+  </script>
+</body>
+</html>
