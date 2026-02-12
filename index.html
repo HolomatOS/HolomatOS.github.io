@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>AR Clock + Video - iPhone Glass Style</title>
+  <title>AR Clock + Video</title>
   <style>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
     #info {
@@ -42,7 +42,6 @@
     let reticle, controller;
     let hitTestSource = null;
     let hitTestSourceRequested = false;
-    let frameCount = 0;
     const panels = [];
     const raycaster = new THREE.Raycaster();
     let activePanel = null;
@@ -63,21 +62,18 @@
       renderer = new THREE.WebGLRenderer({
         antialias: true,
         alpha: true,
-        powerPreference: "high-performance",
-        precision: "highp",
-        logarithmicDepthBuffer: true,
-        stencil: false
+        powerPreference: "high-performance"
       });
-      renderer.setPixelRatio(window.devicePixelRatio || 1);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.xr.enabled = true;
-      renderer.xr.setFramebufferScaleFactor(2.0);
+      renderer.xr.setFramebufferScaleFactor(1.2);
       document.body.appendChild(renderer.domElement);
 
       const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
       scene.add(light);
 
-      const geometry = new THREE.RingGeometry(0.06, 0.075, 16).rotateX(-Math.PI / 2);
+      const geometry = new THREE.RingGeometry(0.06, 0.075, 32).rotateX(-Math.PI / 2);
       const material = new THREE.MeshBasicMaterial({ color: 0x8cdcff });
       reticle = new THREE.Mesh(geometry, material);
       reticle.matrixAutoUpdate = false;
@@ -210,41 +206,30 @@
       canvas.width = 512;
       canvas.height = 256;
       const ctx = canvas.getContext("2d");
-      
-      // Create subtle noise texture for frosted glass effect
-      for (let i = 0; i < canvas.width; i++) {
-        for (let j = 0; j < canvas.height; j++) {
-          const noise = Math.random() * 8;
-          ctx.fillStyle = `rgba(255,255,255,${noise / 255})`;
-          ctx.fillRect(i, j, 1, 1);
-        }
-      }
-      
-      // Add subtle gradient overlay for depth
       const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-      gradient.addColorStop(0, "rgba(255,255,255,0.08)");
-      gradient.addColorStop(0.5, "rgba(255,255,255,0.03)");
-      gradient.addColorStop(1, "rgba(255,255,255,0.06)");
+      gradient.addColorStop(0, "rgba(255,255,255,0.15)");
+      gradient.addColorStop(0.3, "rgba(200,233,255,0.25)");
+      gradient.addColorStop(0.55, "rgba(20,26,50,0.5)");
+      gradient.addColorStop(1, "rgba(10,14,25,0.9)");
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
       const texture = new THREE.CanvasTexture(canvas);
       texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(1.3, 1.3);
       texture.encoding = THREE.sRGBEncoding;
 
       return new THREE.MeshPhysicalMaterial({
-        color: 0xcccccc,  // Light gray base similar to iPhone glass
+        color: baseColor,
         map: texture,
         transparent: true,
-        opacity: 0.8,  // Increased opacity for more visible panels
-        transmission: 0.88,  // High light transmission
-        roughness: 0.4,  // Frosted glass effect
-        metalness: 0,
-        clearcoat: 0.3,
-        clearcoatRoughness: 0.3,
-        reflectivity: 0.2,
-        ior: 1.45,
-        thickness: 0.5,  // Glass thickness
+        opacity: 0.85,
+        transmission: 0.95,
+        roughness: 0.15,
+        metalness: 0.05,
+        clearcoat: 1,
+        clearcoatRoughness: 0.05,
+        reflectivity: 0.7,
+        ior: 1.4,
         side: THREE.DoubleSide
       });
     }
@@ -252,18 +237,13 @@
     function makeHudPanel() {
       const group = new THREE.Group();
 
-      const panelGeom = new THREE.PlaneGeometry(0.7, 0.35, 1, 1);
-      const panelMat = createLiquidGlassMaterial(0xcccccc);
+      const panelGeom = new THREE.PlaneGeometry(0.7, 0.35);
+      const panelMat = createLiquidGlassMaterial(0x1a1f2b);
       const panel = new THREE.Mesh(panelGeom, panelMat);
       group.add(panel);
 
-      // Subtle border like iPhone widgets
       const borderGeom = new THREE.EdgesGeometry(panelGeom);
-      const borderMat = new THREE.LineBasicMaterial({ 
-        color: 0xffffff, 
-        transparent: true, 
-        opacity: 0.2 
-      });
+      const borderMat = new THREE.LineBasicMaterial({ color: 0x8cdcff });
       const border = new THREE.LineSegments(borderGeom, borderMat);
       group.add(border);
 
@@ -281,7 +261,7 @@
       group.add(timePlane);
 
       const dotGeom = new THREE.CircleGeometry(0.01, 16);
-      const dotMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 });
+      const dotMat = new THREE.MeshBasicMaterial({ color: 0x8cdcff });
       const dot = new THREE.Mesh(dotGeom, dotMat);
       dot.position.set(-0.28, 0.11, 0.001);
       group.add(dot);
@@ -301,17 +281,13 @@
     function makeScreenPanel(texture) {
       const group = new THREE.Group();
 
-      const panelGeom = new THREE.PlaneGeometry(0.9, 0.5, 1, 1);
-      const panelMat = createLiquidGlassMaterial(0xcccccc);
+      const panelGeom = new THREE.PlaneGeometry(0.9, 0.5);
+      const panelMat = createLiquidGlassMaterial(0x101427);
       const panel = new THREE.Mesh(panelGeom, panelMat);
       group.add(panel);
 
       const borderGeom = new THREE.EdgesGeometry(panelGeom);
-      const borderMat = new THREE.LineBasicMaterial({ 
-        color: 0xffffff, 
-        transparent: true, 
-        opacity: 0.2 
-      });
+      const borderMat = new THREE.LineBasicMaterial({ color: 0x8cdcff });
       const border = new THREE.LineSegments(borderGeom, borderMat);
       group.add(border);
 
@@ -351,7 +327,7 @@
     function onWindowResize() {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
-      renderer.setPixelRatio(window.devicePixelRatio || 1);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
@@ -360,8 +336,6 @@
     }
 
     function render(timestamp, frame) {
-      frameCount++;
-      
       if (frame) {
         const referenceSpace = renderer.xr.getReferenceSpace();
         const session = renderer.xr.getSession();
@@ -381,8 +355,7 @@
           hitTestSourceRequested = true;
         }
 
-        // Throttle hit-test to every 2 frames for better performance
-        if (hitTestSource && frameCount % 2 === 0) {
+        if (hitTestSource) {
           const hitTestResults = frame.getHitTestResults(hitTestSource);
           if (hitTestResults.length) {
             const hit = hitTestResults[0];
@@ -409,3 +382,4 @@
   </script>
 </body>
 </html>
+
