@@ -181,19 +181,44 @@
       return candidate && candidate.userData && candidate.userData.isHudPanel ? candidate : null;
     }
 
-    // Simple, lightweight glass material - realistic iPhone style
+    // Realistic iPhone frosted glass material with blur-like properties
     function createGlassMaterial() {
+      // Create subtle noise/frosted texture
+      const canvas = document.createElement("canvas");
+      canvas.width = 256;
+      canvas.height = 256;
+      const ctx = canvas.getContext("2d");
+      
+      // Create fine noise for frosted effect
+      for (let i = 0; i < canvas.width; i++) {
+        for (let j = 0; j < canvas.height; j++) {
+          const noise = Math.random() * 15;
+          ctx.fillStyle = `rgba(255,255,255,${noise / 255})`;
+          ctx.fillRect(i, j, 1, 1);
+        }
+      }
+      
+      const noiseTexture = new THREE.CanvasTexture(canvas);
+      noiseTexture.wrapS = noiseTexture.wrapT = THREE.RepeatWrapping;
+      
       return new THREE.MeshPhysicalMaterial({
-        color: 0xdddddd,
+        color: 0xe8e8e8,  // Light gray-white like iPhone
+        map: noiseTexture,
         transparent: true,
-        opacity: 0.9,
-        transmission: 0.85,
-        roughness: 0.35,
+        opacity: 0.95,  // Max opacity for tunability
+        transmission: 0.7,  // Light passes through
+        roughness: 0.5,  // Key for frosted look
         metalness: 0,
-        clearcoat: 0.25,
-        clearcoatRoughness: 0.25,
-        reflectivity: 0.15,
+        clearcoat: 0.1,
+        clearcoatRoughness: 0.4,
+        reflectivity: 0.1,
         ior: 1.45,
+        thickness: 0.2,
+        attenuationDistance: 0.5,  // Adds depth to glass
+        attenuationColor: 0xffffff,
+        sheen: 0.2,  // Subtle sheen like real glass
+        sheenColor: 0xffffff,
+        sheenRoughness: 0.5,
         side: THREE.DoubleSide
       });
     }
@@ -210,10 +235,22 @@
       const borderMat = new THREE.LineBasicMaterial({ 
         color: 0xffffff, 
         transparent: true, 
-        opacity: 0.25 
+        opacity: 0.3
       });
       const border = new THREE.LineSegments(borderGeom, borderMat);
       group.add(border);
+      
+      // Subtle inner glow for depth
+      const glowGeom = new THREE.PlaneGeometry(0.68, 0.33);
+      const glowMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.08,
+        side: THREE.DoubleSide
+      });
+      const glow = new THREE.Mesh(glowGeom, glowMat);
+      glow.position.z = -0.001;
+      group.add(glow);
 
       const timeCanvas = document.createElement("canvas");
       timeCanvas.width = 512;
@@ -262,10 +299,22 @@
       const borderMat = new THREE.LineBasicMaterial({ 
         color: 0xffffff, 
         transparent: true, 
-        opacity: 0.25 
+        opacity: 0.3
       });
       const border = new THREE.LineSegments(borderGeom, borderMat);
       group.add(border);
+      
+      // Subtle inner glow for depth
+      const glowGeom = new THREE.PlaneGeometry(0.88, 0.48);
+      const glowMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.08,
+        side: THREE.DoubleSide
+      });
+      const glow = new THREE.Mesh(glowGeom, glowMat);
+      glow.position.z = -0.001;
+      group.add(glow);
 
       const videoMat = new THREE.MeshBasicMaterial({ map: texture });
       const videoPlane = new THREE.Mesh(new THREE.PlaneGeometry(0.82, 0.46), videoMat);
