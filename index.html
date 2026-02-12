@@ -57,7 +57,7 @@
 
     function init() {
       scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.005, 30);
+      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
       renderer = new THREE.WebGLRenderer({
         antialias: true,
@@ -235,7 +235,7 @@
         color: 0xcccccc,  // Light gray base similar to iPhone glass
         map: texture,
         transparent: true,
-        opacity: 0.25,  // Very translucent like iPhone widgets
+        opacity: 0.55,  // Increased opacity for more visible panels
         transmission: 0.88,  // High light transmission
         roughness: 0.4,  // Frosted glass effect
         metalness: 0,
