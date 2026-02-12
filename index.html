@@ -59,15 +59,9 @@
       scene = new THREE.Scene();
       camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
-      renderer = new THREE.WebGLRenderer({
-        antialias: true,
-        alpha: true,
-        powerPreference: "high-performance"
-      });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.xr.enabled = true;
-      renderer.xr.setFramebufferScaleFactor(1.2);
       document.body.appendChild(renderer.domElement);
 
       const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
@@ -92,20 +86,6 @@
         optionalFeatures: ["dom-overlay"],
         domOverlay: { root: document.body }
       }));
-
-      renderer.xr.addEventListener("sessionstart", () => {
-        const info = document.getElementById("info");
-        const hud = document.getElementById("hud");
-        if (info) info.style.opacity = "0.25";
-        if (hud) hud.style.opacity = "0.35";
-      });
-
-      renderer.xr.addEventListener("sessionend", () => {
-        const info = document.getElementById("info");
-        const hud = document.getElementById("hud");
-        if (info) info.style.opacity = "1";
-        if (hud) hud.style.opacity = "1";
-      });
 
       window.addEventListener("resize", onWindowResize);
     }
@@ -201,35 +181,19 @@
       return candidate && candidate.userData && candidate.userData.isHudPanel ? candidate : null;
     }
 
-    function createLiquidGlassMaterial(baseColor) {
-      const canvas = document.createElement("canvas");
-      canvas.width = 512;
-      canvas.height = 256;
-      const ctx = canvas.getContext("2d");
-      const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-      gradient.addColorStop(0, "rgba(255,255,255,0.15)");
-      gradient.addColorStop(0.3, "rgba(200,233,255,0.25)");
-      gradient.addColorStop(0.55, "rgba(20,26,50,0.5)");
-      gradient.addColorStop(1, "rgba(10,14,25,0.9)");
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      const texture = new THREE.CanvasTexture(canvas);
-      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-      texture.repeat.set(1.3, 1.3);
-      texture.encoding = THREE.sRGBEncoding;
-
+    // Simple, lightweight glass material - realistic iPhone style
+    function createGlassMaterial() {
       return new THREE.MeshPhysicalMaterial({
-        color: baseColor,
-        map: texture,
+        color: 0xdddddd,
         transparent: true,
-        opacity: 0.85,
-        transmission: 0.95,
-        roughness: 0.15,
-        metalness: 0.05,
-        clearcoat: 1,
-        clearcoatRoughness: 0.05,
-        reflectivity: 0.7,
-        ior: 1.4,
+        opacity: 0.9,
+        transmission: 0.85,
+        roughness: 0.35,
+        metalness: 0,
+        clearcoat: 0.25,
+        clearcoatRoughness: 0.25,
+        reflectivity: 0.15,
+        ior: 1.45,
         side: THREE.DoubleSide
       });
     }
@@ -238,12 +202,16 @@
       const group = new THREE.Group();
 
       const panelGeom = new THREE.PlaneGeometry(0.7, 0.35);
-      const panelMat = createLiquidGlassMaterial(0x1a1f2b);
+      const panelMat = createGlassMaterial();
       const panel = new THREE.Mesh(panelGeom, panelMat);
       group.add(panel);
 
       const borderGeom = new THREE.EdgesGeometry(panelGeom);
-      const borderMat = new THREE.LineBasicMaterial({ color: 0x8cdcff });
+      const borderMat = new THREE.LineBasicMaterial({ 
+        color: 0xffffff, 
+        transparent: true, 
+        opacity: 0.25 
+      });
       const border = new THREE.LineSegments(borderGeom, borderMat);
       group.add(border);
 
@@ -256,12 +224,16 @@
       timeTexture.magFilter = THREE.LinearFilter;
 
       const timeMat = new THREE.MeshBasicMaterial({ map: timeTexture, transparent: true });
-      const timePlane = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.2), timeMat);
+      const timePlane = new THREE.Mesh(new THREE.PlaneGeometry(0.28, 0.28), timeMat);
       timePlane.position.set(0, 0, 0.002);
       group.add(timePlane);
 
       const dotGeom = new THREE.CircleGeometry(0.01, 16);
-      const dotMat = new THREE.MeshBasicMaterial({ color: 0x8cdcff });
+      const dotMat = new THREE.MeshBasicMaterial({ 
+        color: 0xffffff, 
+        transparent: true, 
+        opacity: 0.7 
+      });
       const dot = new THREE.Mesh(dotGeom, dotMat);
       dot.position.set(-0.28, 0.11, 0.001);
       group.add(dot);
@@ -282,12 +254,16 @@
       const group = new THREE.Group();
 
       const panelGeom = new THREE.PlaneGeometry(0.9, 0.5);
-      const panelMat = createLiquidGlassMaterial(0x101427);
+      const panelMat = createGlassMaterial();
       const panel = new THREE.Mesh(panelGeom, panelMat);
       group.add(panel);
 
       const borderGeom = new THREE.EdgesGeometry(panelGeom);
-      const borderMat = new THREE.LineBasicMaterial({ color: 0x8cdcff });
+      const borderMat = new THREE.LineBasicMaterial({ 
+        color: 0xffffff, 
+        transparent: true, 
+        opacity: 0.25 
+      });
       const border = new THREE.LineSegments(borderGeom, borderMat);
       group.add(border);
 
@@ -313,21 +289,69 @@
       const tex = panel.userData.timeTexture;
 
       ctx.clearRect(0, 0, 512, 256);
-      ctx.fillStyle = "rgba(0,0,0,0)";
-      ctx.fillRect(0, 0, 512, 256);
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 80px system-ui";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(timeText, 256, 128);
+      drawAnalogClock(ctx, now);
       tex.needsUpdate = true;
     }
 
+    function drawAnalogClock(ctx, now) {
+      const w = 512;
+      const h = 256;
+      const cx = w * 0.5;
+      const cy = h * 0.5;
+      const r = 100;
+
+      ctx.clearRect(0, 0, w, h);
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(10, 26, 40, 0.55)";
+      ctx.fill();
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = "rgba(140, 220, 255, 0.9)";
+      ctx.stroke();
+
+      for (let i = 0; i < 60; i++) {
+        const a = (i / 60) * Math.PI * 2 - Math.PI / 2;
+        const isHour = i % 5 === 0;
+        const tickOuter = r - 8;
+        const tickInner = isHour ? r - 22 : r - 15;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a) * tickInner, cy + Math.sin(a) * tickInner);
+        ctx.lineTo(cx + Math.cos(a) * tickOuter, cy + Math.sin(a) * tickOuter);
+        ctx.lineWidth = isHour ? 3 : 1.5;
+        ctx.strokeStyle = isHour ? "rgba(220, 242, 255, 0.95)" : "rgba(140, 220, 255, 0.75)";
+        ctx.stroke();
+      }
+
+      const ms = now.getMilliseconds();
+      const sec = now.getSeconds() + ms / 1000;
+      const min = now.getMinutes() + sec / 60;
+      const hour = (now.getHours() % 12) + min / 60;
+
+      drawClockHand(ctx, cx, cy, hour / 12, 50, 5, "rgba(255,255,255,0.95)");
+      drawClockHand(ctx, cx, cy, min / 60, 72, 4, "rgba(200,235,255,0.95)");
+      drawClockHand(ctx, cx, cy, sec / 60, 84, 2, "rgba(255,120,120,0.95)");
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255,255,255,0.95)";
+      ctx.fill();
+    }
+
+    function drawClockHand(ctx, cx, cy, unit, len, width, color) {
+      const angle = unit * Math.PI * 2 - Math.PI / 2;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(angle) * len, cy + Math.sin(angle) * len);
+      ctx.lineWidth = width;
+      ctx.lineCap = "round";
+      ctx.strokeStyle = color;
+      ctx.stroke();
+    }
 
     function onWindowResize() {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
@@ -382,4 +406,3 @@
   </script>
 </body>
 </html>
-
