@@ -48,6 +48,7 @@
     let activePanel = null;
     let videoEl = null;
     let videoTexture = null;
+    const liquidMaterials = [];
     let lastTapTime = 0;
     const tapCooldownMs = 250;
     let singleClickTimer = null;
@@ -223,11 +224,96 @@
       });
     }
 
+    // Ported lightweight liquid-glass shader (samples a map when provided,
+    // otherwise produces a subtle frosted/translucent surface). Materials
+    // created here are tracked in `liquidMaterials` so we can update `time`.
+    function createLiquidGlassMaterial(mapTexture, opts = {}) {
+      opts = Object.assign({noiseScale: 4.0, strength: 0.035, opacity: 0.86}, opts);
+
+      // noise texture (generated once per material; small and tiled)
+      const canvas = document.createElement('canvas');
+      canvas.width = 128; canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      for (let x = 0; x < canvas.width; x++) {
+        for (let y = 0; y < canvas.height; y++) {
+          const n = 128 + Math.floor(Math.random() * 96);
+          ctx.fillStyle = `rgba(${n},${n},${n},${(4 + Math.random()*6)/255})`;
+          ctx.fillRect(x,y,1,1);
+        }
+      }
+      const noiseTex = new THREE.CanvasTexture(canvas);
+      noiseTex.wrapS = noiseTex.wrapT = THREE.RepeatWrapping;
+      noiseTex.repeat.set(opts.noiseScale, opts.noiseScale);
+
+      const uniforms = {
+        map: { value: mapTexture || null },
+        noise: { value: noiseTex },
+        time: { value: 0.0 },
+        strength: { value: opts.strength },
+        opacity: { value: opts.opacity },
+        rimColor: { value: new THREE.Color(0x8cdcff) },
+      };
+
+      const mat = new THREE.ShaderMaterial({
+        uniforms,
+        transparent: true,
+        side: THREE.DoubleSide,
+        vertexShader: `
+          varying vec2 vUv;
+          varying vec3 vNormal;
+          varying vec3 vViewDir;
+          void main(){
+            vUv = uv;
+            vNormal = normalize(normalMatrix * normal);
+            vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+            vViewDir = normalize(-mvPosition.xyz);
+            gl_Position = projectionMatrix * mvPosition;
+          }
+        `,
+        fragmentShader: `
+          uniform sampler2D map;
+          uniform sampler2D noise;
+          uniform float time;
+          uniform float strength;
+          uniform float opacity;
+          uniform vec3 rimColor;
+          varying vec2 vUv;
+          varying vec3 vNormal;
+          varying vec3 vViewDir;
+
+          void main(){
+            vec2 nuv = vUv + (texture2D(noise, vUv + vec2(time*0.03, time*0.02)).rg - 0.5) * strength * 0.5;
+            vec2 offset = (texture2D(noise, vUv*4.0 + vec2(time*0.05)).rg - 0.5) * strength;
+            vec4 base = vec4(0.96,0.97,0.99,1.0);
+            if (map != NULL) {
+              base = texture2D(map, vUv + offset);
+            }
+
+            float fresnel = pow(1.0 - max(0.0, dot(normalize(vNormal), normalize(vViewDir))), 3.0);
+            vec3 rim = rimColor * fresnel * 0.7;
+
+            // subtle white haze + rim + base color
+            vec3 color = mix(base.rgb, vec3(1.0), 0.06) + rim * 0.9;
+            gl_FragColor = vec4(color, opacity * (map == NULL ? 0.55 : 0.88));
+          }
+        `
+      });
+
+      // If a texture was passed ensure it's updated for linear filtering
+      if (mapTexture) {
+        mapTexture.minFilter = THREE.LinearFilter;
+        mapTexture.magFilter = THREE.LinearFilter;
+      }
+
+      liquidMaterials.push(mat);
+      return mat;
+    }
+
     function makeHudPanel() {
       const group = new THREE.Group();
 
       const panelGeom = new THREE.PlaneGeometry(0.7, 0.35);
-      const panelMat = createGlassMaterial();
+      const panelMat = createLiquidGlassMaterial(null, {noiseScale:4.0, strength:0.03, opacity:0.86});
       const panel = new THREE.Mesh(panelGeom, panelMat);
       group.add(panel);
 
@@ -291,7 +377,7 @@
       const group = new THREE.Group();
 
       const panelGeom = new THREE.PlaneGeometry(0.9, 0.5);
-      const panelMat = createGlassMaterial();
+      const panelMat = createLiquidGlassMaterial(texture, {noiseScale:4.0, strength:0.045, opacity:0.9});
       const panel = new THREE.Mesh(panelGeom, panelMat);
       group.add(panel);
 
@@ -448,6 +534,14 @@
 
       for (const panel of panels) {
         if (panel.userData.timeCtx) updatePanelTime(panel, false);
+      }
+
+      // advance liquid shader time uniforms
+      if (liquidMaterials.length) {
+        const t = (timestamp || performance.now()) * 0.001;
+        for (const m of liquidMaterials) {
+          if (m && m.uniforms && typeof m.uniforms.time !== 'undefined') m.uniforms.time.value = t;
+        }
       }
 
       renderer.render(scene, camera);
