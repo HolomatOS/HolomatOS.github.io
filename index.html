@@ -182,43 +182,43 @@
       return candidate && candidate.userData && candidate.userData.isHudPanel ? candidate : null;
     }
 
-    // MAX SETTINGS - iPhone frosted glass - TUNE DOWN AS NEEDED
+    // iOS-style frosted/glass material tuned for a subtle "glass" look
     function createGlassMaterial() {
       const canvas = document.createElement("canvas");
       canvas.width = 256;
       canvas.height = 256;
       const ctx = canvas.getContext("2d");
-      
-      // MAX noise for frosted effect
+
+      // subtle noise for a frosted appearance
       for (let i = 0; i < canvas.width; i++) {
         for (let j = 0; j < canvas.height; j++) {
-          const noise = Math.random() * 50;  // MAX
-          ctx.fillStyle = `rgba(255,255,255,${noise / 255})`;
+          const noise = 200 + Math.floor(Math.random() * 55); // subtle luminance
+          // low alpha so the noise only affects roughness/texture
+          ctx.fillStyle = `rgba(${noise},${noise},${noise},${(6 + Math.random() * 10) / 255})`;
           ctx.fillRect(i, j, 1, 1);
         }
       }
-      
+
       const noiseTexture = new THREE.CanvasTexture(canvas);
       noiseTexture.wrapS = noiseTexture.wrapT = THREE.RepeatWrapping;
-      
+      noiseTexture.repeat.set(4, 4);
+      noiseTexture.anisotropy = 4;
+
       return new THREE.MeshPhysicalMaterial({
-        color: 0xffffff,  // MAX white
-        map: noiseTexture,
+        color: 0xf8fbff,
         transparent: true,
-        opacity: 1.0,  // MAX
-        transmission: 1.0,  // MAX
-        roughness: 1.0,  // MAX frosted
-        metalness: 0,
-        clearcoat: 1.0,  // MAX
-        clearcoatRoughness: 1.0,  // MAX
-        reflectivity: 1.0,  // MAX
-        ior: 2.333,  // MAX (diamond-like)
-        thickness: 1.0,  // MAX
-        attenuationDistance: 0.05,  // MIN for MAX effect
-        attenuationColor: 0xffffff,
-        sheen: 1.0,  // MAX
-        sheenColor: 0xffffff,
-        sheenRoughness: 1.0,  // MAX
+        opacity: 0.86,
+        transmission: 0.9,
+        roughness: 0.55,
+        roughnessMap: noiseTexture,
+        metalness: 0.0,
+        clearcoat: 0.12,
+        clearcoatRoughness: 0.25,
+        reflectivity: 0.5,
+        ior: 1.45,
+        thickness: 0.25,
+        attenuationDistance: 0.6,
+        attenuationColor: new THREE.Color(0xffffff),
         side: THREE.DoubleSide
       });
     }
