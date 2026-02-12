@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>AR Clock + Video</title>
+  <title>AR Clock + Video - MAX Glass</title>
   <style>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
     #info {
@@ -28,7 +28,7 @@
   </style>
 </head>
 <body>
-  <div id="info">Tap "Enter AR". Single click spawns a translucent clock. Double click spawns a video panel. Tap a panel to pick up, tap again to drop.</div>
+  <div id="info">Tap "Enter AR". Single click spawns a translucent clock. Double click spawns a video panel. Tap a panel to pick up, tap again to drop. ALL VALUES AT MAX - TUNE DOWN AS NEEDED</div>
   <div id="hud">
     <div class="reticle"></div>
     <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
@@ -181,18 +181,17 @@
       return candidate && candidate.userData && candidate.userData.isHudPanel ? candidate : null;
     }
 
-    // Realistic iPhone frosted glass material with blur-like properties
+    // MAX SETTINGS - iPhone frosted glass - TUNE DOWN AS NEEDED
     function createGlassMaterial() {
-      // Create subtle noise/frosted texture
       const canvas = document.createElement("canvas");
       canvas.width = 256;
       canvas.height = 256;
       const ctx = canvas.getContext("2d");
       
-      // Create fine noise for frosted effect
+      // MAX noise for frosted effect
       for (let i = 0; i < canvas.width; i++) {
         for (let j = 0; j < canvas.height; j++) {
-          const noise = Math.random() * 15;
+          const noise = Math.random() * 50;  // MAX
           ctx.fillStyle = `rgba(255,255,255,${noise / 255})`;
           ctx.fillRect(i, j, 1, 1);
         }
@@ -202,23 +201,23 @@
       noiseTexture.wrapS = noiseTexture.wrapT = THREE.RepeatWrapping;
       
       return new THREE.MeshPhysicalMaterial({
-        color: 0xe8e8e8,  // Light gray-white like iPhone
+        color: 0xffffff,  // MAX white
         map: noiseTexture,
         transparent: true,
-        opacity: 0.95,  // Max opacity for tunability
-        transmission: 0.7,  // Light passes through
-        roughness: 0.5,  // Key for frosted look
+        opacity: 1.0,  // MAX
+        transmission: 1.0,  // MAX
+        roughness: 1.0,  // MAX frosted
         metalness: 0,
-        clearcoat: 0.1,
-        clearcoatRoughness: 0.4,
-        reflectivity: 0.1,
-        ior: 1.45,
-        thickness: 0.2,
-        attenuationDistance: 0.5,  // Adds depth to glass
+        clearcoat: 1.0,  // MAX
+        clearcoatRoughness: 1.0,  // MAX
+        reflectivity: 1.0,  // MAX
+        ior: 2.333,  // MAX (diamond-like)
+        thickness: 1.0,  // MAX
+        attenuationDistance: 0.05,  // MIN for MAX effect
         attenuationColor: 0xffffff,
-        sheen: 0.2,  // Subtle sheen like real glass
+        sheen: 1.0,  // MAX
         sheenColor: 0xffffff,
-        sheenRoughness: 0.5,
+        sheenRoughness: 1.0,  // MAX
         side: THREE.DoubleSide
       });
     }
@@ -235,17 +234,17 @@
       const borderMat = new THREE.LineBasicMaterial({ 
         color: 0xffffff, 
         transparent: true, 
-        opacity: 0.3
+        opacity: 0.6  // MAX border
       });
       const border = new THREE.LineSegments(borderGeom, borderMat);
       group.add(border);
       
-      // Subtle inner glow for depth
+      // MAX inner glow for depth
       const glowGeom = new THREE.PlaneGeometry(0.68, 0.33);
       const glowMat = new THREE.MeshBasicMaterial({
         color: 0xffffff,
         transparent: true,
-        opacity: 0.08,
+        opacity: 0.3,  // MAX
         side: THREE.DoubleSide
       });
       const glow = new THREE.Mesh(glowGeom, glowMat);
@@ -269,7 +268,7 @@
       const dotMat = new THREE.MeshBasicMaterial({ 
         color: 0xffffff, 
         transparent: true, 
-        opacity: 0.7 
+        opacity: 1.0  // MAX
       });
       const dot = new THREE.Mesh(dotGeom, dotMat);
       dot.position.set(-0.28, 0.11, 0.001);
@@ -299,17 +298,17 @@
       const borderMat = new THREE.LineBasicMaterial({ 
         color: 0xffffff, 
         transparent: true, 
-        opacity: 0.3
+        opacity: 0.6  // MAX border
       });
       const border = new THREE.LineSegments(borderGeom, borderMat);
       group.add(border);
       
-      // Subtle inner glow for depth
+      // MAX inner glow for depth
       const glowGeom = new THREE.PlaneGeometry(0.88, 0.48);
       const glowMat = new THREE.MeshBasicMaterial({
         color: 0xffffff,
         transparent: true,
-        opacity: 0.08,
+        opacity: 0.3,  // MAX
         side: THREE.DoubleSide
       });
       const glow = new THREE.Mesh(glowGeom, glowMat);
