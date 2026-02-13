@@ -181,6 +181,38 @@
       return candidate && candidate.userData && candidate.userData.isHudPanel ? candidate : null;
     }
 
+    // REALISTIC GLASS - Based on Three.js MeshPhysicalMaterial tutorial
+    // This creates water/glass effect using transmission property
+    function createRealisticGlassMaterial() {
+      return new THREE.MeshPhysicalMaterial({
+        color: 0xffffff,
+        
+        // KEY PROPERTY: transmission makes it actually see-through like real glass
+        transmission: 1.0,        // Full light transmission (this is the magic!)
+        opacity: 1.0,             // Keep at 1 when using transmission
+        
+        // Surface finish
+        roughness: 0.0,           // 0 = perfectly smooth glass, 0.3 = frosted
+        metalness: 0.0,           // Glass is not metallic
+        
+        // Refraction (bending of light)
+        thickness: 0.5,           // Affects how much light bends
+        ior: 1.5,                 // Index of Refraction: 1.5=glass, 1.33=water, 2.4=diamond
+        
+        // Reflections
+        clearcoat: 1.0,           // Surface shine
+        clearcoatRoughness: 0.0,  // Smooth shine
+        reflectivity: 0.5,        // Reflection strength
+        
+        // Color tinting (optional)
+        attenuationDistance: 0.5,
+        attenuationColor: new THREE.Color(0xffffff),
+        
+        transparent: true,
+        side: THREE.DoubleSide
+      });
+    }
+
     // CSS Glassy Card Material - Ported from CSS
     // .glassy-card { background: hsl(0,0%,100%,0.2); backdrop-filter: blur(2px); border: 3px solid hsl(0,0%,100%,0.3); box-shadow: inset 0 0 8px 1px hsl(0,0%,100%,0.6); }
     function createGlassyCardMaterial() {
@@ -260,7 +292,17 @@
       const group = new THREE.Group();
 
       const panelGeom = new THREE.PlaneGeometry(0.7, 0.35);
-      const panelMat = createGlassyCardMaterial(); // Using CSS-ported material
+      
+      // CHOOSE YOUR GLASS STYLE:
+      // Option 1: Realistic glass (transmission-based, like water/glass)
+      const panelMat = createRealisticGlassMaterial();
+      
+      // Option 2: CSS-style frosted glass
+      // const panelMat = createGlassyCardMaterial();
+      
+      // Option 3: Maximum settings glass
+      // const panelMat = createGlassMaterial();
+      
       const panel = new THREE.Mesh(panelGeom, panelMat);
       group.add(panel);
 
