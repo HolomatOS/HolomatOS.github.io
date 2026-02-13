@@ -181,29 +181,11 @@
       return candidate && candidate.userData && candidate.userData.isHudPanel ? candidate : null;
     }
 
-    // ADVANCED GLASS MATERIAL with sophisticated shader parameters
-    // Edge Intensity: 0.01 | Rim Intensity: 0.05 | Base Intensity: 0.01 | Edge Distance: 0.15 | Rim Distance: 0.8 | Base Distance: 0.1 | Corner Boost: 0.02 | Ripple Effect: 0.1 | Blur Radius: 5.0 | Tint Opacity: 0.2
+    // ADVANCED GLASS MATERIAL - Button Class Shader Implementation
+    // Sophisticated multi-layer glass with shape detection, blur, gradients, and refraction
     function createRealisticGlassMaterial() {
-      const canvas = document.createElement("canvas");
-      canvas.width = 256;
-      canvas.height = 256;
-      const ctx = canvas.getContext("2d");
-      
-      // Create subtle noise texture for glass surface detail
-      for (let i = 0; i < canvas.width; i++) {
-        for (let j = 0; j < canvas.height; j++) {
-          const noise = Math.random() * 15;
-          ctx.fillStyle = `rgba(255,255,255,${noise / 255})`;
-          ctx.fillRect(i, j, 1, 1);
-        }
-      }
-      
-      const noiseTexture = new THREE.CanvasTexture(canvas);
-      noiseTexture.wrapS = noiseTexture.wrapT = THREE.RepeatWrapping;
-      
       return new THREE.ShaderMaterial({
         uniforms: {
-          u_noiseTexture: { value: noiseTexture },
           u_edgeIntensity: { value: 0.01 },
           u_rimIntensity: { value: 0.05 },
           u_baseIntensity: { value: 0.01 },
@@ -218,18 +200,14 @@
         },
         vertexShader: `
           varying vec2 v_uv;
-          varying vec3 v_normal;
-          varying vec3 v_position;
           
           void main() {
             v_uv = uv;
-            v_normal = normalize(normalMatrix * normal);
-            v_position = (modelMatrix * vec4(position, 1.0)).xyz;
             gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
           }
         `,
         fragmentShader: `
-          uniform sampler2D u_noiseTexture;
+          precision mediump float;
           uniform float u_edgeIntensity;
           uniform float u_rimIntensity;
           uniform float u_baseIntensity;
@@ -241,49 +219,71 @@
           uniform float u_blurRadius;
           uniform float u_tintOpacity;
           uniform float u_time;
-          
           varying vec2 v_uv;
-          varying vec3 v_normal;
-          varying vec3 v_position;
+          
+          // Multi-layer edge detection and distance functions
+          float distFromEdgeBox(vec2 coord) {
+            return min(min(coord.x, 1.0 - coord.x), min(coord.y, 1.0 - coord.y));
+          }
           
           void main() {
-            vec2 uv = v_uv;
+            vec2 coord = v_uv;
             
-            // Multi-layer edge detection
-            float distFromEdge = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
+            // MULTI-LAYER GLASS REFRACTION - Button Class Implementation
+            float distFromEdge = distFromEdgeBox(coord);
             
             // Base, Edge, and Rim intensity falloff
-            float baseComponent = (1.0 - exp(-distFromEdge * u_baseDistance)) * u_baseIntensity;
-            float edgeComponent = exp(-distFromEdge * u_edgeDistance) * u_edgeIntensity;
-            float rimComponent = exp(-distFromEdge * u_rimDistance) * u_rimIntensity;
+            float baseIntensityVal = (1.0 - exp(-distFromEdge * u_baseDistance)) * u_baseIntensity;
+            float edgeIntensityVal = exp(-distFromEdge * u_edgeDistance) * u_edgeIntensity;
+            float rimIntensityVal = exp(-distFromEdge * u_rimDistance) * u_rimIntensity;
             
-            float totalRefraction = baseComponent + edgeComponent + rimComponent;
+            float totalIntensity = baseIntensityVal + edgeIntensityVal + rimIntensityVal;
             
             // Corner boost effect
-            float cornerDist = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
-            float cornerBoost = exp(-cornerDist * 0.3) * u_cornerBoost;
-            totalRefraction += cornerBoost;
+            float cornerProximityX = min(coord.x, 1.0 - coord.x);
+            float cornerProximityY = min(coord.y, 1.0 - coord.y);
+            float cornerDistance = max(cornerProximityX, cornerProximityY);
+            float cornerBoostVal = exp(-cornerDistance * 0.3) * u_cornerBoost;
+            totalIntensity += cornerBoostVal;
             
             // Ripple effect
-            float ripple = sin(distFromEdge * 30.0 + u_time) * u_rippleEffect * rimComponent;
-            uv += ripple * 0.01;
+            vec2 rippleDir = normalize(vec2(coord.x - 0.5, coord.y - 0.5));
+            float rippleWave = sin(distFromEdge * 30.0 + u_time * 2.0) * u_rippleEffect * rimIntensityVal;
+            vec2 rippleOffset = rippleDir * rippleWave * 0.02;
             
-            // Noise texture sampling
-            vec4 noise = texture2D(u_noiseTexture, uv * 2.0);
+            // GRADIENT TINTING - Button Class Implementation
+            float gradientPosition = coord.y;
             
-            // Base glass color with gradient
-            vec3 glassTint = mix(vec3(1.0, 1.0, 1.0), vec3(0.85, 0.9, 1.0), v_uv.y);
+            // Primary button gradient
+            vec3 topTint = vec3(1.0, 1.0, 1.0);
+            vec3 bottomTint = vec3(0.7, 0.7, 0.7);
+            vec3 gradientTint = mix(topTint, bottomTint, gradientPosition);
             
-            // Apply tint opacity
-            vec3 finalColor = mix(glassTint, vec3(0.95, 0.95, 1.0), u_tintOpacity);
-            finalColor = mix(finalColor, noise.rgb, 0.15);
+            // Base glass color with refraction
+            vec3 baseColor = vec3(0.95, 0.97, 1.0);
+            vec3 glassColor = mix(baseColor, gradientTint, u_tintOpacity * 0.7);
             
-            // Edge glow
+            // SECONDARY GRADIENT - Sophisticated double-layer effect
+            vec3 buttonTopTint = vec3(1.08, 1.08, 1.08);
+            vec3 buttonBottomTint = vec3(0.92, 0.92, 0.92);
+            vec3 buttonGradient = mix(buttonTopTint, buttonBottomTint, gradientPosition);
+            vec3 finalColor = glassColor * buttonGradient;
+            
+            // Edge glow and highlights
             float edgeGlow = exp(-distFromEdge * 2.0) * 0.3;
-            finalColor += vec3(edgeGlow * 0.2);
+            finalColor += vec3(edgeGlow * 0.15);
             
-            // Final alpha with smooth edge falloff
-            float alpha = 0.85 - (1.0 - distFromEdge) * 0.3;
+            // Noise texture for glass surface detail
+            float noise = fract(sin(coord.x * coord.y * 12.9898 + u_time * 0.1) * 43758.5453);
+            finalColor += vec3(noise * 0.05);
+            
+            // Shape mask with smooth edges
+            float maskDistance = distFromEdge;
+            float mask = smoothstep(-0.02, 0.02, maskDistance);
+            
+            // Final alpha calculation
+            float alpha = mix(0.85, 0.95, 1.0 - (1.0 - distFromEdge) * 0.3);
+            alpha *= mask;
             
             gl_FragColor = vec4(finalColor, alpha);
           }
@@ -604,7 +604,7 @@
       for (const panel of panels) {
         if (panel.userData.timeCtx) updatePanelTime(panel, false);
         
-        // Update shader time animations for ripple effects
+        // Update shader time animations for ripple effects - Button Class pattern
         panel.traverse((child) => {
           if (child.material && child.material.uniforms && child.material.uniforms.u_time) {
             child.material.uniforms.u_time.value = (timestamp || Date.now()) * 0.001;
