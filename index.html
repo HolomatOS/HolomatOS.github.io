@@ -181,35 +181,116 @@
       return candidate && candidate.userData && candidate.userData.isHudPanel ? candidate : null;
     }
 
-    // REALISTIC GLASS - Based on Three.js MeshPhysicalMaterial tutorial
-    // This creates water/glass effect using transmission property
+    // ADVANCED GLASS MATERIAL with sophisticated shader parameters
+    // Edge Intensity: 0.01 | Rim Intensity: 0.05 | Base Intensity: 0.01 | Edge Distance: 0.15 | Rim Distance: 0.8 | Base Distance: 0.1 | Corner Boost: 0.02 | Ripple Effect: 0.1 | Blur Radius: 5.0 | Tint Opacity: 0.2
     function createRealisticGlassMaterial() {
-      return new THREE.MeshPhysicalMaterial({
-        color: 0xffffff,
-        
-        // KEY PROPERTY: transmission makes it actually see-through like real glass
-        transmission: 1.0,        // Full light transmission (this is the magic!)
-        opacity: 1.0,             // Keep at 1 when using transmission
-        
-        // Surface finish
-        roughness: 0.3,           // 0 = perfectly smooth glass, 0.3 = frosted
-        metalness: 0.2,           // Glass is not metallic
-        
-        // Refraction (bending of light)
-        thickness: 0.5,           // Affects how much light bends
-        ior: 1.33,                 // Index of Refraction: 1.5=glass, 1.33=water, 2.4=diamond
-        
-        // Reflections
-        clearcoat: 1.0,           // Surface shine
-        clearcoatRoughness: 0.0,  // Smooth shine
-        reflectivity: 0.5,        // Reflection strength
-        
-        // Color tinting (optional)
-        attenuationDistance: 0.5,
-        attenuationColor: new THREE.Color(0xffffff),
-        
+      const canvas = document.createElement("canvas");
+      canvas.width = 256;
+      canvas.height = 256;
+      const ctx = canvas.getContext("2d");
+      
+      // Create subtle noise texture for glass surface detail
+      for (let i = 0; i < canvas.width; i++) {
+        for (let j = 0; j < canvas.height; j++) {
+          const noise = Math.random() * 15;
+          ctx.fillStyle = `rgba(255,255,255,${noise / 255})`;
+          ctx.fillRect(i, j, 1, 1);
+        }
+      }
+      
+      const noiseTexture = new THREE.CanvasTexture(canvas);
+      noiseTexture.wrapS = noiseTexture.wrapT = THREE.RepeatWrapping;
+      
+      return new THREE.ShaderMaterial({
+        uniforms: {
+          u_noiseTexture: { value: noiseTexture },
+          u_edgeIntensity: { value: 0.01 },
+          u_rimIntensity: { value: 0.05 },
+          u_baseIntensity: { value: 0.01 },
+          u_edgeDistance: { value: 0.15 },
+          u_rimDistance: { value: 0.8 },
+          u_baseDistance: { value: 0.1 },
+          u_cornerBoost: { value: 0.02 },
+          u_rippleEffect: { value: 0.1 },
+          u_blurRadius: { value: 5.0 },
+          u_tintOpacity: { value: 0.2 },
+          u_time: { value: 0.0 }
+        },
+        vertexShader: `
+          varying vec2 v_uv;
+          varying vec3 v_normal;
+          varying vec3 v_position;
+          
+          void main() {
+            v_uv = uv;
+            v_normal = normalize(normalMatrix * normal);
+            v_position = (modelMatrix * vec4(position, 1.0)).xyz;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform sampler2D u_noiseTexture;
+          uniform float u_edgeIntensity;
+          uniform float u_rimIntensity;
+          uniform float u_baseIntensity;
+          uniform float u_edgeDistance;
+          uniform float u_rimDistance;
+          uniform float u_baseDistance;
+          uniform float u_cornerBoost;
+          uniform float u_rippleEffect;
+          uniform float u_blurRadius;
+          uniform float u_tintOpacity;
+          uniform float u_time;
+          
+          varying vec2 v_uv;
+          varying vec3 v_normal;
+          varying vec3 v_position;
+          
+          void main() {
+            vec2 uv = v_uv;
+            
+            // Multi-layer edge detection
+            float distFromEdge = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
+            
+            // Base, Edge, and Rim intensity falloff
+            float baseComponent = (1.0 - exp(-distFromEdge * u_baseDistance)) * u_baseIntensity;
+            float edgeComponent = exp(-distFromEdge * u_edgeDistance) * u_edgeIntensity;
+            float rimComponent = exp(-distFromEdge * u_rimDistance) * u_rimIntensity;
+            
+            float totalRefraction = baseComponent + edgeComponent + rimComponent;
+            
+            // Corner boost effect
+            float cornerDist = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
+            float cornerBoost = exp(-cornerDist * 0.3) * u_cornerBoost;
+            totalRefraction += cornerBoost;
+            
+            // Ripple effect
+            float ripple = sin(distFromEdge * 30.0 + u_time) * u_rippleEffect * rimComponent;
+            uv += ripple * 0.01;
+            
+            // Noise texture sampling
+            vec4 noise = texture2D(u_noiseTexture, uv * 2.0);
+            
+            // Base glass color with gradient
+            vec3 glassTint = mix(vec3(1.0, 1.0, 1.0), vec3(0.85, 0.9, 1.0), v_uv.y);
+            
+            // Apply tint opacity
+            vec3 finalColor = mix(glassTint, vec3(0.95, 0.95, 1.0), u_tintOpacity);
+            finalColor = mix(finalColor, noise.rgb, 0.15);
+            
+            // Edge glow
+            float edgeGlow = exp(-distFromEdge * 2.0) * 0.3;
+            finalColor += vec3(edgeGlow * 0.2);
+            
+            // Final alpha with smooth edge falloff
+            float alpha = 0.85 - (1.0 - distFromEdge) * 0.3;
+            
+            gl_FragColor = vec4(finalColor, alpha);
+          }
+        `,
         transparent: true,
-        side: THREE.DoubleSide
+        side: THREE.DoubleSide,
+        depthWrite: false
       });
     }
 
@@ -364,7 +445,7 @@
       const group = new THREE.Group();
 
       const panelGeom = new THREE.PlaneGeometry(0.9, 0.5);
-      const panelMat = createGlassMaterial();
+      const panelMat = createRealisticGlassMaterial();
       const panel = new THREE.Mesh(panelGeom, panelMat);
       group.add(panel);
 
@@ -519,8 +600,16 @@
         activePanel.quaternion.setFromRotationMatrix(reticle.matrix);
       }
 
+      // Update shader time uniforms and panel times
       for (const panel of panels) {
         if (panel.userData.timeCtx) updatePanelTime(panel, false);
+        
+        // Update shader time animations for ripple effects
+        panel.traverse((child) => {
+          if (child.material && child.material.uniforms && child.material.uniforms.u_time) {
+            child.material.uniforms.u_time.value = (timestamp || Date.now()) * 0.001;
+          }
+        });
       }
 
       renderer.render(scene, camera);
