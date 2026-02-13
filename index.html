@@ -44,11 +44,9 @@
     let hitTestSourceRequested = false;
     const panels = [];
     const raycaster = new THREE.Raycaster();
-    const liquidGlassTextures = [];
     let activePanel = null;
     let videoEl = null;
     let videoTexture = null;
-    const liquidMaterials = [];
     let lastTapTime = 0;
     const tapCooldownMs = 250;
     let singleClickTimer = null;
@@ -183,183 +181,107 @@
       return candidate && candidate.userData && candidate.userData.isHudPanel ? candidate : null;
     }
 
-    // iOS-style frosted/glass material tuned for a subtle "glass" look
+    // CSS Glassy Card Material - Ported from CSS
+    // .glassy-card { background: hsl(0,0%,100%,0.2); backdrop-filter: blur(2px); border: 3px solid hsl(0,0%,100%,0.3); box-shadow: inset 0 0 8px 1px hsl(0,0%,100%,0.6); }
+    function createGlassyCardMaterial() {
+      // Create subtle inner glow texture for box-shadow effect
+      const canvas = document.createElement("canvas");
+      canvas.width = 256;
+      canvas.height = 256;
+      const ctx = canvas.getContext("2d");
+      
+      // Inner glow effect: box-shadow: inset 0 0 8px 1px hsl(0, 0%, 100%, 0.6)
+      const gradient = ctx.createRadialGradient(128, 128, 80, 128, 128, 128);
+      gradient.addColorStop(0, "rgba(255, 255, 255, 0.6)");
+      gradient.addColorStop(1, "rgba(255, 255, 255, 0)");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 256, 256);
+      
+      const glowTexture = new THREE.CanvasTexture(canvas);
+      
+      return new THREE.MeshPhysicalMaterial({
+        color: 0xffffff,           // hsl(0, 0%, 100%)
+        map: glowTexture,          // box-shadow: inset glow
+        transparent: true,
+        opacity: 0.2,              // background: hsl(0, 0%, 100%, 0.2)
+        transmission: 0.8,         // Makes it see-through
+        roughness: 0.6,            // backdrop-filter: blur(2px) - Higher = more blur
+        metalness: 0,
+        clearcoat: 0.3,            // Adds surface shine
+        clearcoatRoughness: 0.4,
+        reflectivity: 0.3,
+        ior: 1.45,
+        side: THREE.DoubleSide
+      });
+    }
+
+    // MAX SETTINGS - iPhone frosted glass - TUNE DOWN AS NEEDED
     function createGlassMaterial() {
       const canvas = document.createElement("canvas");
       canvas.width = 256;
       canvas.height = 256;
       const ctx = canvas.getContext("2d");
-
-      // subtle noise for a frosted appearance
+      
+      // MAX noise for frosted effect
       for (let i = 0; i < canvas.width; i++) {
         for (let j = 0; j < canvas.height; j++) {
-          const noise = 200 + Math.floor(Math.random() * 55); // subtle luminance
-          // low alpha so the noise only affects roughness/texture
-          ctx.fillStyle = `rgba(${noise},${noise},${noise},${(6 + Math.random() * 10) / 255})`;
+          const noise = Math.random() * 50;  // MAX
+          ctx.fillStyle = `rgba(255,255,255,${noise / 255})`;
           ctx.fillRect(i, j, 1, 1);
         }
       }
-
+      
       const noiseTexture = new THREE.CanvasTexture(canvas);
       noiseTexture.wrapS = noiseTexture.wrapT = THREE.RepeatWrapping;
-      noiseTexture.repeat.set(4, 4);
-      noiseTexture.anisotropy = 4;
-
+      
       return new THREE.MeshPhysicalMaterial({
-        color: 0xf8fbff,
+        color: 0xffffff,  // MAX white
+        map: noiseTexture,
         transparent: true,
-        opacity: 0.86,
-        transmission: 0.9,
-        roughness: 0.55,
-        roughnessMap: noiseTexture,
-        metalness: 0.0,
-        clearcoat: 0.12,
-        clearcoatRoughness: 0.25,
-        reflectivity: 0.5,
-        ior: 1.45,
-        thickness: 0.25,
-        attenuationDistance: 0.6,
-        attenuationColor: new THREE.Color(0xffffff),
+        opacity: 1.0,  // MAX
+        transmission: 1.0,  // MAX
+        roughness: 1.0,  // MAX frosted
+        metalness: 0,
+        clearcoat: 1.0,  // MAX
+        clearcoatRoughness: 1.0,  // MAX
+        reflectivity: 1.0,  // MAX
+        ior: 2.333,  // MAX (diamond-like)
+        thickness: 1.0,  // MAX
+        attenuationDistance: 0.05,  // MIN for MAX effect
+        attenuationColor: 0xffffff,
+        sheen: 1.0,  // MAX
+        sheenColor: 0xffffff,
+        sheenRoughness: 1.0,  // MAX
         side: THREE.DoubleSide
       });
-    }
-
-    // Ported lightweight liquid-glass shader (samples a map when provided,
-    // otherwise produces a subtle frosted/translucent surface). Materials
-    // created here are tracked in `liquidMaterials` so we can update `time`.
-    function createLiquidGlassMaterial(mapTexture, opts = {}) {
-      opts = Object.assign({noiseScale: 4.0, strength: 0.035, opacity: 0.86, magnifyStrength: 0.0, chroma: 0.0}, opts);
-
-      // noise texture (generated once per material; small and tiled)
-      const canvas = document.createElement('canvas');
-      canvas.width = 128; canvas.height = 128;
-      const ctx = canvas.getContext('2d');
-      for (let x = 0; x < canvas.width; x++) {
-        for (let y = 0; y < canvas.height; y++) {
-          const n = 150 + Math.floor(Math.random() * 80);
-          ctx.fillStyle = `rgba(${n},${n},${n},${(3 + Math.random()*5)/255})`;
-          ctx.fillRect(x,y,1,1);
-        }
-      }
-      const noiseTex = new THREE.CanvasTexture(canvas);
-      noiseTex.wrapS = noiseTex.wrapT = THREE.RepeatWrapping;
-      noiseTex.repeat.set(opts.noiseScale, opts.noiseScale);
-
-      const uniforms = {
-        map: { value: mapTexture || null },
-        hasMap: { value: mapTexture ? 1.0 : 0.0 },
-        noise: { value: noiseTex },
-        time: { value: 0.0 },
-        strength: { value: opts.strength },
-        opacity: { value: opts.opacity },
-        rimColor: { value: new THREE.Color(0x8cdcff) },
-        magnify: { value: opts.magnifyStrength },
-        chroma: { value: opts.chroma }
-      };
-
-      const mat = new THREE.ShaderMaterial({
-        uniforms,
-        transparent: true,
-        side: THREE.DoubleSide,
-        vertexShader: `
-          varying vec2 vUv;
-          varying vec3 vNormal;
-          varying vec3 vViewDir;
-          void main(){
-            vUv = uv;
-            vNormal = normalize(normalMatrix * normal);
-            vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-            vViewDir = normalize(-mvPosition.xyz);
-            gl_Position = projectionMatrix * mvPosition;
-          }
-        `,
-        fragmentShader: `
-          uniform sampler2D map;
-          uniform float hasMap;
-          uniform sampler2D noise;
-          uniform float time;
-          uniform float strength;
-          uniform float opacity;
-          uniform vec3 rimColor;
-          uniform float magnify;
-          uniform float chroma;
-          varying vec2 vUv;
-          varying vec3 vNormal;
-          varying vec3 vViewDir;
-
-          void main(){
-            // animated noise-based UV perturbation
-            vec2 n1 = texture2D(noise, vUv * 2.0 + vec2(time * 0.06, time * 0.04)).rg * 2.0 - 1.0;
-            vec2 n2 = texture2D(noise, vUv * 6.0 + vec2(-time * 0.03, time * 0.02)).rg * 2.0 - 1.0;
-            vec2 uvOffset = (n1 * 0.6 + n2 * 0.4) * strength;
-
-            // radial magnify (lens) centered in UV space
-            vec2 center = vUv - vec2(0.5);
-            float dist = length(center);
-            float m = smoothstep(0.0, 0.9, 1.0 - dist) * magnify;
-            vec2 refr = normalize(center + 1e-6) * m;
-
-            vec3 col = vec3(0.96, 0.97, 0.99);
-
-            if (hasMap > 0.5) {
-              // chromatic aberration: sample RGB with small offsets
-              vec2 baseUV = vUv + uvOffset + refr * 0.5;
-              vec3 cr = texture2D(map, baseUV + vec2(chroma, 0.0)).rgb;
-              vec3 cg = texture2D(map, baseUV).rgb;
-              vec3 cb = texture2D(map, baseUV - vec2(chroma, 0.0)).rgb;
-              col = vec3(cr.r, cg.g, cb.b);
-            } else {
-              // fallback subtle frosted tint
-              col += uvOffset.x * 0.02;
-            }
-
-            float fresnel = pow(1.0 - max(0.0, dot(normalize(vNormal), normalize(vViewDir))), 3.0);
-            vec3 rim = rimColor * fresnel * 0.85;
-
-            vec3 outColor = mix(col, vec3(1.0), 0.04) + rim * 0.9;
-            gl_FragColor = vec4(outColor, opacity);
-          }
-        `
-      });
-
-      if (mapTexture) {
-        mapTexture.minFilter = THREE.LinearFilter;
-        mapTexture.magFilter = THREE.LinearFilter;
-        mapTexture.encoding = THREE.sRGBEncoding;
-      }
-
-      liquidMaterials.push(mat);
-      return mat;
     }
 
     function makeHudPanel() {
       const group = new THREE.Group();
 
       const panelGeom = new THREE.PlaneGeometry(0.7, 0.35);
-      const panelMat = createLiquidGlassMaterial(null, {noiseScale:3.0, strength:0.02, magnifyStrength:0.02, chroma:0.001, opacity:0.86});
+      const panelMat = createGlassyCardMaterial(); // Using CSS-ported material
       const panel = new THREE.Mesh(panelGeom, panelMat);
       group.add(panel);
 
+      // border: 3px solid hsl(0, 0%, 100%, 0.3)
       const borderGeom = new THREE.EdgesGeometry(panelGeom);
       const borderMat = new THREE.LineBasicMaterial({ 
         color: 0xffffff, 
         transparent: true, 
-        opacity: 0.6  // MAX border
+        opacity: 0.3  // CSS border opacity
       });
       const border = new THREE.LineSegments(borderGeom, borderMat);
       group.add(border);
       
-      // MAX inner glow for depth
-      const glowGeom = new THREE.PlaneGeometry(0.68, 0.33);
-      const glowMat = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.3,  // MAX
-        side: THREE.DoubleSide
-      });
-      const glow = new THREE.Mesh(glowGeom, glowMat);
-      glow.position.z = -0.001;
-      group.add(glow);
+      // Add extra border layers for thickness (simulating 3px border)
+      const border2 = border.clone();
+      border2.position.z = 0.0003;
+      group.add(border2);
+      
+      const border3 = border.clone();
+      border3.position.z = 0.0006;
+      group.add(border3);
 
       const timeCanvas = document.createElement("canvas");
       timeCanvas.width = 512;
@@ -400,7 +322,7 @@
       const group = new THREE.Group();
 
       const panelGeom = new THREE.PlaneGeometry(0.9, 0.5);
-      const panelMat = createLiquidGlassMaterial(texture, {noiseScale:6.0, strength:0.05, magnifyStrength:0.18, chroma:0.02, opacity:0.92});
+      const panelMat = createGlassMaterial();
       const panel = new THREE.Mesh(panelGeom, panelMat);
       group.add(panel);
 
@@ -557,14 +479,6 @@
 
       for (const panel of panels) {
         if (panel.userData.timeCtx) updatePanelTime(panel, false);
-      }
-
-      // advance liquid shader time uniforms
-      if (liquidMaterials.length) {
-        const t = (timestamp || performance.now()) * 0.001;
-        for (const m of liquidMaterials) {
-          if (m && m.uniforms && typeof m.uniforms.time !== 'undefined') m.uniforms.time.value = t;
-        }
       }
 
       renderer.render(scene, camera);
