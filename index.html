@@ -28,7 +28,7 @@
   </style>
 </head>
 <body>
-  <div id="info">👆 Tap to spawn clock | Tap panel to grab/drop</div>
+  <div id="info">👆 Tap empty space → Spawn clock | Look at clock + tap → Grab/move | Tap again → Drop</div>
   <div id="hud">
     <div class="reticle"></div>
     <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
@@ -134,15 +134,15 @@
 
     function createVisionProGlass() {
       return new THREE.MeshPhysicalMaterial({
-        color: 0xffffff,
+        color: 0x1a1a1a,  // Darker base color
         transparent: true,
-        opacity: 0.15,
-        transmission: 0.9,
-        roughness: 0.3,
-        metalness: 0,
-        clearcoat: 0.5,
-        clearcoatRoughness: 0.2,
-        reflectivity: 0.4,
+        opacity: 0.85,  // More opaque like the image
+        transmission: 0.3,  // Less transparent
+        roughness: 0.2,
+        metalness: 0.1,
+        clearcoat: 0.8,
+        clearcoatRoughness: 0.1,
+        reflectivity: 0.5,
         ior: 1.5,
         thickness: 0.5,
         side: THREE.DoubleSide
@@ -152,19 +152,33 @@
     function makeClockPanel() {
       const group = new THREE.Group();
 
-      const panelGeom = new THREE.PlaneGeometry(0.8, 0.3);
+      // Bigger panel like Vision Pro
+      const panelGeom = new THREE.PlaneGeometry(1.0, 0.4);
       const panelMat = createVisionProGlass();
       const panel = new THREE.Mesh(panelGeom, panelMat);
       group.add(panel);
 
+      // Thicker white border
       const borderGeom = new THREE.EdgesGeometry(panelGeom);
       const borderMat = new THREE.LineBasicMaterial({ 
         color: 0xffffff, 
         transparent: true, 
-        opacity: 0.4
+        opacity: 0.6,
+        linewidth: 2
       });
       const border = new THREE.LineSegments(borderGeom, borderMat);
       group.add(border);
+
+      // Shadow plane behind panel
+      const shadowGeom = new THREE.PlaneGeometry(1.02, 0.42);
+      const shadowMat = new THREE.MeshBasicMaterial({
+        color: 0x000000,
+        transparent: true,
+        opacity: 0.3
+      });
+      const shadow = new THREE.Mesh(shadowGeom, shadowMat);
+      shadow.position.z = -0.005;
+      group.add(shadow);
 
       const clockCanvas = document.createElement('canvas');
       clockCanvas.width = 512;
@@ -175,7 +189,7 @@
       clockTexture.magFilter = THREE.LinearFilter;
 
       const clockMat = new THREE.MeshBasicMaterial({ map: clockTexture, transparent: true });
-      const clockMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.75, 0.25), clockMat);
+      const clockMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.35), clockMat);
       clockMesh.position.z = 0.002;
       group.add(clockMesh);
 
