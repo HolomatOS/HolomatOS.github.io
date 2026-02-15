@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>AR Hand Tracking + Clock</title>
+  <title>AR + TensorFlow Hand Tracking</title>
   <style>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
     #info {
       position: absolute; left: 0; right: 0; top: 0;
       color: #9cf; font: 14px/1.4 system-ui, sans-serif;
-      background: rgba(0,0,0,0.5); padding: 8px 12px; z-index: 3;
+      background: rgba(0,0,0,0.7); padding: 8px 12px; z-index: 3;
     }
     #hud {
       position: absolute; inset: 0; pointer-events: none; z-index: 2;
@@ -39,18 +39,14 @@
       color: #0f0;
       padding: 10px;
       border-radius: 8px;
-      font-size: 14px;
+      font-size: 12px;
       font-family: monospace;
       z-index: 10;
-      min-width: 250px;
     }
-    .debug-error { color: #f00 !important; }
-    .debug-warning { color: #ff0 !important; }
-    .debug-success { color: #0f0 !important; }
   </style>
 </head>
 <body>
-  <div id="info">🤏 Pinch or tap to spawn clock | Tap panel to grab/drop</div>
+  <div id="info">🤏 Pinch or tap to spawn clock | Before AR: Test hand tracking</div>
   <div id="hud">
     <div class="reticle"></div>
     <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
@@ -58,15 +54,17 @@
   <canvas id="handCanvas"></canvas>
   <video id="handVideo" playsinline></video>
   <div id="debug">
-    <div id="debugCamera">Camera: Initializing...</div>
-    <div id="debugModel">Model: Not loaded</div>
+    <div>Model: Loading...</div>
     <div id="debugHands">Hands: 0</div>
-    <div id="debugFPS">FPS: --</div>
     <div id="debugPinch">Pinch: No</div>
+    <div id="debugFPS">FPS: --</div>
   </div>
 
-  <!-- MediaPipe Hands -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <!-- TensorFlow.js -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
 
   <script type="module">
     import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
@@ -81,18 +79,11 @@
     let activePanel = null;
 
     // Hand tracking
-    let hands, handVideo, handCanvas, handCtx;
+    let handModel, handVideo, handCanvas, handCtx;
     let lastPinch = false;
     let isInAR = false;
     let frameCount = 0;
     let lastFPSTime = Date.now();
-
-    // Debug elements
-    const debugCamera = () => document.getElementById('debugCamera');
-    const debugModel = () => document.getElementById('debugModel');
-    const debugHands = () => document.getElementById('debugHands');
-    const debugFPS = () => document.getElementById('debugFPS');
-    const debugPinch = () => document.getElementById('debugPinch');
 
     init();
     initHandTracking();
@@ -129,8 +120,7 @@
         optionalFeatures: ["dom-overlay"],
         domOverlay: { root: document.body }
       });
-      
-      // Track AR session state
+
       arButton.addEventListener('click', () => {
         setTimeout(() => {
           isInAR = renderer.xr.isPresenting;
@@ -138,7 +128,6 @@
       });
 
       document.body.appendChild(arButton);
-
       window.addEventListener("resize", onWindowResize);
     }
 
@@ -150,12 +139,15 @@
       handCtx = handCanvas.getContext('2d');
 
       try {
-        debugCamera().textContent = 'Camera: Requesting...';
-        debugCamera().className = 'debug-warning';
+        // Load TensorFlow HandPose model
+        document.getElementById('debug').children[0].textContent = 'Model: Loading TensorFlow...';
+        handModel = await handpose.load();
+        document.getElementById('debug').children[0].textContent = 'Model: Loaded ✓';
 
+        // Setup camera
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            facingMode: { exact: 'environment' },
+            facingMode: 'user',  // Front camera for easier testing
             width: { ideal: 640 },
             height: { ideal: 480 }
           }
@@ -164,82 +156,55 @@
         handVideo.srcObject = stream;
         await handVideo.play();
 
-        debugCamera().textContent = `Camera: Active (${handVideo.videoWidth}x${handVideo.videoHeight})`;
-        debugCamera().className = 'debug-success';
-
-        debugModel().textContent = 'Model: Loading...';
-        debugModel().className = 'debug-warning';
-
-        hands = new Hands({
-          locateFile: (file) => {
-            console.log('Loading MediaPipe file:', file);
-            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-          }
-        });
-
-        hands.setOptions({
-          maxNumHands: 1,
-          modelComplexity: 1,
-          minDetectionConfidence: 0.7,
-          minTrackingConfidence: 0.5
-        });
-
-        hands.onResults(onHandResults);
-
-        debugModel().textContent = 'Model: Loaded ✓';
-        debugModel().className = 'debug-success';
-
-        // Send frames manually
-        async function sendFrames() {
-          if (handVideo.readyState === handVideo.HAVE_ENOUGH_DATA) {
-            try {
-              await hands.send({image: handVideo});
-            } catch (e) {
-              console.error('Send frame error:', e);
-              debugModel().textContent = `Model: Error - ${e.message}`;
-              debugModel().className = 'debug-error';
-            }
-          }
-          requestAnimationFrame(sendFrames);
-        }
-        sendFrames();
-
-        console.log('Hand tracking initialized successfully');
+        console.log('TensorFlow hand tracking initialized');
+        detectHands();
       } catch (error) {
         console.error('Hand tracking error:', error);
-        debugCamera().textContent = `Camera: Error - ${error.message}`;
-        debugCamera().className = 'debug-error';
+        document.getElementById('debug').children[0].textContent = 'Model: Error';
       }
     }
 
-    function onHandResults(results) {
-      // Update FPS
-      frameCount++;
-      const now = Date.now();
-      if (now - lastFPSTime > 1000) {
-        const fps = Math.round(frameCount * 1000 / (now - lastFPSTime));
-        debugFPS().textContent = `FPS: ${fps}`;
-        debugFPS().className = fps > 10 ? 'debug-success' : fps > 5 ? 'debug-warning' : 'debug-error';
-        frameCount = 0;
-        lastFPSTime = now;
+    async function detectHands() {
+      if (handVideo.readyState === handVideo.HAVE_ENOUGH_DATA) {
+        const predictions = await handModel.estimateHands(handVideo);
+
+        // Update FPS
+        frameCount++;
+        const now = Date.now();
+        if (now - lastFPSTime > 1000) {
+          const fps = Math.round(frameCount * 1000 / (now - lastFPSTime));
+          document.getElementById('debugFPS').textContent = `FPS: ${fps}`;
+          frameCount = 0;
+          lastFPSTime = now;
+        }
+
+        document.getElementById('debugHands').textContent = `Hands: ${predictions.length}`;
+
+        // Only draw when not in AR
+        if (!isInAR) {
+          drawHands(predictions);
+        } else {
+          handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
+        }
+
+        // Detect pinch even in AR
+        if (predictions.length > 0) {
+          checkPinch(predictions[0]);
+        } else {
+          document.getElementById('debugPinch').textContent = 'Pinch: No hand';
+        }
       }
 
-      const hands = results.multiHandLandmarks || [];
-      debugHands().textContent = `Hands: ${hands.length}`;
-      debugHands().className = hands.length > 0 ? 'debug-success' : 'debug-warning';
+      requestAnimationFrame(detectHands);
+    }
 
-      // Only draw hand skeleton when NOT in AR mode
-      if (isInAR) {
-        handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
-        return;
-      }
-
+    function drawHands(predictions) {
       handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
 
-      if (hands.length > 0) {
-        const landmarks = hands[0];
+      for (const hand of predictions) {
+        const landmarks = hand.landmarks;
 
-        // Draw minimal skeleton
+        // Draw connections
         const connections = [
           [0, 1], [1, 2], [2, 3], [3, 4],
           [0, 5], [5, 6], [6, 7], [7, 8],
@@ -253,10 +218,8 @@
         handCtx.lineCap = 'round';
 
         for (const [s, e] of connections) {
-          const x1 = landmarks[s].x * handCanvas.width;
-          const y1 = landmarks[s].y * handCanvas.height;
-          const x2 = landmarks[e].x * handCanvas.width;
-          const y2 = landmarks[e].y * handCanvas.height;
+          const [x1, y1] = landmarks[s];
+          const [x2, y2] = landmarks[e];
 
           const gradient = handCtx.createLinearGradient(x1, y1, x2, y2);
           gradient.addColorStop(0, 'rgba(255, 150, 200, 0.8)');
@@ -269,42 +232,32 @@
           handCtx.stroke();
         }
 
-        // Small dots
+        // Draw dots
         for (let j = 0; j < landmarks.length; j++) {
-          const x = landmarks[j].x * handCanvas.width;
-          const y = landmarks[j].y * handCanvas.height;
+          const [x, y] = landmarks[j];
           handCtx.beginPath();
           handCtx.arc(x, y, 3, 0, 2 * Math.PI);
           handCtx.fillStyle = 'rgba(255, 255, 255, 0.5)';
           handCtx.fill();
         }
-
-        // Detect pinch
-        const thumb = landmarks[4];
-        const index = landmarks[8];
-        const dx = (thumb.x - index.x) * handCanvas.width;
-        const dy = (thumb.y - index.y) * handCanvas.height;
-        const distance = Math.sqrt(dx*dx + dy*dy);
-        
-        const isPinching = distance < 50;
-        
-        debugPinch().textContent = `Pinch: ${isPinching ? 'YES ✓' : 'No'} (${Math.round(distance)}px)`;
-        debugPinch().className = isPinching ? 'debug-success' : '';
-        
-        if (isPinching && !lastPinch) {
-          onPinchDetected();
-        }
-        lastPinch = isPinching;
-      } else {
-        debugPinch().textContent = 'Pinch: No hand';
       }
     }
 
-    function onPinchDetected() {
-      console.log('Pinch detected!');
-      if (reticle.visible) {
+    function checkPinch(hand) {
+      const thumb = hand.landmarks[4];
+      const index = hand.landmarks[8];
+      const distance = Math.sqrt(
+        Math.pow(thumb[0] - index[0], 2) +
+        Math.pow(thumb[1] - index[1], 2)
+      );
+
+      const isPinching = distance < 40;
+      document.getElementById('debugPinch').textContent = `Pinch: ${isPinching ? 'YES ✓' : `No (${Math.round(distance)}px)`}`;
+
+      if (isPinching && !lastPinch && reticle.visible) {
         spawnClockPanel();
       }
+      lastPinch = isPinching;
     }
 
     function onSelect() {
@@ -409,7 +362,6 @@
       group.scale.setScalar(1);
 
       updateClock(group);
-
       return group;
     }
 
