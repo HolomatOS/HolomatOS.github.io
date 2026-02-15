@@ -37,9 +37,7 @@
       height: 100%;
       z-index: 2;
       pointer-events: none;
-      /* mirror the canvas too so drawings align with the mirrored video */
-      transform: scaleX(-1);
-      transform-origin: center center;
+      /* canvas must NOT be mirrored by CSS; drawing is flipped via the 2D context */
     }
     #status {
       position: absolute;
@@ -106,8 +104,6 @@
           // set CSS size to match displayed video element size
           canvas.style.width = `${video.clientWidth}px`;
           canvas.style.height = `${video.clientHeight}px`;
-          // scale the 2D context so draw coordinates match video pixel coords
-          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
           resolve(video);
         };
       });
