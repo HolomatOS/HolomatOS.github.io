@@ -143,17 +143,16 @@
         for (let i = 0; i < predictions.length; i++) {
           const hand = predictions[i];
           
-          // Draw keypoints
+          // Draw keypoints (made larger/brighter for testing)
           for (let j = 0; j < hand.landmarks.length; j++) {
             const [x, y] = hand.landmarks[j];
-            
-            // Draw circle at each landmark
+            const radius = (j === 4 || j === 8) ? 14 : 10;
             ctx.beginPath();
-            ctx.arc(x, y, 5, 0, 2 * Math.PI);
+            ctx.arc(x, y, radius, 0, 2 * Math.PI);
             ctx.fillStyle = j === 4 || j === 8 ? '#00ff00' : '#ffffff';
             ctx.fill();
             ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 4;
             ctx.stroke();
           }
 
@@ -167,8 +166,9 @@
             [5, 9], [9, 13], [13, 17]  // Palm
           ];
 
-          ctx.strokeStyle = '#ff69b4';
-          ctx.lineWidth = 3;
+          // Make connections bold and bright for testing
+          ctx.strokeStyle = '#ff00ff';
+          ctx.lineWidth = 10;
           for (const [start, end] of connections) {
             const [x1, y1] = hand.landmarks[start];
             const [x2, y2] = hand.landmarks[end];
@@ -186,14 +186,16 @@
             Math.pow(thumb[1] - index[1], 2)
           );
 
-          if (distance < 40) {
-            // Draw pinch indicator
+          if (distance < 60) {
+            // Draw larger pinch indicator for testing
+            const cx = (thumb[0] + index[0]) / 2;
+            const cy = (thumb[1] + index[1]) / 2;
             ctx.beginPath();
-            ctx.arc((thumb[0] + index[0]) / 2, (thumb[1] + index[1]) / 2, 30, 0, 2 * Math.PI);
+            ctx.arc(cx, cy, 80, 0, 2 * Math.PI);
             ctx.strokeStyle = '#00ff00';
-            ctx.lineWidth = 5;
+            ctx.lineWidth = 12;
             ctx.stroke();
-            ctx.fillStyle = 'rgba(0, 255, 0, 0.3)';
+            ctx.fillStyle = 'rgba(0, 255, 0, 0.45)';
             ctx.fill();
           }
         }
