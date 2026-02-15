@@ -3,36 +3,32 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>AR Clock + Video - MAX Glass</title>
+  <title>AR Hand Tracking - Digital Clock</title>
   <style>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
     #info {
       position: absolute; left: 0; right: 0; top: 0;
       color: #9cf; font: 14px/1.4 system-ui, sans-serif;
-      background: rgba(0,0,0,0.5); padding: 8px 12px; z-index: 2;
+      background: rgba(0,0,0,0.7); padding: 8px 12px; z-index: 2;
     }
-    #hud {
-      position: absolute; inset: 0; pointer-events: none; z-index: 2;
+    #handCanvas {
+      position: absolute; inset: 0; pointer-events: none; z-index: 1;
     }
-    .reticle {
-      position: absolute; left: 50%; top: 50%; width: 60px; height: 60px;
-      border: 2px solid rgba(140,220,255,0.8); border-radius: 50%;
-      transform: translate(-50%,-50%);
-      box-shadow: 0 0 12px rgba(140,220,255,0.6);
+    #gestureDebug {
+      position: absolute; right: 10px; bottom: 10px;
+      color: #0f0; font: 14px monospace;
+      background: rgba(0,0,0,0.7); padding: 8px; z-index: 3;
+      border-radius: 4px;
     }
-    .tick { position: absolute; width: 2px; height: 18px; background: rgba(140,220,255,0.8); }
-    .tick.t1 { left: 50%; top: calc(50% - 50px); transform: translateX(-50%); }
-    .tick.t2 { left: 50%; top: calc(50% + 32px); transform: translateX(-50%); }
-    .tick.t3 { top: 50%; left: calc(50% - 50px); transform: translateY(-50%); }
-    .tick.t4 { top: 50%; left: calc(50% + 48px); transform: translateY(-50%); }
   </style>
 </head>
 <body>
-  <div id="info">Tap "Enter AR". Single click spawns a translucent clock. Double click spawns a video panel. Tap a panel to pick up, tap again to drop. ALL VALUES AT MAX - TUNE DOWN AS NEEDED</div>
-  <div id="hud">
-    <div class="reticle"></div>
-    <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
-  </div>
+  <div id="info">🤏 Pinch to spawn/grab clock</div>
+  <canvas id="handCanvas"></canvas>
+
+  <!-- MediaPipe Hand Tracking -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
 
   <script type="module">
     import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
@@ -45,21 +41,26 @@
     const panels = [];
     const raycaster = new THREE.Raycaster();
     let activePanel = null;
-    let videoEl = null;
-    let videoTexture = null;
-    let lastTapTime = 0;
-    const tapCooldownMs = 250;
-    let singleClickTimer = null;
-    const doubleClickDelayMs = 260;
+
+    // Hand tracking variables
+    let hands, cameraFeed;
+    let handCanvas, handCtx;
+    let currentGesture = 'none';
+    let handLandmarks = null;
+    let isPinching = false;
+    let lastPinchState = false;
+    let fingerTipPosition = new THREE.Vector2();
 
     init();
+    initHandTracking();
     animate();
 
     function init() {
       scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+      camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.01, 20);
 
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.xr.enabled = true;
       document.body.appendChild(renderer.domElement);
@@ -67,7 +68,7 @@
       const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
       scene.add(light);
 
-      const geometry = new THREE.RingGeometry(0.06, 0.075, 32).rotateX(-Math.PI / 2);
+      const geometry = new THREE.RingGeometry(0.06, 0.075, 16).rotateX(-Math.PI / 2);
       const material = new THREE.MeshBasicMaterial({ color: 0x8cdcff });
       reticle = new THREE.Mesh(geometry, material);
       reticle.matrixAutoUpdate = false;
@@ -79,7 +80,6 @@
       scene.add(controller);
 
       renderer.domElement.addEventListener("click", onCanvasClick);
-      renderer.domElement.addEventListener("dblclick", onDoubleClick);
 
       document.body.appendChild(ARButton.createButton(renderer, {
         requiredFeatures: ["hit-test"],
@@ -90,32 +90,177 @@
       window.addEventListener("resize", onWindowResize);
     }
 
-    function onSelect() {
-      const now = performance.now();
-      if (now - lastTapTime < tapCooldownMs) return;
-      lastTapTime = now;
+    // MEDIAPIPE HAND TRACKING INIT
+    function initHandTracking() {
+      handCanvas = document.getElementById('handCanvas');
+      handCanvas.width = window.innerWidth;
+      handCanvas.height = window.innerHeight;
+      handCtx = handCanvas.getContext('2d');
 
-      const hitPanel = getPanelUnderGaze();
-
-      // Check if we're looking at the microphone for voice commands
-      const hitMic = getMicrophoneUnderGaze();
-      if (hitMic && hitMic.userData.isMicrophone) {
-        startVoiceCommand();
-        return;
-      }
-
-      // Check if we're looking at an app icon
-      const hitIcon = getIconUnderGaze();
-      if (hitIcon && hitIcon.userData.isAppIcon) {
-        if (hitIcon.userData.appType === 'map') {
-          console.log('Opening Map panel...');
-          spawnMapPanel();
-        } else if (hitIcon.userData.appType === 'microphone') {
-          console.log('Starting voice command...');
-          startVoiceCommand();
+      hands = new Hands({
+        locateFile: (file) => {
+          return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
         }
-        return;
+      });
+
+      hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.7,
+        minTrackingConfidence: 0.7
+      });
+
+      hands.onResults(onHandResults);
+
+      const videoElement = document.createElement('video');
+      videoElement.style.display = 'none';
+      document.body.appendChild(videoElement);
+
+      cameraFeed = new Camera(videoElement, {
+        onFrame: async () => {
+          await hands.send({image: videoElement});
+        },
+        width: 640,
+        height: 480
+      });
+
+      cameraFeed.start();
+    }
+
+    function onHandResults(results) {
+      handCtx.save();
+      handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
+
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        handLandmarks = results.multiHandLandmarks[0];
+        
+        // Draw clean skeleton - Vision Pro style
+        drawVisionProSkeleton(handLandmarks);
+        
+        const gesture = detectGesture(handLandmarks);
+        currentGesture = gesture;
+
+        const indexTip = handLandmarks[8];
+        fingerTipPosition.x = (indexTip.x * 2 - 1);
+        fingerTipPosition.y = -(indexTip.y * 2 - 1);
+
+        if (gesture === 'pinch' && !lastPinchState) {
+          onPinchStart();
+        } else if (gesture !== 'pinch' && lastPinchState) {
+          onPinchEnd();
+        }
+        lastPinchState = (gesture === 'pinch');
+
+      } else {
+        handLandmarks = null;
+        currentGesture = 'none';
       }
+
+      handCtx.restore();
+    }
+
+    function drawVisionProSkeleton(landmarks) {
+      const w = handCanvas.width;
+      const h = handCanvas.height;
+
+      // Connection lines - clean and minimal
+      const connections = [
+        [0,1],[1,2],[2,3],[3,4], // Thumb
+        [0,5],[5,6],[6,7],[7,8], // Index
+        [0,9],[9,10],[10,11],[11,12], // Middle
+        [0,13],[13,14],[14,15],[15,16], // Ring
+        [0,17],[17,18],[18,19],[19,20], // Pinky
+        [5,9],[9,13],[13,17] // Palm
+      ];
+
+      // Gradient effect like Vision Pro
+      handCtx.lineWidth = 2;
+      handCtx.lineCap = 'round';
+      handCtx.lineJoin = 'round';
+
+      connections.forEach(([start, end]) => {
+        const startPoint = landmarks[start];
+        const endPoint = landmarks[end];
+        
+        // Create gradient for each line
+        const gradient = handCtx.createLinearGradient(
+          startPoint.x * w, startPoint.y * h,
+          endPoint.x * w, endPoint.y * h
+        );
+        
+        // Pink to white gradient like Vision Pro
+        gradient.addColorStop(0, 'rgba(255, 150, 200, 0.8)');
+        gradient.addColorStop(1, 'rgba(255, 255, 255, 0.6)');
+        
+        handCtx.strokeStyle = gradient;
+        handCtx.beginPath();
+        handCtx.moveTo(startPoint.x * w, startPoint.y * h);
+        handCtx.lineTo(endPoint.x * w, endPoint.y * h);
+        handCtx.stroke();
+      });
+
+      // Small dots at joints - minimal
+      landmarks.forEach((landmark) => {
+        handCtx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        handCtx.beginPath();
+        handCtx.arc(landmark.x * w, landmark.y * h, 3, 0, Math.PI * 2);
+        handCtx.fill();
+      });
+    }
+
+    function detectGesture(landmarks) {
+      const thumbTip = landmarks[4];
+      const indexTip = landmarks[8];
+
+      const pinchDist = Math.sqrt(
+        Math.pow(thumbTip.x - indexTip.x, 2) +
+        Math.pow(thumbTip.y - indexTip.y, 2) +
+        Math.pow(thumbTip.z - indexTip.z, 2)
+      );
+
+      if (pinchDist < 0.05) {
+        return 'pinch';
+      }
+
+      return 'none';
+    }
+
+    function onPinchStart() {
+      console.log('Pinch detected!');
+      
+      const hitPanel = getPanelAtFingerTip();
+      
+      if (activePanel) {
+        activePanel.userData.selected = false;
+        activePanel.scale.setScalar(1);
+        activePanel = null;
+      } else if (hitPanel) {
+        activePanel = hitPanel;
+        activePanel.userData.selected = true;
+        activePanel.scale.setScalar(1.08);
+      } else if (reticle.visible) {
+        spawnClockPanel();
+      }
+    }
+
+    function onPinchEnd() {
+      console.log('Pinch released');
+    }
+
+    function getPanelAtFingerTip() {
+      if (panels.length === 0 || !handLandmarks) return null;
+
+      raycaster.setFromCamera(fingerTipPosition, camera);
+      const hits = raycaster.intersectObjects(panels, true);
+      
+      if (!hits.length) return null;
+
+      const candidate = hits[0].object.parent;
+      return candidate && candidate.userData && candidate.userData.isPanel ? candidate : null;
+    }
+
+    function onSelect() {
+      const hitPanel = getPanelUnderGaze();
 
       if (activePanel) {
         activePanel.userData.selected = false;
@@ -133,187 +278,9 @@
     }
 
     function onCanvasClick() {
-      if (singleClickTimer) clearTimeout(singleClickTimer);
-      singleClickTimer = setTimeout(() => {
-        spawnLauncherPanel(); // Changed to spawn launcher instead of clock
-        singleClickTimer = null;
-      }, doubleClickDelayMs);
-    }
-
-    function spawnLauncherPanel() {
-      if (!reticle.visible) return;
-      const launcher = makeLauncherPanel();
-      launcher.position.setFromMatrixPosition(reticle.matrix);
-      launcher.quaternion.setFromRotationMatrix(reticle.matrix);
-      scene.add(launcher);
-      panels.push(launcher);
-    }
-
-    function spawnWebPanel(url, appName) {
-      if (!reticle.visible) return;
-      
-      // Create iframe element for the web content
-      const iframe = document.createElement('iframe');
-      iframe.src = url;
-      iframe.style.width = '1024px';
-      iframe.style.height = '768px';
-      iframe.style.border = 'none';
-      iframe.style.position = 'absolute';
-      iframe.style.left = '-9999px'; // Hide offscreen initially
-      iframe.allow = 'camera; microphone; geolocation';
-      document.body.appendChild(iframe);
-
-      // Create canvas to render iframe content
-      const canvas = document.createElement('canvas');
-      canvas.width = 1024;
-      canvas.height = 768;
-      const ctx = canvas.getContext('2d');
-
-      // Try to capture iframe content (may be blocked by CORS)
-      const updateTexture = () => {
-        try {
-          ctx.drawImage(iframe, 0, 0, 1024, 768);
-        } catch(e) {
-          // CORS blocked - show placeholder
-          ctx.fillStyle = '#1a1a2e';
-          ctx.fillRect(0, 0, 1024, 768);
-          ctx.fillStyle = '#ffffff';
-          ctx.font = 'bold 48px system-ui';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(`${appName}`, 512, 300);
-          ctx.font = '32px system-ui';
-          ctx.fillText('Loading in external window...', 512, 400);
-          ctx.fillText('(CORS prevents embedding)', 512, 450);
-        }
-      };
-
-      const texture = new THREE.CanvasTexture(canvas);
-      texture.minFilter = THREE.LinearFilter;
-      texture.magFilter = THREE.LinearFilter;
-
-      // Create web panel
-      const webPanel = makeWebDisplayPanel(texture, appName);
-      webPanel.position.setFromMatrixPosition(reticle.matrix);
-      webPanel.quaternion.setFromRotationMatrix(reticle.matrix);
-      
-      // Store iframe reference for cleanup
-      webPanel.userData.iframe = iframe;
-      webPanel.userData.updateTexture = updateTexture;
-      
-      scene.add(webPanel);
-      panels.push(webPanel);
-
-      // Update texture periodically (if CORS allows)
-      webPanel.userData.textureInterval = setInterval(() => {
-        updateTexture();
-        texture.needsUpdate = true;
-      }, 100);
-
-      // Fallback: Open in new window if CORS blocks
-      setTimeout(() => {
-        window.open(url, `${appName}_window`);
-      }, 500);
-    }
-
-    function makeWebDisplayPanel(texture, appName) {
-      const group = new THREE.Group();
-
-      // Large panel for web content
-      const panelGeom = new THREE.PlaneGeometry(1.6, 1.2);
-      const panelMat = createRealisticGlassMaterial();
-      const panel = new THREE.Mesh(panelGeom, panelMat);
-      group.add(panel);
-
-      // Border
-      const borderGeom = new THREE.EdgesGeometry(panelGeom);
-      const borderMat = new THREE.LineBasicMaterial({ 
-        color: 0xffffff, 
-        transparent: true, 
-        opacity: 0.4
-      });
-      const border = new THREE.LineSegments(borderGeom, borderMat);
-      group.add(border);
-
-      // Web content display
-      const contentMat = new THREE.MeshBasicMaterial({ 
-        map: texture,
-        transparent: false
-      });
-      const contentPlane = new THREE.Mesh(
-        new THREE.PlaneGeometry(1.5, 1.1),
-        contentMat
-      );
-      contentPlane.position.z = 0.002;
-      group.add(contentPlane);
-
-      // Title bar
-      const titleCanvas = document.createElement('canvas');
-      titleCanvas.width = 512;
-      titleCanvas.height = 64;
-      const titleCtx = titleCanvas.getContext('2d');
-      titleCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      titleCtx.fillRect(0, 0, 512, 64);
-      titleCtx.fillStyle = '#ffffff';
-      titleCtx.font = 'bold 32px system-ui';
-      titleCtx.textAlign = 'center';
-      titleCtx.textBaseline = 'middle';
-      titleCtx.fillText(appName, 256, 32);
-      
-      const titleTexture = new THREE.CanvasTexture(titleCanvas);
-      const titleMat = new THREE.MeshBasicMaterial({ 
-        map: titleTexture, 
-        transparent: true 
-      });
-      const titleMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(1.5, 0.08),
-        titleMat
-      );
-      titleMesh.position.set(0, 0.54, 0.003);
-      group.add(titleMesh);
-
-      group.userData.isHudPanel = true;
-      group.userData.isWebPanel = true;
-      group.userData.selected = false;
-      group.scale.setScalar(1);
-
-      return group;
-    }
-
-    function spawnClockPanel() {
-      if (!reticle.visible) return;
-      const hud = makeHudPanel();
-      hud.position.setFromMatrixPosition(reticle.matrix);
-      hud.quaternion.setFromRotationMatrix(reticle.matrix);
-      scene.add(hud);
-      panels.push(hud);
-    }
-
-    function onDoubleClick() {
-      if (singleClickTimer) {
-        clearTimeout(singleClickTimer);
-        singleClickTimer = null;
+      if (reticle.visible) {
+        spawnClockPanel();
       }
-      if (!reticle.visible) return;
-
-      // Spawn microphone panel on double click
-      spawnMicrophonePanel();
-    }
-
-    function createVideoTexture(src) {
-      const video = document.createElement("video");
-      video.src = src;
-      video.loop = true;
-      video.muted = true;
-      video.playsInline = true;
-      video.crossOrigin = "anonymous";
-      videoEl = video;
-
-      const texture = new THREE.VideoTexture(video);
-      texture.minFilter = THREE.LinearFilter;
-      texture.magFilter = THREE.LinearFilter;
-      texture.colorSpace = THREE.SRGBColorSpace;
-      return texture;
     }
 
     function getPanelUnderGaze() {
@@ -329,98 +296,39 @@
       if (!hits.length) return null;
 
       const candidate = hits[0].object.parent;
-      return candidate && candidate.userData && candidate.userData.isHudPanel ? candidate : null;
+      return candidate && candidate.userData && candidate.userData.isPanel ? candidate : null;
     }
 
-    function getIconUnderGaze() {
-      if (panels.length === 0) return null;
+    function spawnClockPanel() {
+      const panel = makeClockPanel();
+      panel.position.setFromMatrixPosition(reticle.matrix);
+      panel.quaternion.setFromRotationMatrix(reticle.matrix);
+      scene.add(panel);
+      panels.push(panel);
+    }
 
-      const origin = new THREE.Vector3();
-      const direction = new THREE.Vector3();
-      camera.getWorldPosition(origin);
-      camera.getWorldDirection(direction);
-      raycaster.set(origin, direction);
-
-      // Check all objects in all panels
-      const allObjects = [];
-      panels.forEach(panel => {
-        panel.traverse(child => {
-          if (child.userData && child.userData.isAppIcon) {
-            allObjects.push(child);
-          }
-        });
+    function createVisionProGlass() {
+      return new THREE.MeshPhysicalMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.15,
+        transmission: 0.9,
+        roughness: 0.3,
+        metalness: 0,
+        clearcoat: 0.5,
+        clearcoatRoughness: 0.2,
+        reflectivity: 0.4,
+        ior: 1.5,
+        thickness: 0.5,
+        side: THREE.DoubleSide
       });
-
-      const hits = raycaster.intersectObjects(allObjects, true);
-      if (!hits.length) return null;
-
-      // Find the app icon group
-      let current = hits[0].object;
-      while (current && !current.userData.isAppIcon) {
-        current = current.parent;
-      }
-      
-      return current;
     }
 
-    function getMicrophoneUnderGaze() {
-      if (panels.length === 0) return null;
-
-      const origin = new THREE.Vector3();
-      const direction = new THREE.Vector3();
-      camera.getWorldPosition(origin);
-      camera.getWorldDirection(direction);
-      raycaster.set(origin, direction);
-
-      const allObjects = [];
-      panels.forEach(panel => {
-        panel.traverse(child => {
-          if (child.userData && child.userData.isMicrophone) {
-            allObjects.push(child);
-          }
-        });
-      });
-
-      const hits = raycaster.intersectObjects(allObjects, true);
-      if (!hits.length) return null;
-
-      let current = hits[0].object;
-      while (current && !current.userData.isMicrophone) {
-        current = current.parent;
-      }
-      
-      return current;
-    }
-
-    // SPAWN MAP PANEL - Next to the launcher, not on top
-    function spawnMapPanel() {
-      if (!reticle.visible) return;
-      const mapPanel = makeMapPanel();
-      
-      // Position next to the reticle (0.8 units to the right)
-      const pos = new THREE.Vector3();
-      pos.setFromMatrixPosition(reticle.matrix);
-      
-      const quat = new THREE.Quaternion();
-      quat.setFromRotationMatrix(reticle.matrix);
-      
-      // Offset to the right
-      const offset = new THREE.Vector3(0.8, 0, 0);
-      offset.applyQuaternion(quat);
-      pos.add(offset);
-      
-      mapPanel.position.copy(pos);
-      mapPanel.quaternion.copy(quat);
-      
-      scene.add(mapPanel);
-      panels.push(mapPanel);
-    }
-
-    function makeMapPanel() {
+    function makeClockPanel() {
       const group = new THREE.Group();
 
-      const panelGeom = new THREE.PlaneGeometry(1.4, 1.0);
-      const panelMat = createRealisticGlassMaterial();
+      const panelGeom = new THREE.PlaneGeometry(0.8, 0.3);
+      const panelMat = createVisionProGlass();
       const panel = new THREE.Mesh(panelGeom, panelMat);
       group.add(panel);
 
@@ -433,799 +341,73 @@
       const border = new THREE.LineSegments(borderGeom, borderMat);
       group.add(border);
 
-      // Create canvas for the map
-      const mapCanvas = document.createElement('canvas');
-      mapCanvas.width = 1024;
-      mapCanvas.height = 768;
-      const mapCtx = mapCanvas.getContext('2d');
-      
-      // Draw loading screen first
-      mapCtx.fillStyle = '#aad3df';
-      mapCtx.fillRect(0, 0, 1024, 768);
-      mapCtx.fillStyle = '#ffffff';
-      mapCtx.font = 'bold 32px system-ui';
-      mapCtx.textAlign = 'center';
-      mapCtx.fillText('Loading OpenStreetMap...', 512, 384);
-      
-      const mapTexture = new THREE.CanvasTexture(mapCanvas);
-      mapTexture.minFilter = THREE.LinearFilter;
-      mapTexture.magFilter = THREE.LinearFilter;
-      
-      const mapMat = new THREE.MeshBasicMaterial({ 
-        map: mapTexture,
-        transparent: false
-      });
-      const mapDisplay = new THREE.Mesh(
-        new THREE.PlaneGeometry(1.3, 0.9),
-        mapMat
-      );
-      mapDisplay.position.z = 0.002;
-      group.add(mapDisplay);
+      // Digital clock canvas
+      const clockCanvas = document.createElement('canvas');
+      clockCanvas.width = 512;
+      clockCanvas.height = 128;
+      const clockCtx = clockCanvas.getContext('2d');
+      const clockTexture = new THREE.CanvasTexture(clockCanvas);
+      clockTexture.minFilter = THREE.LinearFilter;
+      clockTexture.magFilter = THREE.LinearFilter;
 
-      // Title bar
-      const titleCanvas = document.createElement('canvas');
-      titleCanvas.width = 512;
-      titleCanvas.height = 64;
-      const titleCtx = titleCanvas.getContext('2d');
-      titleCtx.fillStyle = 'rgba(126, 188, 111, 0.9)';
-      titleCtx.fillRect(0, 0, 512, 64);
-      titleCtx.fillStyle = '#ffffff';
-      titleCtx.font = 'bold 32px system-ui';
-      titleCtx.textAlign = 'center';
-      titleCtx.textBaseline = 'middle';
-      titleCtx.fillText('🗺️ OpenStreetMap', 256, 32);
-      
-      const titleTexture = new THREE.CanvasTexture(titleCanvas);
-      const titleMat = new THREE.MeshBasicMaterial({ 
-        map: titleTexture, 
-        transparent: true 
-      });
-      const titleMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(1.3, 0.08),
-        titleMat
-      );
-      titleMesh.position.set(0, 0.46, 0.003);
-      group.add(titleMesh);
+      const clockMat = new THREE.MeshBasicMaterial({ map: clockTexture, transparent: true });
+      const clockMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.75, 0.25), clockMat);
+      clockMesh.position.z = 0.002;
+      group.add(clockMesh);
 
-      group.userData.isHudPanel = true;
-      group.userData.isMapPanel = true;
+      group.userData.isPanel = true;
       group.userData.selected = false;
-      group.userData.mapCanvas = mapCanvas;
-      group.userData.mapCtx = mapCtx;
-      group.userData.mapTexture = mapTexture;
+      group.userData.clockCtx = clockCtx;
+      group.userData.clockTexture = clockTexture;
       group.scale.setScalar(1);
 
-      // Load actual OpenStreetMap tiles
-      loadMapTiles(mapCtx, mapTexture, 40.7608, -111.8910, 13);
+      updateClock(group);
 
       return group;
     }
 
-    // Load real OpenStreetMap tiles
-    function loadMapTiles(ctx, texture, lat, lon, zoom) {
-      // Convert lat/lon to tile coordinates
-      const n = Math.pow(2, zoom);
-      const xtile = Math.floor((lon + 180) / 360 * n);
-      const ytile = Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n);
-      
-      // Load 3x3 grid of tiles centered on location
-      const tiles = [];
-      for (let dx = -1; dx <= 1; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
-          const x = xtile + dx;
-          const y = ytile + dy;
-          const url = `https://tile.openstreetmap.org/${zoom}/${x}/${y}.png`;
-          
-          const img = new Image();
-          img.crossOrigin = 'anonymous';
-          img.onload = function() {
-            const offsetX = (dx + 1) * 256 + 128;
-            const offsetY = (dy + 1) * 256 + 128;
-            ctx.drawImage(img, offsetX, offsetY, 256, 256);
-            
-            // Add location marker in center
-            ctx.fillStyle = '#EA4335';
-            ctx.beginPath();
-            ctx.arc(512, 384, 15, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = '#ffffff';
-            ctx.beginPath();
-            ctx.arc(512, 384, 6, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Add text
-            ctx.fillStyle = '#000000';
-            ctx.font = 'bold 24px system-ui';
-            ctx.textAlign = 'center';
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 4;
-            ctx.strokeText('Salt Lake City, UT', 512, 50);
-            ctx.fillText('Salt Lake City, UT', 512, 50);
-            
-            texture.needsUpdate = true;
-          };
-          img.onerror = function() {
-            console.error('Failed to load tile:', url);
-            // Draw fallback
-            ctx.fillStyle = '#e0e0e0';
-            ctx.fillRect(0, 0, 1024, 768);
-            ctx.fillStyle = '#666';
-            ctx.font = '24px system-ui';
-            ctx.textAlign = 'center';
-            ctx.fillText('Map tiles loading...', 512, 384);
-            texture.needsUpdate = true;
-          };
-          img.src = url;
-        }
-      }
-    }
+    function updateClock(panel) {
+      if (!panel.userData.clockCtx) return;
 
-    // SPAWN MICROPHONE PANEL
-    function spawnMicrophonePanel() {
-      if (!reticle.visible) return;
-      const micPanel = makeMicrophonePanel();
-      micPanel.position.setFromMatrixPosition(reticle.matrix);
-      micPanel.quaternion.setFromRotationMatrix(reticle.matrix);
-      scene.add(micPanel);
-      panels.push(micPanel);
-    }
-
-    function makeMicrophonePanel() {
-      const group = new THREE.Group();
-
-      const panelGeom = new THREE.PlaneGeometry(0.5, 0.5);
-      const panelMat = createRealisticGlassMaterial();
-      const panel = new THREE.Mesh(panelGeom, panelMat);
-      group.add(panel);
-
-      const borderGeom = new THREE.EdgesGeometry(panelGeom);
-      const borderMat = new THREE.LineBasicMaterial({ 
-        color: 0xffffff, 
-        transparent: true, 
-        opacity: 0.3
-      });
-      const border = new THREE.LineSegments(borderGeom, borderMat);
-      group.add(border);
-
-      const micGroup = new THREE.Group();
-      
-      // Microphone background circle
-      const micBgGeom = new THREE.CircleGeometry(0.15, 32);
-      const micBgMat = new THREE.MeshBasicMaterial({ 
-        color: 0x1E88E5,
-        transparent: true,
-        opacity: 0.9
-      });
-      const micBg = new THREE.Mesh(micBgGeom, micBgMat);
-      micGroup.add(micBg);
-
-      // Draw microphone icon (matching your reference image)
-      const micCanvas = document.createElement('canvas');
-      micCanvas.width = 256;
-      micCanvas.height = 256;
-      const micCtx = micCanvas.getContext('2d');
-      
-      micCtx.fillStyle = '#ffffff';
-      // Mic body (rounded rect)
-      micCtx.beginPath();
-      micCtx.roundRect(98, 60, 60, 90, 30);
-      micCtx.fill();
-      
-      // Mic handle
-      micCtx.fillRect(123, 150, 10, 40);
-      
-      // Mic base (circle)
-      micCtx.beginPath();
-      micCtx.arc(128, 200, 15, 0, Math.PI * 2);
-      micCtx.fill();
-      
-      // Side arcs
-      micCtx.strokeStyle = '#ffffff';
-      micCtx.lineWidth = 12;
-      micCtx.lineCap = 'round';
-      
-      // Left arc
-      micCtx.beginPath();
-      micCtx.arc(65, 105, 25, -Math.PI/4, Math.PI/4);
-      micCtx.stroke();
-      
-      // Right arc
-      micCtx.beginPath();
-      micCtx.arc(191, 105, 25, Math.PI*3/4, Math.PI*5/4);
-      micCtx.stroke();
-      
-      const micTexture = new THREE.CanvasTexture(micCanvas);
-      const micMat = new THREE.MeshBasicMaterial({ 
-        map: micTexture, 
-        transparent: true 
-      });
-      const micIcon = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.2, 0.2),
-        micMat
-      );
-      micIcon.position.z = 0.001;
-      micGroup.add(micIcon);
-
-      micGroup.position.set(0, 0, 0.002);
-      micGroup.userData.isMicrophone = true;
-      
-      group.add(micGroup);
-
-      // Status text
-      const statusCanvas = document.createElement('canvas');
-      statusCanvas.width = 256;
-      statusCanvas.height = 64;
-      const statusCtx = statusCanvas.getContext('2d');
-      statusCtx.fillStyle = '#ffffff';
-      statusCtx.font = 'bold 24px system-ui';
-      statusCtx.textAlign = 'center';
-      statusCtx.textBaseline = 'middle';
-      statusCtx.fillText('Tap to speak', 128, 32);
-      
-      const statusTexture = new THREE.CanvasTexture(statusCanvas);
-      const statusMat = new THREE.MeshBasicMaterial({ 
-        map: statusTexture, 
-        transparent: true 
-      });
-      const statusMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.3, 0.08),
-        statusMat
-      );
-      statusMesh.position.set(0, -0.18, 0.002);
-      group.add(statusMesh);
-
-      group.userData.isHudPanel = true;
-      group.userData.isMicPanel = true;
-      group.userData.selected = false;
-      group.userData.statusCanvas = statusCanvas;
-      group.userData.statusCtx = statusCtx;
-      group.userData.statusTexture = statusTexture;
-      group.scale.setScalar(1);
-
-      return group;
-    }
-
-    // VOICE COMMAND SYSTEM
-    function startVoiceCommand() {
-      console.log('Starting voice recognition...');
-      
-      if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-        alert('Speech recognition not supported in this browser');
-        return;
-      }
-
-      const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-      recognition.lang = 'en-US';
-      recognition.continuous = false;
-      recognition.interimResults = false;
-
-      recognition.onstart = () => {
-        console.log('Listening...');
-        updateMicStatus('Listening...');
-      };
-
-      recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript.toLowerCase();
-        console.log('Heard:', transcript);
-        
-        updateMicStatus(`"${transcript}"`);
-        
-        // Process commands
-        if (transcript.includes('open map') || transcript.includes('show map')) {
-          setTimeout(() => {
-            spawnMapPanel();
-            updateMicStatus('Opening map...');
-          }, 500);
-        } else {
-          updateMicStatus('Command not recognized');
-        }
-      };
-
-      recognition.onerror = (event) => {
-        console.error('Speech recognition error:', event.error);
-        updateMicStatus('Error: ' + event.error);
-      };
-
-      recognition.onend = () => {
-        console.log('Speech recognition ended');
-        setTimeout(() => {
-          updateMicStatus('Tap to speak');
-        }, 2000);
-      };
-
-      recognition.start();
-    }
-
-    function updateMicStatus(text) {
-      panels.forEach(panel => {
-        if (panel.userData.isMicPanel && panel.userData.statusCtx) {
-          const ctx = panel.userData.statusCtx;
-          const tex = panel.userData.statusTexture;
-          
-          ctx.clearRect(0, 0, 256, 64);
-          ctx.fillStyle = '#ffffff';
-          ctx.font = 'bold 24px system-ui';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(text, 128, 32);
-          tex.needsUpdate = true;
-        }
-      });
-    }
-
-    // REALISTIC GLASS - Based on Three.js MeshPhysicalMaterial tutorial
-    // This creates water/glass effect using transmission property
-    function createRealisticGlassMaterial() {
-      return new THREE.MeshPhysicalMaterial({
-        color: 0xffffff,
-        
-        // KEY PROPERTY: transmission makes it actually see-through like real glass
-        transmission: 1.0,        // Full light transmission (this is the magic!)
-        opacity: 1.0,             // Keep at 1 when using transmission
-        
-        // Surface finish
-        roughness: 0.0,           // 0 = perfectly smooth glass, 0.3 = frosted
-        metalness: 0.0,           // Glass is not metallic
-        
-        // Refraction (bending of light)
-        thickness: 0.5,           // Affects how much light bends
-        ior: 1.5,                 // Index of Refraction: 1.5=glass, 1.33=water, 2.4=diamond
-        
-        // Reflections
-        clearcoat: 1.0,           // Surface shine
-        clearcoatRoughness: 0.0,  // Smooth shine
-        reflectivity: 0.5,        // Reflection strength
-        
-        // Color tinting (optional)
-        attenuationDistance: 0.5,
-        attenuationColor: new THREE.Color(0xffffff),
-        
-        transparent: true,
-        side: THREE.DoubleSide
-      });
-    }
-
-    // CSS Glassy Card Material - Ported from CSS
-    // .glassy-card { background: hsl(0,0%,100%,0.2); backdrop-filter: blur(2px); border: 3px solid hsl(0,0%,100%,0.3); box-shadow: inset 0 0 8px 1px hsl(0,0%,100%,0.6); }
-    function createGlassyCardMaterial() {
-      // Create subtle inner glow texture for box-shadow effect
-      const canvas = document.createElement("canvas");
-      canvas.width = 256;
-      canvas.height = 256;
-      const ctx = canvas.getContext("2d");
-      
-      // Inner glow effect: box-shadow: inset 0 0 8px 1px hsl(0, 0%, 100%, 0.6)
-      const gradient = ctx.createRadialGradient(128, 128, 80, 128, 128, 128);
-      gradient.addColorStop(0, "rgba(255, 255, 255, 0.6)");
-      gradient.addColorStop(1, "rgba(255, 255, 255, 0)");
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, 256, 256);
-      
-      const glowTexture = new THREE.CanvasTexture(canvas);
-      
-      return new THREE.MeshPhysicalMaterial({
-        color: 0xffffff,           // hsl(0, 0%, 100%)
-        map: glowTexture,          // box-shadow: inset glow
-        transparent: true,
-        opacity: 0.2,              // background: hsl(0, 0%, 100%, 0.2)
-        transmission: 0.8,         // Makes it see-through
-        roughness: 0.6,            // backdrop-filter: blur(2px) - Higher = more blur
-        metalness: 0,
-        clearcoat: 0.3,            // Adds surface shine
-        clearcoatRoughness: 0.4,
-        reflectivity: 0.3,
-        ior: 1.45,
-        side: THREE.DoubleSide
-      });
-    }
-
-    // MAX SETTINGS - iPhone frosted glass - TUNE DOWN AS NEEDED
-    function createGlassMaterial() {
-      const canvas = document.createElement("canvas");
-      canvas.width = 256;
-      canvas.height = 256;
-      const ctx = canvas.getContext("2d");
-      
-      // MAX noise for frosted effect
-      for (let i = 0; i < canvas.width; i++) {
-        for (let j = 0; j < canvas.height; j++) {
-          const noise = Math.random() * 50;  // MAX
-          ctx.fillStyle = `rgba(255,255,255,${noise / 255})`;
-          ctx.fillRect(i, j, 1, 1);
-        }
-      }
-      
-      const noiseTexture = new THREE.CanvasTexture(canvas);
-      noiseTexture.wrapS = noiseTexture.wrapT = THREE.RepeatWrapping;
-      
-      return new THREE.MeshPhysicalMaterial({
-        color: 0xffffff,  // MAX white
-        map: noiseTexture,
-        transparent: true,
-        opacity: 1.0,  // MAX
-        transmission: 1.0,  // MAX
-        roughness: 1.0,  // MAX frosted
-        metalness: 0,
-        clearcoat: 1.0,  // MAX
-        clearcoatRoughness: 1.0,  // MAX
-        reflectivity: 1.0,  // MAX
-        ior: 2.333,  // MAX (diamond-like)
-        thickness: 1.0,  // MAX
-        attenuationDistance: 0.05,  // MIN for MAX effect
-        attenuationColor: 0xffffff,
-        sheen: 1.0,  // MAX
-        sheenColor: 0xffffff,
-        sheenRoughness: 1.0,  // MAX
-        side: THREE.DoubleSide
-      });
-    }
-
-    function makeHudPanel() {
-      const group = new THREE.Group();
-
-      const panelGeom = new THREE.PlaneGeometry(0.7, 0.35);
-      
-      // CHOOSE YOUR GLASS STYLE:
-      // Option 1: Realistic glass (transmission-based, like water/glass)
-      const panelMat = createRealisticGlassMaterial();
-      
-      // Option 2: CSS-style frosted glass
-      // const panelMat = createGlassyCardMaterial();
-      
-      // Option 3: Maximum settings glass
-      // const panelMat = createGlassMaterial();
-      
-      const panel = new THREE.Mesh(panelGeom, panelMat);
-      group.add(panel);
-
-      // border: 3px solid hsl(0, 0%, 100%, 0.3)
-      const borderGeom = new THREE.EdgesGeometry(panelGeom);
-      const borderMat = new THREE.LineBasicMaterial({ 
-        color: 0xffffff, 
-        transparent: true, 
-        opacity: 0.3  // CSS border opacity
-      });
-      const border = new THREE.LineSegments(borderGeom, borderMat);
-      group.add(border);
-      
-      // Add extra border layers for thickness (simulating 3px border)
-      const border2 = border.clone();
-      border2.position.z = 0.0003;
-      group.add(border2);
-      
-      const border3 = border.clone();
-      border3.position.z = 0.0006;
-      group.add(border3);
-
-      const timeCanvas = document.createElement("canvas");
-      timeCanvas.width = 512;
-      timeCanvas.height = 256;
-      const timeCtx = timeCanvas.getContext("2d");
-      const timeTexture = new THREE.CanvasTexture(timeCanvas);
-      timeTexture.minFilter = THREE.LinearFilter;
-      timeTexture.magFilter = THREE.LinearFilter;
-
-      const timeMat = new THREE.MeshBasicMaterial({ map: timeTexture, transparent: true });
-      const timePlane = new THREE.Mesh(new THREE.PlaneGeometry(0.28, 0.28), timeMat);
-      timePlane.position.set(0, 0, 0.002);
-      group.add(timePlane);
-
-      const dotGeom = new THREE.CircleGeometry(0.01, 16);
-      const dotMat = new THREE.MeshBasicMaterial({ 
-        color: 0xffffff, 
-        transparent: true, 
-        opacity: 1.0  // MAX
-      });
-      const dot = new THREE.Mesh(dotGeom, dotMat);
-      dot.position.set(-0.28, 0.11, 0.001);
-      group.add(dot);
-
-      group.userData.isHudPanel = true;
-      group.userData.selected = false;
-      group.userData.timeCtx = timeCtx;
-      group.userData.timeTexture = timeTexture;
-      group.userData.lastTimeText = "";
-      group.scale.setScalar(1);
-
-      updatePanelTime(group, true);
-
-      return group;
-    }
-
-    // CREATE LAUNCHER PANEL WITH APP ICONS
-    function makeLauncherPanel() {
-      const group = new THREE.Group();
-
-      // Bigger glass panel for 2 icons
-      const panelGeom = new THREE.PlaneGeometry(0.8, 0.5);
-      const panelMat = createRealisticGlassMaterial();
-      const panel = new THREE.Mesh(panelGeom, panelMat);
-      group.add(panel);
-
-      // Border
-      const borderGeom = new THREE.EdgesGeometry(panelGeom);
-      const borderMat = new THREE.LineBasicMaterial({ 
-        color: 0xffffff, 
-        transparent: true, 
-        opacity: 0.3
-      });
-      const border = new THREE.LineSegments(borderGeom, borderMat);
-      group.add(border);
-
-      // === MAP ICON (LEFT) ===
-      const mapIconGroup = new THREE.Group();
-      
-      // Load real map icon from file
-      const mapLoader = new THREE.TextureLoader();
-      mapLoader.load('icon.png', (iconTexture) => {
-        const iconMat = new THREE.MeshBasicMaterial({ 
-          map: iconTexture,
-          transparent: true,
-          opacity: 1.0
-        });
-        const iconMesh = new THREE.Mesh(
-          new THREE.PlaneGeometry(0.2, 0.2),
-          iconMat
-        );
-        iconMesh.position.z = 0.001;
-        mapIconGroup.add(iconMesh);
-      }, undefined, (error) => {
-        console.error('Error loading icon.png:', error);
-        // Fallback pin
-        const pinCanvas = document.createElement('canvas');
-        pinCanvas.width = 256;
-        pinCanvas.height = 256;
-        const pinCtx = pinCanvas.getContext('2d');
-        
-        pinCtx.fillStyle = '#EA4335';
-        pinCtx.beginPath();
-        pinCtx.arc(128, 100, 50, 0, Math.PI * 2);
-        pinCtx.fill();
-        
-        const pinTexture = new THREE.CanvasTexture(pinCanvas);
-        const pinMat = new THREE.MeshBasicMaterial({ 
-          map: pinTexture, 
-          transparent: true 
-        });
-        const pinMesh = new THREE.Mesh(
-          new THREE.PlaneGeometry(0.2, 0.2),
-          pinMat
-        );
-        pinMesh.position.z = 0.001;
-        mapIconGroup.add(pinMesh);
-      });
-
-      // Map text label
-      const mapTextCanvas = document.createElement('canvas');
-      mapTextCanvas.width = 256;
-      mapTextCanvas.height = 64;
-      const mapTextCtx = mapTextCanvas.getContext('2d');
-      mapTextCtx.fillStyle = '#ffffff';
-      mapTextCtx.font = 'bold 28px system-ui';
-      mapTextCtx.textAlign = 'center';
-      mapTextCtx.textBaseline = 'middle';
-      mapTextCtx.fillText('Map', 128, 32);
-      
-      const mapTextTexture = new THREE.CanvasTexture(mapTextCanvas);
-      const mapTextMat = new THREE.MeshBasicMaterial({ 
-        map: mapTextTexture, 
-        transparent: true 
-      });
-      const mapTextMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.15, 0.04),
-        mapTextMat
-      );
-      mapTextMesh.position.y = -0.14;
-      mapIconGroup.add(mapTextMesh);
-
-      // Position map icon on left
-      mapIconGroup.position.set(-0.2, 0.02, 0.002);
-      mapIconGroup.userData.isAppIcon = true;
-      mapIconGroup.userData.appType = 'map';
-      mapIconGroup.userData.appName = 'Map';
-      group.add(mapIconGroup);
-
-      // === MICROPHONE ICON (RIGHT) ===
-      const micIconGroup = new THREE.Group();
-      
-      // Draw microphone icon
-      const micCanvas = document.createElement('canvas');
-      micCanvas.width = 256;
-      micCanvas.height = 256;
-      const micCtx = micCanvas.getContext('2d');
-      
-      micCtx.fillStyle = '#1E88E5'; // Blue
-      // Mic body
-      micCtx.beginPath();
-      micCtx.roundRect(98, 60, 60, 90, 30);
-      micCtx.fill();
-      
-      // Mic handle
-      micCtx.fillRect(123, 150, 10, 40);
-      
-      // Mic base
-      micCtx.beginPath();
-      micCtx.arc(128, 200, 15, 0, Math.PI * 2);
-      micCtx.fill();
-      
-      // Side arcs
-      micCtx.strokeStyle = '#1E88E5';
-      micCtx.lineWidth = 12;
-      micCtx.lineCap = 'round';
-      
-      micCtx.beginPath();
-      micCtx.arc(65, 105, 25, -Math.PI/4, Math.PI/4);
-      micCtx.stroke();
-      
-      micCtx.beginPath();
-      micCtx.arc(191, 105, 25, Math.PI*3/4, Math.PI*5/4);
-      micCtx.stroke();
-      
-      const micTexture = new THREE.CanvasTexture(micCanvas);
-      const micMat = new THREE.MeshBasicMaterial({ 
-        map: micTexture, 
-        transparent: true 
-      });
-      const micIcon = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.2, 0.2),
-        micMat
-      );
-      micIcon.position.z = 0.001;
-      micIconGroup.add(micIcon);
-
-      // Mic text label
-      const micTextCanvas = document.createElement('canvas');
-      micTextCanvas.width = 256;
-      micTextCanvas.height = 64;
-      const micTextCtx = micTextCanvas.getContext('2d');
-      micTextCtx.fillStyle = '#ffffff';
-      micTextCtx.font = 'bold 28px system-ui';
-      micTextCtx.textAlign = 'center';
-      micTextCtx.textBaseline = 'middle';
-      micTextCtx.fillText('Voice', 128, 32);
-      
-      const micTextTexture = new THREE.CanvasTexture(micTextCanvas);
-      const micTextMat = new THREE.MeshBasicMaterial({ 
-        map: micTextTexture, 
-        transparent: true 
-      });
-      const micTextMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.15, 0.04),
-        micTextMat
-      );
-      micTextMesh.position.y = -0.14;
-      micIconGroup.add(micTextMesh);
-
-      // Position mic icon on right
-      micIconGroup.position.set(0.2, 0.02, 0.002);
-      micIconGroup.userData.isAppIcon = true;
-      micIconGroup.userData.appType = 'microphone';
-      micIconGroup.userData.appName = 'Voice';
-      group.add(micIconGroup);
-
-      group.userData.isHudPanel = true;
-      group.userData.isLauncher = true;
-      group.userData.selected = false;
-      group.scale.setScalar(1);
-
-      return group;
-    }
-
-    function makeScreenPanel(texture) {
-      const group = new THREE.Group();
-
-      const panelGeom = new THREE.PlaneGeometry(0.9, 0.5);
-      const panelMat = createGlassMaterial();
-      const panel = new THREE.Mesh(panelGeom, panelMat);
-      group.add(panel);
-
-      const borderGeom = new THREE.EdgesGeometry(panelGeom);
-      const borderMat = new THREE.LineBasicMaterial({ 
-        color: 0xffffff, 
-        transparent: true, 
-        opacity: 0.6  // MAX border
-      });
-      const border = new THREE.LineSegments(borderGeom, borderMat);
-      group.add(border);
-      
-      // MAX inner glow for depth
-      const glowGeom = new THREE.PlaneGeometry(0.88, 0.48);
-      const glowMat = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.3,  // MAX
-        side: THREE.DoubleSide
-      });
-      const glow = new THREE.Mesh(glowGeom, glowMat);
-      glow.position.z = -0.001;
-      group.add(glow);
-
-      const videoMat = new THREE.MeshBasicMaterial({ map: texture });
-      const videoPlane = new THREE.Mesh(new THREE.PlaneGeometry(0.82, 0.46), videoMat);
-      videoPlane.position.set(0, 0, 0.002);
-      group.add(videoPlane);
-
-      group.userData.isHudPanel = true;
-      group.userData.selected = false;
-      group.scale.setScalar(1);
-
-      return group;
-    }
-
-    function updatePanelTime(panel, force) {
       const now = new Date();
-      const timeText = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-      if (!force && panel.userData.lastTimeText === timeText) return;
+      const timeString = now.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit',
+        hour12: true 
+      });
+      const dateString = now.toLocaleDateString('en-US', { 
+        weekday: 'short', 
+        month: 'short', 
+        day: 'numeric' 
+      });
 
-      panel.userData.lastTimeText = timeText;
-      const ctx = panel.userData.timeCtx;
-      const tex = panel.userData.timeTexture;
+      const ctx = panel.userData.clockCtx;
+      const tex = panel.userData.clockTexture;
 
-      ctx.clearRect(0, 0, 512, 256);
-      drawAnalogClock(ctx, now);
+      ctx.clearRect(0, 0, 512, 128);
+
+      // Draw time
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 56px system-ui';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(timeString, 256, 55);
+
+      // Draw date
+      ctx.font = '24px system-ui';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.fillText(dateString, 256, 100);
+
       tex.needsUpdate = true;
-    }
-
-    function drawAnalogClock(ctx, now) {
-      const w = 512;
-      const h = 256;
-      const cx = w * 0.5;
-      const cy = h * 0.5;
-      const r = 100;
-
-      ctx.clearRect(0, 0, w, h);
-
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(10, 26, 40, 0.55)";
-      ctx.fill();
-      ctx.lineWidth = 5;
-      ctx.strokeStyle = "rgba(140, 220, 255, 0.9)";
-      ctx.stroke();
-
-      for (let i = 0; i < 60; i++) {
-        const a = (i / 60) * Math.PI * 2 - Math.PI / 2;
-        const isHour = i % 5 === 0;
-        const tickOuter = r - 8;
-        const tickInner = isHour ? r - 22 : r - 15;
-        ctx.beginPath();
-        ctx.moveTo(cx + Math.cos(a) * tickInner, cy + Math.sin(a) * tickInner);
-        ctx.lineTo(cx + Math.cos(a) * tickOuter, cy + Math.sin(a) * tickOuter);
-        ctx.lineWidth = isHour ? 3 : 1.5;
-        ctx.strokeStyle = isHour ? "rgba(220, 242, 255, 0.95)" : "rgba(140, 220, 255, 0.75)";
-        ctx.stroke();
-      }
-
-      const ms = now.getMilliseconds();
-      const sec = now.getSeconds() + ms / 1000;
-      const min = now.getMinutes() + sec / 60;
-      const hour = (now.getHours() % 12) + min / 60;
-
-      drawClockHand(ctx, cx, cy, hour / 12, 50, 5, "rgba(255,255,255,0.95)");
-      drawClockHand(ctx, cx, cy, min / 60, 72, 4, "rgba(200,235,255,0.95)");
-      drawClockHand(ctx, cx, cy, sec / 60, 84, 2, "rgba(255,120,120,0.95)");
-
-      ctx.beginPath();
-      ctx.arc(cx, cy, 5, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(255,255,255,0.95)";
-      ctx.fill();
-    }
-
-    function drawClockHand(ctx, cx, cy, unit, len, width, color) {
-      const angle = unit * Math.PI * 2 - Math.PI / 2;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.lineTo(cx + Math.cos(angle) * len, cy + Math.sin(angle) * len);
-      ctx.lineWidth = width;
-      ctx.lineCap = "round";
-      ctx.strokeStyle = color;
-      ctx.stroke();
     }
 
     function onWindowResize() {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
+      handCanvas.width = window.innerWidth;
+      handCanvas.height = window.innerHeight;
     }
 
     function animate() {
@@ -1270,9 +452,12 @@
         activePanel.quaternion.setFromRotationMatrix(reticle.matrix);
       }
 
-      for (const panel of panels) {
-        if (panel.userData.timeCtx) updatePanelTime(panel, false);
-      }
+      // Update all clocks
+      panels.forEach(panel => {
+        if (panel.userData.clockCtx) {
+          updateClock(panel);
+        }
+      });
 
       renderer.render(scene, camera);
     }
