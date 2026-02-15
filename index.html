@@ -24,6 +24,7 @@
       width: 100%;
       height: 100%;
       object-fit: cover;
+      z-index: 1;
     }
     #canvas {
       position: absolute;
@@ -31,6 +32,8 @@
       left: 0;
       width: 100%;
       height: 100%;
+      z-index: 2;
+      pointer-events: none;
     }
     #status {
       position: absolute;
@@ -92,8 +95,15 @@
       return new Promise((resolve) => {
         video.onloadedmetadata = () => {
           video.play();
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
+          // set backing buffer to account for devicePixelRatio for crisp drawing
+          const dpr = window.devicePixelRatio || 1;
+          canvas.width = Math.round(video.videoWidth * dpr);
+          canvas.height = Math.round(video.videoHeight * dpr);
+          // set CSS size to match displayed video element size
+          canvas.style.width = `${video.clientWidth}px`;
+          canvas.style.height = `${video.clientHeight}px`;
+          // scale the 2D context so draw coordinates match video pixel coords
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
           resolve(video);
         };
       });
