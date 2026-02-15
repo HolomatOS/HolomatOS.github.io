@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>AR + TensorFlow Hand Tracking</title>
+  <title>AR Clock - Touch Controls</title>
   <style>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
     #info {
       position: absolute; left: 0; right: 0; top: 0;
       color: #9cf; font: 14px/1.4 system-ui, sans-serif;
-      background: rgba(0,0,0,0.7); padding: 8px 12px; z-index: 3;
+      background: rgba(0,0,0,0.5); padding: 8px 12px; z-index: 2;
     }
     #hud {
       position: absolute; inset: 0; pointer-events: none; z-index: 2;
@@ -25,46 +25,14 @@
     .tick.t2 { left: 50%; top: calc(50% + 32px); transform: translateX(-50%); }
     .tick.t3 { top: 50%; left: calc(50% - 50px); transform: translateY(-50%); }
     .tick.t4 { top: 50%; left: calc(50% + 48px); transform: translateY(-50%); }
-    #handCanvas {
-      position: absolute; inset: 0; pointer-events: none; z-index: 1;
-    }
-    #handVideo {
-      display: none;
-    }
-    #debug {
-      position: absolute;
-      bottom: 10px;
-      left: 10px;
-      background: rgba(0,0,0,0.8);
-      color: #0f0;
-      padding: 10px;
-      border-radius: 8px;
-      font-size: 12px;
-      font-family: monospace;
-      z-index: 10;
-    }
   </style>
 </head>
 <body>
-  <div id="info">🤏 Pinch or tap to spawn clock | Before AR: Test hand tracking</div>
+  <div id="info">👆 Tap to spawn clock | Tap panel to grab/drop</div>
   <div id="hud">
     <div class="reticle"></div>
     <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
   </div>
-  <canvas id="handCanvas"></canvas>
-  <video id="handVideo" playsinline></video>
-  <div id="debug">
-    <div>Model: Loading...</div>
-    <div id="debugHands">Hands: 0</div>
-    <div id="debugPinch">Pinch: No</div>
-    <div id="debugFPS">FPS: --</div>
-  </div>
-
-  <!-- TensorFlow.js -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
 
   <script type="module">
     import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
@@ -78,15 +46,7 @@
     const raycaster = new THREE.Raycaster();
     let activePanel = null;
 
-    // Hand tracking
-    let handModel, handVideo, handCanvas, handCtx;
-    let lastPinch = false;
-    let isInAR = false;
-    let frameCount = 0;
-    let lastFPSTime = Date.now();
-
     init();
-    initHandTracking();
     animate();
 
     function init() {
@@ -115,149 +75,13 @@
 
       renderer.domElement.addEventListener("click", onCanvasClick);
 
-      const arButton = ARButton.createButton(renderer, {
+      document.body.appendChild(ARButton.createButton(renderer, {
         requiredFeatures: ["hit-test"],
         optionalFeatures: ["dom-overlay"],
         domOverlay: { root: document.body }
-      });
+      }));
 
-      arButton.addEventListener('click', () => {
-        setTimeout(() => {
-          isInAR = renderer.xr.isPresenting;
-        }, 100);
-      });
-
-      document.body.appendChild(arButton);
       window.addEventListener("resize", onWindowResize);
-    }
-
-    async function initHandTracking() {
-      handVideo = document.getElementById('handVideo');
-      handCanvas = document.getElementById('handCanvas');
-      handCanvas.width = window.innerWidth;
-      handCanvas.height = window.innerHeight;
-      handCtx = handCanvas.getContext('2d');
-
-      try {
-        // Load TensorFlow HandPose model
-        document.getElementById('debug').children[0].textContent = 'Model: Loading TensorFlow...';
-        handModel = await handpose.load();
-        document.getElementById('debug').children[0].textContent = 'Model: Loaded ✓';
-
-        // Setup camera
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: 'user',  // Front camera for easier testing
-            width: { ideal: 640 },
-            height: { ideal: 480 }
-          }
-        });
-
-        handVideo.srcObject = stream;
-        await handVideo.play();
-
-        console.log('TensorFlow hand tracking initialized');
-        detectHands();
-      } catch (error) {
-        console.error('Hand tracking error:', error);
-        document.getElementById('debug').children[0].textContent = 'Model: Error';
-      }
-    }
-
-    async function detectHands() {
-      if (handVideo.readyState === handVideo.HAVE_ENOUGH_DATA) {
-        const predictions = await handModel.estimateHands(handVideo);
-
-        // Update FPS
-        frameCount++;
-        const now = Date.now();
-        if (now - lastFPSTime > 1000) {
-          const fps = Math.round(frameCount * 1000 / (now - lastFPSTime));
-          document.getElementById('debugFPS').textContent = `FPS: ${fps}`;
-          frameCount = 0;
-          lastFPSTime = now;
-        }
-
-        document.getElementById('debugHands').textContent = `Hands: ${predictions.length}`;
-
-        // Only draw when not in AR
-        if (!isInAR) {
-          drawHands(predictions);
-        } else {
-          handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
-        }
-
-        // Detect pinch even in AR
-        if (predictions.length > 0) {
-          checkPinch(predictions[0]);
-        } else {
-          document.getElementById('debugPinch').textContent = 'Pinch: No hand';
-        }
-      }
-
-      requestAnimationFrame(detectHands);
-    }
-
-    function drawHands(predictions) {
-      handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
-
-      for (const hand of predictions) {
-        const landmarks = hand.landmarks;
-
-        // Draw connections
-        const connections = [
-          [0, 1], [1, 2], [2, 3], [3, 4],
-          [0, 5], [5, 6], [6, 7], [7, 8],
-          [0, 9], [9, 10], [10, 11], [11, 12],
-          [0, 13], [13, 14], [14, 15], [15, 16],
-          [0, 17], [17, 18], [18, 19], [19, 20],
-          [5, 9], [9, 13], [13, 17]
-        ];
-
-        handCtx.lineWidth = 2;
-        handCtx.lineCap = 'round';
-
-        for (const [s, e] of connections) {
-          const [x1, y1] = landmarks[s];
-          const [x2, y2] = landmarks[e];
-
-          const gradient = handCtx.createLinearGradient(x1, y1, x2, y2);
-          gradient.addColorStop(0, 'rgba(255, 150, 200, 0.8)');
-          gradient.addColorStop(1, 'rgba(255, 255, 255, 0.6)');
-
-          handCtx.strokeStyle = gradient;
-          handCtx.beginPath();
-          handCtx.moveTo(x1, y1);
-          handCtx.lineTo(x2, y2);
-          handCtx.stroke();
-        }
-
-        // Draw dots
-        for (let j = 0; j < landmarks.length; j++) {
-          const [x, y] = landmarks[j];
-          handCtx.beginPath();
-          handCtx.arc(x, y, 3, 0, 2 * Math.PI);
-          handCtx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-          handCtx.fill();
-        }
-      }
-    }
-
-    function checkPinch(hand) {
-      const thumb = hand.landmarks[4];
-      const index = hand.landmarks[8];
-      const distance = Math.sqrt(
-        Math.pow(thumb[0] - index[0], 2) +
-        Math.pow(thumb[1] - index[1], 2)
-      );
-
-      const isPinching = distance < 40;
-      document.getElementById('debugPinch').textContent = `Pinch: ${isPinching ? 'YES ✓' : `No (${Math.round(distance)}px)`}`;
-
-      if (isPinching && !lastPinch && reticle.visible) {
-        spawnClockPanel();
-      }
-      lastPinch = isPinching;
     }
 
     function onSelect() {
@@ -362,6 +186,7 @@
       group.scale.setScalar(1);
 
       updateClock(group);
+
       return group;
     }
 
@@ -403,8 +228,6 @@
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
-      handCanvas.width = window.innerWidth;
-      handCanvas.height = window.innerHeight;
     }
 
     function animate() {
@@ -426,11 +249,9 @@
           session.addEventListener("end", () => {
             hitTestSourceRequested = false;
             hitTestSource = null;
-            isInAR = false;
           });
 
           hitTestSourceRequested = true;
-          isInAR = true;
         }
 
         if (hitTestSource) {
