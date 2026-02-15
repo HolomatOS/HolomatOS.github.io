@@ -110,6 +110,9 @@
         if (hitIcon.userData.appType === 'map') {
           console.log('Opening Map panel...');
           spawnMapPanel();
+        } else if (hitIcon.userData.appType === 'microphone') {
+          console.log('Starting voice command...');
+          startVoiceCommand();
         }
         return;
       }
@@ -389,12 +392,26 @@
       return current;
     }
 
-    // SPAWN MAP PANEL
+    // SPAWN MAP PANEL - Next to the launcher, not on top
     function spawnMapPanel() {
       if (!reticle.visible) return;
       const mapPanel = makeMapPanel();
-      mapPanel.position.setFromMatrixPosition(reticle.matrix);
-      mapPanel.quaternion.setFromRotationMatrix(reticle.matrix);
+      
+      // Position next to the reticle (0.8 units to the right)
+      const pos = new THREE.Vector3();
+      pos.setFromMatrixPosition(reticle.matrix);
+      
+      const quat = new THREE.Quaternion();
+      quat.setFromRotationMatrix(reticle.matrix);
+      
+      // Offset to the right
+      const offset = new THREE.Vector3(0.8, 0, 0);
+      offset.applyQuaternion(quat);
+      pos.add(offset);
+      
+      mapPanel.position.copy(pos);
+      mapPanel.quaternion.copy(quat);
+      
       scene.add(mapPanel);
       panels.push(mapPanel);
     }
@@ -416,66 +433,19 @@
       const border = new THREE.LineSegments(borderGeom, borderMat);
       group.add(border);
 
-      // Create map container div
-      const mapDiv = document.createElement('div');
-      mapDiv.id = 'osm-map-' + Date.now();
-      mapDiv.style.width = '1024px';
-      mapDiv.style.height = '768px';
-      mapDiv.style.position = 'absolute';
-      mapDiv.style.left = '-9999px';
-      mapDiv.style.top = '0';
-      document.body.appendChild(mapDiv);
-
-      // Load Leaflet CSS and JS
-      if (!document.getElementById('leaflet-css')) {
-        const link = document.createElement('link');
-        link.id = 'leaflet-css';
-        link.rel = 'stylesheet';
-        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-        document.head.appendChild(link);
-      }
-
-      if (!window.L) {
-        const script = document.createElement('script');
-        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-        script.onload = () => initMap(mapDiv.id);
-        document.head.appendChild(script);
-      } else {
-        initMap(mapDiv.id);
-      }
-
-      function initMap(divId) {
-        // Initialize Leaflet map
-        const map = window.L.map(divId).setView([40.7608, -111.8910], 13);
-        
-        // Add OpenStreetMap tiles
-        window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '© OpenStreetMap contributors',
-          maxZoom: 19
-        }).addTo(map);
-
-        // Add marker for Salt Lake City
-        const marker = window.L.marker([40.7608, -111.8910]).addTo(map);
-        marker.bindPopup('<b>Salt Lake City, Utah</b>').openPopup();
-
-        // Force map to render
-        setTimeout(() => map.invalidateSize(), 100);
-      }
-
-      // Create canvas to capture the map
+      // Create canvas for the map
       const mapCanvas = document.createElement('canvas');
       mapCanvas.width = 1024;
       mapCanvas.height = 768;
       const mapCtx = mapCanvas.getContext('2d');
       
-      // Initial loading screen
-      mapCtx.fillStyle = '#7ebc6f';
+      // Draw loading screen first
+      mapCtx.fillStyle = '#aad3df';
       mapCtx.fillRect(0, 0, 1024, 768);
       mapCtx.fillStyle = '#ffffff';
-      mapCtx.font = 'bold 48px system-ui';
+      mapCtx.font = 'bold 32px system-ui';
       mapCtx.textAlign = 'center';
-      mapCtx.textBaseline = 'middle';
-      mapCtx.fillText('🗺️ OpenStreetMap Loading...', 512, 384);
+      mapCtx.fillText('Loading OpenStreetMap...', 512, 384);
       
       const mapTexture = new THREE.CanvasTexture(mapCanvas);
       mapTexture.minFilter = THREE.LinearFilter;
@@ -520,41 +490,74 @@
       group.userData.isHudPanel = true;
       group.userData.isMapPanel = true;
       group.userData.selected = false;
-      group.userData.mapDiv = mapDiv;
       group.userData.mapCanvas = mapCanvas;
+      group.userData.mapCtx = mapCtx;
       group.userData.mapTexture = mapTexture;
       group.scale.setScalar(1);
 
-      // Capture map to canvas periodically
-      setTimeout(() => {
-        const updateInterval = setInterval(() => {
-          try {
-            // Use html2canvas-like approach to capture the map div
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            
-            // For now, show that map is loaded
-            if (mapCtx) {
-              mapCtx.fillStyle = '#7ebc6f';
-              mapCtx.fillRect(0, 0, 1024, 768);
-              mapCtx.fillStyle = '#ffffff';
-              mapCtx.font = 'bold 32px system-ui';
-              mapCtx.textAlign = 'center';
-              mapCtx.fillText('🗺️ Interactive Map Active', 512, 300);
-              mapCtx.font = '24px system-ui';
-              mapCtx.fillText('Salt Lake City, Utah', 512, 380);
-              mapCtx.fillText('Zoom level: 13', 512, 420);
-              mapTexture.needsUpdate = true;
-            }
-          } catch (e) {
-            console.error('Map capture error:', e);
-          }
-        }, 1000);
-        
-        group.userData.updateInterval = updateInterval;
-      }, 2000);
+      // Load actual OpenStreetMap tiles
+      loadMapTiles(mapCtx, mapTexture, 40.7608, -111.8910, 13);
 
       return group;
+    }
+
+    // Load real OpenStreetMap tiles
+    function loadMapTiles(ctx, texture, lat, lon, zoom) {
+      // Convert lat/lon to tile coordinates
+      const n = Math.pow(2, zoom);
+      const xtile = Math.floor((lon + 180) / 360 * n);
+      const ytile = Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n);
+      
+      // Load 3x3 grid of tiles centered on location
+      const tiles = [];
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          const x = xtile + dx;
+          const y = ytile + dy;
+          const url = `https://tile.openstreetmap.org/${zoom}/${x}/${y}.png`;
+          
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = function() {
+            const offsetX = (dx + 1) * 256 + 128;
+            const offsetY = (dy + 1) * 256 + 128;
+            ctx.drawImage(img, offsetX, offsetY, 256, 256);
+            
+            // Add location marker in center
+            ctx.fillStyle = '#EA4335';
+            ctx.beginPath();
+            ctx.arc(512, 384, 15, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(512, 384, 6, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Add text
+            ctx.fillStyle = '#000000';
+            ctx.font = 'bold 24px system-ui';
+            ctx.textAlign = 'center';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 4;
+            ctx.strokeText('Salt Lake City, UT', 512, 50);
+            ctx.fillText('Salt Lake City, UT', 512, 50);
+            
+            texture.needsUpdate = true;
+          };
+          img.onerror = function() {
+            console.error('Failed to load tile:', url);
+            // Draw fallback
+            ctx.fillStyle = '#e0e0e0';
+            ctx.fillRect(0, 0, 1024, 768);
+            ctx.fillStyle = '#666';
+            ctx.font = '24px system-ui';
+            ctx.textAlign = 'center';
+            ctx.fillText('Map tiles loading...', 512, 384);
+            texture.needsUpdate = true;
+          };
+          img.src = url;
+        }
+      }
     }
 
     // SPAWN MICROPHONE PANEL
@@ -933,8 +936,8 @@
     function makeLauncherPanel() {
       const group = new THREE.Group();
 
-      // Smaller glass panel for single icon
-      const panelGeom = new THREE.PlaneGeometry(0.5, 0.5);
+      // Bigger glass panel for 2 icons
+      const panelGeom = new THREE.PlaneGeometry(0.8, 0.5);
       const panelMat = createRealisticGlassMaterial();
       const panel = new THREE.Mesh(panelGeom, panelMat);
       group.add(panel);
@@ -949,47 +952,34 @@
       const border = new THREE.LineSegments(borderGeom, borderMat);
       group.add(border);
 
-      // Create Map icon (no background circle, just the icon)
-      const iconGroup = new THREE.Group();
+      // === MAP ICON (LEFT) ===
+      const mapIconGroup = new THREE.Group();
       
-      // Load real Google Maps icon from file - BIGGER and CLEARER
-      const loader = new THREE.TextureLoader();
-      loader.load('icon.png', (iconTexture) => {
+      // Load real map icon from file
+      const mapLoader = new THREE.TextureLoader();
+      mapLoader.load('icon.png', (iconTexture) => {
         const iconMat = new THREE.MeshBasicMaterial({ 
           map: iconTexture,
           transparent: true,
           opacity: 1.0
         });
         const iconMesh = new THREE.Mesh(
-          new THREE.PlaneGeometry(0.25, 0.25), // Made bigger: 0.15 -> 0.25
+          new THREE.PlaneGeometry(0.2, 0.2),
           iconMat
         );
         iconMesh.position.z = 0.001;
-        iconGroup.add(iconMesh);
+        mapIconGroup.add(iconMesh);
       }, undefined, (error) => {
         console.error('Error loading icon.png:', error);
-        // Fallback: draw simple red pin if icon.png not found
+        // Fallback pin
         const pinCanvas = document.createElement('canvas');
         pinCanvas.width = 256;
         pinCanvas.height = 256;
         const pinCtx = pinCanvas.getContext('2d');
         
-        // Draw red location pin
         pinCtx.fillStyle = '#EA4335';
         pinCtx.beginPath();
         pinCtx.arc(128, 100, 50, 0, Math.PI * 2);
-        pinCtx.fill();
-        
-        pinCtx.beginPath();
-        pinCtx.moveTo(128, 150);
-        pinCtx.lineTo(100, 110);
-        pinCtx.lineTo(156, 110);
-        pinCtx.closePath();
-        pinCtx.fill();
-        
-        pinCtx.fillStyle = '#ffffff';
-        pinCtx.beginPath();
-        pinCtx.arc(128, 100, 25, 0, Math.PI * 2);
         pinCtx.fill();
         
         const pinTexture = new THREE.CanvasTexture(pinCanvas);
@@ -998,68 +988,120 @@
           transparent: true 
         });
         const pinMesh = new THREE.Mesh(
-          new THREE.PlaneGeometry(0.25, 0.25),
+          new THREE.PlaneGeometry(0.2, 0.2),
           pinMat
         );
         pinMesh.position.z = 0.001;
-        iconGroup.add(pinMesh);
+        mapIconGroup.add(pinMesh);
       });
 
-      // Remove the old icon circle and border code
-      /*
-      // Icon background circle
-      const iconGeom = new THREE.CircleGeometry(0.12, 32);
-      const iconMat = new THREE.MeshBasicMaterial({ 
-        color: 0x4CAF50, // Green for maps
-        transparent: true,
-        opacity: 0.9
-      });
-      const icon = new THREE.Mesh(iconGeom, iconMat);
-      iconGroup.add(icon);
-
-      // Icon border
-      const iconBorderGeom = new THREE.RingGeometry(0.12, 0.125, 32);
-      const iconBorderMat = new THREE.MeshBasicMaterial({ 
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.6
-      });
-      const iconBorder = new THREE.Mesh(iconBorderGeom, iconBorderMat);
-      iconGroup.add(iconBorder);
-      */
-
-      // App name text
-      const textCanvas = document.createElement('canvas');
-      textCanvas.width = 256;
-      textCanvas.height = 64;
-      const textCtx = textCanvas.getContext('2d');
-      textCtx.fillStyle = '#ffffff';
-      textCtx.font = 'bold 32px system-ui';
-      textCtx.textAlign = 'center';
-      textCtx.textBaseline = 'middle';
-      textCtx.fillText('Map', 128, 32);
+      // Map text label
+      const mapTextCanvas = document.createElement('canvas');
+      mapTextCanvas.width = 256;
+      mapTextCanvas.height = 64;
+      const mapTextCtx = mapTextCanvas.getContext('2d');
+      mapTextCtx.fillStyle = '#ffffff';
+      mapTextCtx.font = 'bold 28px system-ui';
+      mapTextCtx.textAlign = 'center';
+      mapTextCtx.textBaseline = 'middle';
+      mapTextCtx.fillText('Map', 128, 32);
       
-      const textTexture = new THREE.CanvasTexture(textCanvas);
-      const textMat = new THREE.MeshBasicMaterial({ 
-        map: textTexture, 
+      const mapTextTexture = new THREE.CanvasTexture(mapTextCanvas);
+      const mapTextMat = new THREE.MeshBasicMaterial({ 
+        map: mapTextTexture, 
         transparent: true 
       });
-      const textMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.2, 0.05),
-        textMat
+      const mapTextMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.15, 0.04),
+        mapTextMat
       );
-      textMesh.position.y = -0.18;
-      iconGroup.add(textMesh);
+      mapTextMesh.position.y = -0.14;
+      mapIconGroup.add(mapTextMesh);
 
-      // Position icon at center
-      iconGroup.position.set(0, 0.05, 0.002);
+      // Position map icon on left
+      mapIconGroup.position.set(-0.2, 0.02, 0.002);
+      mapIconGroup.userData.isAppIcon = true;
+      mapIconGroup.userData.appType = 'map';
+      mapIconGroup.userData.appName = 'Map';
+      group.add(mapIconGroup);
+
+      // === MICROPHONE ICON (RIGHT) ===
+      const micIconGroup = new THREE.Group();
       
-      // Store app data for interaction
-      iconGroup.userData.isAppIcon = true;
-      iconGroup.userData.appType = 'map';
-      iconGroup.userData.appName = 'Map';
+      // Draw microphone icon
+      const micCanvas = document.createElement('canvas');
+      micCanvas.width = 256;
+      micCanvas.height = 256;
+      const micCtx = micCanvas.getContext('2d');
       
-      group.add(iconGroup);
+      micCtx.fillStyle = '#1E88E5'; // Blue
+      // Mic body
+      micCtx.beginPath();
+      micCtx.roundRect(98, 60, 60, 90, 30);
+      micCtx.fill();
+      
+      // Mic handle
+      micCtx.fillRect(123, 150, 10, 40);
+      
+      // Mic base
+      micCtx.beginPath();
+      micCtx.arc(128, 200, 15, 0, Math.PI * 2);
+      micCtx.fill();
+      
+      // Side arcs
+      micCtx.strokeStyle = '#1E88E5';
+      micCtx.lineWidth = 12;
+      micCtx.lineCap = 'round';
+      
+      micCtx.beginPath();
+      micCtx.arc(65, 105, 25, -Math.PI/4, Math.PI/4);
+      micCtx.stroke();
+      
+      micCtx.beginPath();
+      micCtx.arc(191, 105, 25, Math.PI*3/4, Math.PI*5/4);
+      micCtx.stroke();
+      
+      const micTexture = new THREE.CanvasTexture(micCanvas);
+      const micMat = new THREE.MeshBasicMaterial({ 
+        map: micTexture, 
+        transparent: true 
+      });
+      const micIcon = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.2, 0.2),
+        micMat
+      );
+      micIcon.position.z = 0.001;
+      micIconGroup.add(micIcon);
+
+      // Mic text label
+      const micTextCanvas = document.createElement('canvas');
+      micTextCanvas.width = 256;
+      micTextCanvas.height = 64;
+      const micTextCtx = micTextCanvas.getContext('2d');
+      micTextCtx.fillStyle = '#ffffff';
+      micTextCtx.font = 'bold 28px system-ui';
+      micTextCtx.textAlign = 'center';
+      micTextCtx.textBaseline = 'middle';
+      micTextCtx.fillText('Voice', 128, 32);
+      
+      const micTextTexture = new THREE.CanvasTexture(micTextCanvas);
+      const micTextMat = new THREE.MeshBasicMaterial({ 
+        map: micTextTexture, 
+        transparent: true 
+      });
+      const micTextMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.15, 0.04),
+        micTextMat
+      );
+      micTextMesh.position.y = -0.14;
+      micIconGroup.add(micTextMesh);
+
+      // Position mic icon on right
+      micIconGroup.position.set(0.2, 0.02, 0.002);
+      micIconGroup.userData.isAppIcon = true;
+      micIconGroup.userData.appType = 'microphone';
+      micIconGroup.userData.appName = 'Voice';
+      group.add(micIconGroup);
 
       group.userData.isHudPanel = true;
       group.userData.isLauncher = true;
