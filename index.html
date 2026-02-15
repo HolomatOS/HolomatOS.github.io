@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>AR Clock - Touch Controls</title>
+  <title>Moto G - AR Receiver</title>
   <style>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
     #info {
       position: absolute; left: 0; right: 0; top: 0;
       color: #9cf; font: 14px/1.4 system-ui, sans-serif;
-      background: rgba(0,0,0,0.5); padding: 8px 12px; z-index: 2;
+      background: rgba(0,0,0,0.7); padding: 8px 12px; z-index: 3;
     }
     #hud {
       position: absolute; inset: 0; pointer-events: none; z-index: 2;
@@ -25,14 +25,79 @@
     .tick.t2 { left: 50%; top: calc(50% + 32px); transform: translateX(-50%); }
     .tick.t3 { top: 50%; left: calc(50% - 50px); transform: translateY(-50%); }
     .tick.t4 { top: 50%; left: calc(50% + 48px); transform: translateY(-50%); }
+    #handCanvas {
+      position: absolute; inset: 0; pointer-events: none; z-index: 1;
+    }
+    #connectPanel {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.95);
+      padding: 30px;
+      border-radius: 12px;
+      z-index: 100;
+      text-align: center;
+    }
+    #connectPanel input {
+      width: 300px;
+      padding: 15px;
+      font-size: 18px;
+      border: 2px solid #1E88E5;
+      border-radius: 8px;
+      margin: 15px 0;
+      font-family: monospace;
+    }
+    #connectPanel button {
+      background: #1E88E5;
+      color: white;
+      border: none;
+      padding: 15px 40px;
+      font-size: 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    #status {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.8);
+      color: #0f0;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-family: monospace;
+      z-index: 10;
+    }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
-  <div id="info">👆 Tap empty space → Spawn clock | Look at clock + tap → Grab/move | Tap again → Drop</div>
+  <div id="info">📱 MOTO G - AR RECEIVER | 🤏 Pinch from Phone 2 or tap to spawn clock</div>
   <div id="hud">
     <div class="reticle"></div>
     <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
   </div>
+  <canvas id="handCanvas"></canvas>
+
+  <div id="connectPanel">
+    <h2 style="color:#fff;">📱 Connect to Phone 2</h2>
+    <p style="color:#aaa;">Enter the ID shown on Phone 2:</p>
+    <input type="text" id="peerIdInput" placeholder="hand-camera-xxxxx" />
+    <br>
+    <button id="connectBtn">CONNECT</button>
+    <div id="connectionStatus" style="margin-top:15px; color:#ff0;"></div>
+  </div>
+
+  <div id="status">
+    <div id="statusConnection">Connection: Not connected</div>
+    <div id="statusHands">Hands: 0</div>
+    <div id="statusPinch">Pinch: No</div>
+  </div>
+
+  <!-- PeerJS for WebRTC -->
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
 
   <script type="module">
     import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
@@ -46,8 +111,125 @@
     const raycaster = new THREE.Raycaster();
     let activePanel = null;
 
+    // Hand data from Phone 2
+    let handLandmarks = null;
+    let lastPinch = false;
+    let peer, connection;
+
+    // Canvas for hand overlay
+    const handCanvas = document.getElementById('handCanvas');
+    const handCtx = handCanvas.getContext('2d');
+    handCanvas.width = window.innerWidth;
+    handCanvas.height = window.innerHeight;
+
     init();
+    setupConnection();
     animate();
+
+    function setupConnection() {
+      const myPeerId = 'moto-receiver-' + Math.random().toString(36).substr(2, 9);
+      peer = new Peer(myPeerId);
+
+      peer.on('open', () => {
+        console.log('Peer ready:', myPeerId);
+      });
+
+      document.getElementById('connectBtn').addEventListener('click', () => {
+        const remotePeerId = document.getElementById('peerIdInput').value.trim();
+        if (!remotePeerId) {
+          alert('Please enter Phone 2 ID');
+          return;
+        }
+
+        document.getElementById('connectionStatus').textContent = 'Connecting...';
+        connection = peer.connect(remotePeerId);
+
+        connection.on('open', () => {
+          document.getElementById('connectPanel').classList.add('hidden');
+          document.getElementById('statusConnection').textContent = 'Connection: Connected ✓';
+          document.getElementById('statusConnection').style.color = '#0f0';
+        });
+
+        connection.on('data', (data) => {
+          if (data.type === 'hand') {
+            handLandmarks = data.landmarks;
+            updateHandDisplay();
+          }
+        });
+
+        connection.on('error', (err) => {
+          document.getElementById('connectionStatus').textContent = 'Error: ' + err;
+          document.getElementById('connectionStatus').style.color = '#f00';
+        });
+      });
+    }
+
+    function updateHandDisplay() {
+      handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
+
+      if (!handLandmarks) {
+        document.getElementById('statusHands').textContent = 'Hands: 0';
+        document.getElementById('statusPinch').textContent = 'Pinch: No hand';
+        return;
+      }
+
+      document.getElementById('statusHands').textContent = 'Hands: 1';
+
+      // Draw hand skeleton overlay
+      const connections = [
+        [0, 1], [1, 2], [2, 3], [3, 4],
+        [0, 5], [5, 6], [6, 7], [7, 8],
+        [0, 9], [9, 10], [10, 11], [11, 12],
+        [0, 13], [13, 14], [14, 15], [15, 16],
+        [0, 17], [17, 18], [18, 19], [19, 20],
+        [5, 9], [9, 13], [13, 17]
+      ];
+
+      handCtx.lineWidth = 2;
+      handCtx.lineCap = 'round';
+
+      for (const [s, e] of connections) {
+        const x1 = handLandmarks[s].x * handCanvas.width;
+        const y1 = handLandmarks[s].y * handCanvas.height;
+        const x2 = handLandmarks[e].x * handCanvas.width;
+        const y2 = handLandmarks[e].y * handCanvas.height;
+
+        const gradient = handCtx.createLinearGradient(x1, y1, x2, y2);
+        gradient.addColorStop(0, 'rgba(255, 150, 200, 0.8)');
+        gradient.addColorStop(1, 'rgba(255, 255, 255, 0.6)');
+
+        handCtx.strokeStyle = gradient;
+        handCtx.beginPath();
+        handCtx.moveTo(x1, y1);
+        handCtx.lineTo(x2, y2);
+        handCtx.stroke();
+      }
+
+      for (let j = 0; j < handLandmarks.length; j++) {
+        const x = handLandmarks[j].x * handCanvas.width;
+        const y = handLandmarks[j].y * handCanvas.height;
+        handCtx.beginPath();
+        handCtx.arc(x, y, 3, 0, 2 * Math.PI);
+        handCtx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        handCtx.fill();
+      }
+
+      // Detect pinch
+      const thumb = handLandmarks[4];
+      const index = handLandmarks[8];
+      const dx = (thumb.x - index.x) * handCanvas.width;
+      const dy = (thumb.y - index.y) * handCanvas.height;
+      const distance = Math.sqrt(dx*dx + dy*dy);
+      
+      const isPinching = distance < 50;
+      
+      document.getElementById('statusPinch').textContent = `Pinch: ${isPinching ? 'YES ✓' : `No (${Math.round(distance)}px)`}`;
+      
+      if (isPinching && !lastPinch && reticle.visible) {
+        spawnClockPanel();
+      }
+      lastPinch = isPinching;
+    }
 
     function init() {
       scene = new THREE.Scene();
@@ -134,15 +316,15 @@
 
     function createVisionProGlass() {
       return new THREE.MeshPhysicalMaterial({
-        color: 0x1a1a1a,  // Darker base color
+        color: 0xffffff,
         transparent: true,
-        opacity: 0.85,  // More opaque like the image
-        transmission: 0.3,  // Less transparent
-        roughness: 0.2,
-        metalness: 0.1,
-        clearcoat: 0.8,
-        clearcoatRoughness: 0.1,
-        reflectivity: 0.5,
+        opacity: 0.15,
+        transmission: 0.9,
+        roughness: 0.3,
+        metalness: 0,
+        clearcoat: 0.5,
+        clearcoatRoughness: 0.2,
+        reflectivity: 0.4,
         ior: 1.5,
         thickness: 0.5,
         side: THREE.DoubleSide
@@ -152,33 +334,19 @@
     function makeClockPanel() {
       const group = new THREE.Group();
 
-      // Bigger panel like Vision Pro
-      const panelGeom = new THREE.PlaneGeometry(1.0, 0.4);
+      const panelGeom = new THREE.PlaneGeometry(0.8, 0.3);
       const panelMat = createVisionProGlass();
       const panel = new THREE.Mesh(panelGeom, panelMat);
       group.add(panel);
 
-      // Thicker white border
       const borderGeom = new THREE.EdgesGeometry(panelGeom);
       const borderMat = new THREE.LineBasicMaterial({ 
         color: 0xffffff, 
         transparent: true, 
-        opacity: 0.6,
-        linewidth: 2
+        opacity: 0.4
       });
       const border = new THREE.LineSegments(borderGeom, borderMat);
       group.add(border);
-
-      // Shadow plane behind panel
-      const shadowGeom = new THREE.PlaneGeometry(1.02, 0.42);
-      const shadowMat = new THREE.MeshBasicMaterial({
-        color: 0x000000,
-        transparent: true,
-        opacity: 0.3
-      });
-      const shadow = new THREE.Mesh(shadowGeom, shadowMat);
-      shadow.position.z = -0.005;
-      group.add(shadow);
 
       const clockCanvas = document.createElement('canvas');
       clockCanvas.width = 512;
@@ -189,7 +357,7 @@
       clockTexture.magFilter = THREE.LinearFilter;
 
       const clockMat = new THREE.MeshBasicMaterial({ map: clockTexture, transparent: true });
-      const clockMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.35), clockMat);
+      const clockMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.75, 0.25), clockMat);
       clockMesh.position.z = 0.002;
       group.add(clockMesh);
 
@@ -242,6 +410,8 @@
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
+      handCanvas.width = window.innerWidth;
+      handCanvas.height = window.innerHeight;
     }
 
     function animate() {
