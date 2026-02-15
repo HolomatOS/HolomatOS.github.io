@@ -25,6 +25,9 @@
       height: 100%;
       object-fit: cover;
       z-index: 1;
+      /* mirror the video visually so rear camera appears reversed */
+      transform: scaleX(-1);
+      transform-origin: center center;
     }
     #canvas {
       position: absolute;
@@ -34,6 +37,9 @@
       height: 100%;
       z-index: 2;
       pointer-events: none;
+      /* mirror the canvas too so drawings align with the mirrored video */
+      transform: scaleX(-1);
+      transform-origin: center center;
     }
     #status {
       position: absolute;
@@ -84,7 +90,8 @@
     async function setupCamera() {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: 'user',
+          // Request the rear-facing camera when available
+          facingMode: { ideal: 'environment' },
           width: { ideal: 640 },
           height: { ideal: 480 }
         }
