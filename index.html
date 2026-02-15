@@ -81,9 +81,10 @@
     let frameCount = 0;
 
     async function setupCamera() {
+      // Request rear camera explicitly
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: 'environment',  // Force rear camera (removed 'ideal')
+          facingMode: { exact: 'environment' },  // EXACT forces rear camera
           width: { ideal: 640 },
           height: { ideal: 480 }
         }
@@ -120,20 +121,17 @@
 
       hands.onResults(onResults);
 
-      const cameraFeed = new Camera(video, {
-        onFrame: async () => {
+      // DON'T use MediaPipe Camera - it overrides our camera selection!
+      // Instead, manually send frames
+      async function sendFrames() {
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
           await hands.send({image: video});
-        },
-        width: 640,
-        height: 480
-      });
+        }
+        requestAnimationFrame(sendFrames);
+      }
 
-      cameraFeed.start().then(() => {
-        updateStatus('Model started — show your hand', 'detected');
-      }).catch(err => {
-        console.error(err);
-        updateStatus(`Camera start error: ${err.message}`, 'error');
-      });
+      updateStatus('Model started — show your hand', 'detected');
+      sendFrames();
     }
 
     function updateStatus(text, className) {
