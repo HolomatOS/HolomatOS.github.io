@@ -1,417 +1,222 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>AR Digital Clock</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hand Tracking Test - TensorFlow.js</title>
   <style>
-    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
-    #info {
-      position: absolute; left: 0; right: 0; top: 0;
-      color: #9cf; font: 14px/1.4 system-ui, sans-serif;
-      background: rgba(0,0,0,0.5); padding: 8px 12px; z-index: 2;
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+      font-family: system-ui;
     }
-    #hud {
-      position: absolute; inset: 0; pointer-events: none; z-index: 2;
+    #container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
     }
-    .reticle {
-      position: absolute; left: 50%; top: 50%; width: 60px; height: 60px;
-      border: 2px solid rgba(140,220,255,0.8); border-radius: 50%;
-      transform: translate(-50%,-50%);
-      box-shadow: 0 0 12px rgba(140,220,255,0.6);
+    #video {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
     }
-    .tick { position: absolute; width: 2px; height: 18px; background: rgba(140,220,255,0.8); }
-    .tick.t1 { left: 50%; top: calc(50% - 50px); transform: translateX(-50%); }
-    .tick.t2 { left: 50%; top: calc(50% + 32px); transform: translateX(-50%); }
-    .tick.t3 { top: 50%; left: calc(50% - 50px); transform: translateY(-50%); }
-    .tick.t4 { top: 50%; left: calc(50% + 48px); transform: translateY(-50%); }
-    #handCanvas {
-      position: absolute; inset: 0; pointer-events: none; z-index: 1;
+    #canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
     }
+    #status {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.8);
+      color: #0f0;
+      padding: 15px;
+      border-radius: 8px;
+      font-size: 16px;
+      z-index: 10;
+      min-width: 200px;
+    }
+    .loading { color: #ff0 !important; }
+    .detected { color: #0f0 !important; }
+    .error { color: #f00 !important; }
   </style>
 </head>
 <body>
-  <div id="info">Tap to spawn digital clock. Tap panel to pick up/drop. 🤏 Pinch also works!</div>
-  <div id="hud">
-    <div class="reticle"></div>
-    <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
+  <div id="container">
+    <video id="video" playsinline></video>
+    <canvas id="canvas"></canvas>
+    <div id="status" class="loading">
+      <div>Status: Loading...</div>
+      <div id="fps">FPS: --</div>
+      <div id="hands">Hands: 0</div>
+    </div>
   </div>
-  <canvas id="handCanvas"></canvas>
 
-  <!-- MediaPipe Hand Tracking - Lightweight -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <!-- TensorFlow.js HandPose -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
 
-  <script type="module">
-    import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
-    import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js";
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const statusDiv = document.getElementById('status');
+    const fpsDiv = document.getElementById('fps');
+    const handsDiv = document.getElementById('hands');
 
-    let camera, scene, renderer;
-    let reticle, controller;
-    let hitTestSource = null;
-    let hitTestSourceRequested = false;
-    const panels = [];
-    const raycaster = new THREE.Raycaster();
-    let activePanel = null;
+    let model;
+    let lastTime = Date.now();
+    let frameCount = 0;
 
-    // Lightweight hand tracking
-    let hands, cameraFeed;
-    let handCanvas, handCtx;
-    let handLandmarks = null;
-    let lastPinchState = false;
+    async function setupCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'user',
+          width: { ideal: 640 },
+          height: { ideal: 480 }
+        }
+      });
 
-    init();
-    initLightweightHandTracking();
-    animate();
+      video.srcObject = stream;
 
-    function init() {
-      scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.01, 20);
-
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-      renderer.setPixelRatio(window.devicePixelRatio);
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.xr.enabled = true;
-      document.body.appendChild(renderer.domElement);
-
-      const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
-      scene.add(light);
-
-      const geometry = new THREE.RingGeometry(0.06, 0.075, 32).rotateX(-Math.PI / 2);
-      const material = new THREE.MeshBasicMaterial({ color: 0x8cdcff });
-      reticle = new THREE.Mesh(geometry, material);
-      reticle.matrixAutoUpdate = false;
-      reticle.visible = false;
-      scene.add(reticle);
-
-      controller = renderer.xr.getController(0);
-      controller.addEventListener("select", onSelect);
-      scene.add(controller);
-
-      renderer.domElement.addEventListener("click", onCanvasClick);
-
-      document.body.appendChild(ARButton.createButton(renderer, {
-        requiredFeatures: ["hit-test"],
-        optionalFeatures: ["dom-overlay"],
-        domOverlay: { root: document.body }
-      }));
-
-      window.addEventListener("resize", onWindowResize);
+      return new Promise((resolve) => {
+        video.onloadedmetadata = () => {
+          video.play();
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          resolve(video);
+        };
+      });
     }
 
-    // LIGHTWEIGHT HAND TRACKING - Optimized for speed
-    function initLightweightHandTracking() {
-      handCanvas = document.getElementById('handCanvas');
-      handCanvas.width = window.innerWidth;
-      handCanvas.height = window.innerHeight;
-      handCtx = handCanvas.getContext('2d');
-
-      hands = new Hands({
-        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    async function loadModel() {
+      updateStatus('Loading hand tracking model...', 'loading');
+      
+      // Load TensorFlow.js HandPose model
+      model = await handpose.load({
+        maxContinuousChecks: Infinity,
+        detectionConfidence: 0.7,
+        iouThreshold: 0.3,
+        scoreThreshold: 0.7
       });
-
-      // Minimal settings for maximum speed
-      hands.setOptions({
-        maxNumHands: 1,
-        modelComplexity: 0,  // 0 = Lite model (FASTEST)
-        minDetectionConfidence: 0.5,  // Lower = faster
-        minTrackingConfidence: 0.5    // Lower = faster
-      });
-
-      hands.onResults(onHandResults);
-
-      const videoElement = document.createElement('video');
-      videoElement.style.display = 'none';
-      document.body.appendChild(videoElement);
-
-      // Lower resolution for speed
-      cameraFeed = new Camera(videoElement, {
-        onFrame: async () => {
-          await hands.send({image: videoElement});
-        },
-        width: 320,   // Reduced from 640 for speed
-        height: 240   // Reduced from 480 for speed
-      });
-
-      cameraFeed.start();
+      
+      updateStatus('Model loaded! Show your hand', 'detected');
     }
 
-    function onHandResults(results) {
+    function updateStatus(text, className) {
+      statusDiv.querySelector('div').textContent = `Status: ${text}`;
+      statusDiv.className = className;
+    }
+
+    async function detectHands() {
+      const predictions = await model.estimateHands(video, true);
+
       // Clear canvas
-      handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-        handLandmarks = results.multiHandLandmarks[0];
-        
-        // Minimal drawing - just essential lines
-        drawMinimalHand(handLandmarks);
-        
-        // Check pinch
-        const isPinching = detectPinch(handLandmarks);
-        
-        if (isPinching && !lastPinchState) {
-          onPinchDetected();
-        }
-        lastPinchState = isPinching;
-      } else {
-        handLandmarks = null;
-      }
-    }
+      // Update hand count
+      handsDiv.textContent = `Hands: ${predictions.length}`;
 
-    function drawMinimalHand(landmarks) {
-      const w = handCanvas.width;
-      const h = handCanvas.height;
+      if (predictions.length > 0) {
+        updateStatus('Hand detected!', 'detected');
 
-      // Only draw main connections - minimal lines
-      const mainConnections = [
-        [0,5],[5,9],[9,13],[13,17],  // Palm only
-        [5,8],[9,12],[13,16],[17,20]  // Fingertips only
-      ];
+        for (let i = 0; i < predictions.length; i++) {
+          const hand = predictions[i];
+          
+          // Draw keypoints
+          for (let j = 0; j < hand.landmarks.length; j++) {
+            const [x, y] = hand.landmarks[j];
+            
+            // Draw circle at each landmark
+            ctx.beginPath();
+            ctx.arc(x, y, 5, 0, 2 * Math.PI);
+            ctx.fillStyle = j === 4 || j === 8 ? '#00ff00' : '#ffffff';
+            ctx.fill();
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          }
 
-      handCtx.strokeStyle = 'rgba(255, 200, 220, 0.6)';
-      handCtx.lineWidth = 2;
+          // Draw connections
+          const connections = [
+            [0, 1], [1, 2], [2, 3], [3, 4],  // Thumb
+            [0, 5], [5, 6], [6, 7], [7, 8],  // Index
+            [0, 9], [9, 10], [10, 11], [11, 12],  // Middle
+            [0, 13], [13, 14], [14, 15], [15, 16],  // Ring
+            [0, 17], [17, 18], [18, 19], [19, 20],  // Pinky
+            [5, 9], [9, 13], [13, 17]  // Palm
+          ];
 
-      mainConnections.forEach(([start, end]) => {
-        const s = landmarks[start];
-        const e = landmarks[end];
-        handCtx.beginPath();
-        handCtx.moveTo(s.x * w, s.y * h);
-        handCtx.lineTo(e.x * w, e.y * h);
-        handCtx.stroke();
-      });
+          ctx.strokeStyle = '#ff69b4';
+          ctx.lineWidth = 3;
+          for (const [start, end] of connections) {
+            const [x1, y1] = hand.landmarks[start];
+            const [x2, y2] = hand.landmarks[end];
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+          }
 
-      // Just thumb and index tips
-      [4, 8].forEach(idx => {
-        const p = landmarks[idx];
-        handCtx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-        handCtx.beginPath();
-        handCtx.arc(p.x * w, p.y * h, 4, 0, Math.PI * 2);
-        handCtx.fill();
-      });
-    }
+          // Check for pinch
+          const thumb = hand.landmarks[4];
+          const index = hand.landmarks[8];
+          const distance = Math.sqrt(
+            Math.pow(thumb[0] - index[0], 2) +
+            Math.pow(thumb[1] - index[1], 2)
+          );
 
-    function detectPinch(landmarks) {
-      const thumb = landmarks[4];
-      const index = landmarks[8];
-      const dist = Math.sqrt(
-        Math.pow(thumb.x - index.x, 2) +
-        Math.pow(thumb.y - index.y, 2) +
-        Math.pow(thumb.z - index.z, 2)
-      );
-      return dist < 0.05;
-    }
-
-    function onPinchDetected() {
-      console.log('Pinch!');
-      if (reticle.visible) {
-        spawnClockPanel();
-      }
-    }
-
-    function onSelect() {
-      const hitPanel = getPanelUnderGaze();
-
-      if (activePanel) {
-        activePanel.userData.selected = false;
-        activePanel.scale.setScalar(1);
-        activePanel = null;
-        return;
-      }
-
-      if (hitPanel) {
-        activePanel = hitPanel;
-        activePanel.userData.selected = true;
-        activePanel.scale.setScalar(1.08);
-        return;
-      }
-    }
-
-    function onCanvasClick() {
-      if (reticle.visible) {
-        spawnClockPanel();
-      }
-    }
-
-    function getPanelUnderGaze() {
-      if (panels.length === 0) return null;
-
-      const origin = new THREE.Vector3();
-      const direction = new THREE.Vector3();
-      camera.getWorldPosition(origin);
-      camera.getWorldDirection(direction);
-      raycaster.set(origin, direction);
-
-      const hits = raycaster.intersectObjects(panels, true);
-      if (!hits.length) return null;
-
-      const candidate = hits[0].object.parent;
-      return candidate && candidate.userData && candidate.userData.isPanel ? candidate : null;
-    }
-
-    function spawnClockPanel() {
-      const panel = makeClockPanel();
-      panel.position.setFromMatrixPosition(reticle.matrix);
-      panel.quaternion.setFromRotationMatrix(reticle.matrix);
-      scene.add(panel);
-      panels.push(panel);
-    }
-
-    function createVisionProGlass() {
-      return new THREE.MeshPhysicalMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.15,
-        transmission: 0.9,
-        roughness: 0.3,
-        metalness: 0,
-        clearcoat: 0.5,
-        clearcoatRoughness: 0.2,
-        reflectivity: 0.4,
-        ior: 1.5,
-        thickness: 0.5,
-        side: THREE.DoubleSide
-      });
-    }
-
-    function makeClockPanel() {
-      const group = new THREE.Group();
-
-      const panelGeom = new THREE.PlaneGeometry(0.8, 0.3);
-      const panelMat = createVisionProGlass();
-      const panel = new THREE.Mesh(panelGeom, panelMat);
-      group.add(panel);
-
-      const borderGeom = new THREE.EdgesGeometry(panelGeom);
-      const borderMat = new THREE.LineBasicMaterial({ 
-        color: 0xffffff, 
-        transparent: true, 
-        opacity: 0.4
-      });
-      const border = new THREE.LineSegments(borderGeom, borderMat);
-      group.add(border);
-
-      // Digital clock canvas
-      const clockCanvas = document.createElement('canvas');
-      clockCanvas.width = 512;
-      clockCanvas.height = 128;
-      const clockCtx = clockCanvas.getContext('2d');
-      const clockTexture = new THREE.CanvasTexture(clockCanvas);
-      clockTexture.minFilter = THREE.LinearFilter;
-      clockTexture.magFilter = THREE.LinearFilter;
-
-      const clockMat = new THREE.MeshBasicMaterial({ map: clockTexture, transparent: true });
-      const clockMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.75, 0.25), clockMat);
-      clockMesh.position.z = 0.002;
-      group.add(clockMesh);
-
-      group.userData.isPanel = true;
-      group.userData.selected = false;
-      group.userData.clockCtx = clockCtx;
-      group.userData.clockTexture = clockTexture;
-      group.scale.setScalar(1);
-
-      updateClock(group);
-
-      return group;
-    }
-
-    function updateClock(panel) {
-      if (!panel.userData.clockCtx) return;
-
-      const now = new Date();
-      const timeString = now.toLocaleTimeString('en-US', { 
-        hour: '2-digit', 
-        minute: '2-digit', 
-        second: '2-digit',
-        hour12: true 
-      });
-      const dateString = now.toLocaleDateString('en-US', { 
-        weekday: 'short', 
-        month: 'short', 
-        day: 'numeric' 
-      });
-
-      const ctx = panel.userData.clockCtx;
-      const tex = panel.userData.clockTexture;
-
-      ctx.clearRect(0, 0, 512, 128);
-
-      // Draw time
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 56px system-ui';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(timeString, 256, 55);
-
-      // Draw date
-      ctx.font = '24px system-ui';
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-      ctx.fillText(dateString, 256, 100);
-
-      tex.needsUpdate = true;
-    }
-
-    function onWindowResize() {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      if (handCanvas) {
-        handCanvas.width = window.innerWidth;
-        handCanvas.height = window.innerHeight;
-      }
-    }
-
-    function animate() {
-      renderer.setAnimationLoop(render);
-    }
-
-    function render(timestamp, frame) {
-      if (frame) {
-        const referenceSpace = renderer.xr.getReferenceSpace();
-        const session = renderer.xr.getSession();
-
-        if (!hitTestSourceRequested) {
-          session.requestReferenceSpace("viewer").then((space) => {
-            session.requestHitTestSource({ space }).then((source) => {
-              hitTestSource = source;
-            });
-          });
-
-          session.addEventListener("end", () => {
-            hitTestSourceRequested = false;
-            hitTestSource = null;
-          });
-
-          hitTestSourceRequested = true;
-        }
-
-        if (hitTestSource) {
-          const hitTestResults = frame.getHitTestResults(hitTestSource);
-          if (hitTestResults.length) {
-            const hit = hitTestResults[0];
-            const pose = hit.getPose(referenceSpace);
-            reticle.visible = true;
-            reticle.matrix.fromArray(pose.transform.matrix);
-          } else {
-            reticle.visible = false;
+          if (distance < 40) {
+            // Draw pinch indicator
+            ctx.beginPath();
+            ctx.arc((thumb[0] + index[0]) / 2, (thumb[1] + index[1]) / 2, 30, 0, 2 * Math.PI);
+            ctx.strokeStyle = '#00ff00';
+            ctx.lineWidth = 5;
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(0, 255, 0, 0.3)';
+            ctx.fill();
           }
         }
+      } else {
+        updateStatus('Show your hand to camera', 'loading');
       }
 
-      if (activePanel && reticle.visible) {
-        activePanel.position.setFromMatrixPosition(reticle.matrix);
-        activePanel.quaternion.setFromRotationMatrix(reticle.matrix);
+      // Calculate FPS
+      frameCount++;
+      const now = Date.now();
+      if (now - lastTime > 1000) {
+        const fps = Math.round(frameCount * 1000 / (now - lastTime));
+        fpsDiv.textContent = `FPS: ${fps}`;
+        frameCount = 0;
+        lastTime = now;
       }
 
-      // Update all clocks
-      panels.forEach(panel => {
-        if (panel.userData.clockCtx) {
-          updateClock(panel);
-        }
-      });
-
-      renderer.render(scene, camera);
+      // Continue detection loop
+      requestAnimationFrame(detectHands);
     }
+
+    async function main() {
+      try {
+        await setupCamera();
+        await loadModel();
+        detectHands();
+      } catch (error) {
+        console.error('Error:', error);
+        updateStatus(`Error: ${error.message}`, 'error');
+      }
+    }
+
+    main();
   </script>
 </body>
 </html>
