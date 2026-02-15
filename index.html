@@ -69,11 +69,9 @@
     </div>
   </div>
 
-  <!-- TensorFlow.js HandPose -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
+  <!-- MediaPipe Hands -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
   <script>
     const video = document.getElementById('video');
@@ -83,7 +81,6 @@
     const fpsDiv = document.getElementById('fps');
     const handsDiv = document.getElementById('hands');
 
-    let model;
     let lastTime = Date.now();
     let frameCount = 0;
 
@@ -116,18 +113,37 @@
       });
     }
 
-    async function loadModel() {
-      updateStatus('Loading hand tracking model...', 'loading');
-      
-      // Load TensorFlow.js HandPose model
-      model = await handpose.load({
-        maxContinuousChecks: Infinity,
-        detectionConfidence: 0.7,
-        iouThreshold: 0.3,
-        scoreThreshold: 0.7
+    // Initialize MediaPipe Hands
+    function setupMediaPipe() {
+      updateStatus('Loading MediaPipe Hands...', 'loading');
+
+      const hands = new Hands({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
       });
-      
-      updateStatus('Model loaded! Show your hand', 'detected');
+
+      hands.setOptions({
+        maxNumHands: 2,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.7,
+        minTrackingConfidence: 0.5
+      });
+
+      hands.onResults(onResults);
+
+      const cameraFeed = new Camera(video, {
+        onFrame: async () => {
+          await hands.send({image: video});
+        },
+        width: 640,
+        height: 480
+      });
+
+      cameraFeed.start().then(() => {
+        updateStatus('Model started — show your hand', 'detected');
+      }).catch(err => {
+        console.error(err);
+        updateStatus(`Camera start error: ${err.message}`, 'error');
+      });
     }
 
     function updateStatus(text, className) {
@@ -135,82 +151,76 @@
       statusDiv.className = className;
     }
 
-    async function detectHands() {
-      const predictions = await model.estimateHands(video, true);
-
-      // Clear canvas
+    // MediaPipe results handler
+    function onResults(results) {
+      // Clear canvas (use CSS-size coordinates; context transform handles DPR and mirroring)
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Update hand count
-      handsDiv.textContent = `Hands: ${predictions.length}`;
+      const hands = results.multiHandLandmarks || [];
+      handsDiv.textContent = `Hands: ${hands.length}`;
 
-      if (predictions.length > 0) {
-        updateStatus('Hand detected!', 'detected');
+      if (hands.length > 0) updateStatus('Hand detected!', 'detected');
+      else updateStatus('Show your hand to camera', 'loading');
 
-        for (let i = 0; i < predictions.length; i++) {
-          const hand = predictions[i];
-          
-          // Draw keypoints (made larger/brighter for testing)
-          for (let j = 0; j < hand.landmarks.length; j++) {
-            const [x, y] = hand.landmarks[j];
-            const radius = (j === 4 || j === 8) ? 14 : 10;
-            ctx.beginPath();
-            ctx.arc(x, y, radius, 0, 2 * Math.PI);
-            ctx.fillStyle = j === 4 || j === 8 ? '#00ff00' : '#ffffff';
-            ctx.fill();
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 4;
-            ctx.stroke();
-          }
+      for (const landmarks of hands) {
+        // Draw connections
+        const connections = [
+          [0, 1], [1, 2], [2, 3], [3, 4],
+          [0, 5], [5, 6], [6, 7], [7, 8],
+          [0, 9], [9, 10], [10, 11], [11, 12],
+          [0, 13], [13, 14], [14, 15], [15, 16],
+          [0, 17], [17, 18], [18, 19], [19, 20],
+          [5, 9], [9, 13], [13, 17]
+        ];
 
-          // Draw connections
-          const connections = [
-            [0, 1], [1, 2], [2, 3], [3, 4],  // Thumb
-            [0, 5], [5, 6], [6, 7], [7, 8],  // Index
-            [0, 9], [9, 10], [10, 11], [11, 12],  // Middle
-            [0, 13], [13, 14], [14, 15], [15, 16],  // Ring
-            [0, 17], [17, 18], [18, 19], [19, 20],  // Pinky
-            [5, 9], [9, 13], [13, 17]  // Palm
-          ];
-
-          // Make connections bold and bright for testing
-          ctx.strokeStyle = '#ff00ff';
-          ctx.lineWidth = 10;
-          for (const [start, end] of connections) {
-            const [x1, y1] = hand.landmarks[start];
-            const [x2, y2] = hand.landmarks[end];
-            ctx.beginPath();
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-            ctx.stroke();
-          }
-
-          // Check for pinch
-          const thumb = hand.landmarks[4];
-          const index = hand.landmarks[8];
-          const distance = Math.sqrt(
-            Math.pow(thumb[0] - index[0], 2) +
-            Math.pow(thumb[1] - index[1], 2)
-          );
-
-          if (distance < 60) {
-            // Draw larger pinch indicator for testing
-            const cx = (thumb[0] + index[0]) / 2;
-            const cy = (thumb[1] + index[1]) / 2;
-            ctx.beginPath();
-            ctx.arc(cx, cy, 80, 0, 2 * Math.PI);
-            ctx.strokeStyle = '#00ff00';
-            ctx.lineWidth = 12;
-            ctx.stroke();
-            ctx.fillStyle = 'rgba(0, 255, 0, 0.45)';
-            ctx.fill();
-          }
+        ctx.strokeStyle = '#ff00ff';
+        ctx.lineWidth = 10;
+        for (const [s, e] of connections) {
+          const x1 = landmarks[s].x * video.videoWidth;
+          const y1 = landmarks[s].y * video.videoHeight;
+          const x2 = landmarks[e].x * video.videoWidth;
+          const y2 = landmarks[e].y * video.videoHeight;
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
         }
-      } else {
-        updateStatus('Show your hand to camera', 'loading');
+
+        // Draw keypoints
+        for (let j = 0; j < landmarks.length; j++) {
+          const lm = landmarks[j];
+          const x = lm.x * video.videoWidth;
+          const y = lm.y * video.videoHeight;
+          const radius = (j === 4 || j === 8) ? 14 : 10;
+          ctx.beginPath();
+          ctx.arc(x, y, radius, 0, 2 * Math.PI);
+          ctx.fillStyle = (j === 4 || j === 8) ? '#00ff00' : '#ffffff';
+          ctx.fill();
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 4;
+          ctx.stroke();
+        }
+
+        // Simple pinch check using thumb tip (4) and index tip (8)
+        const thumb = landmarks[4];
+        const index = landmarks[8];
+        const dx = (thumb.x - index.x) * video.videoWidth;
+        const dy = (thumb.y - index.y) * video.videoHeight;
+        const distance = Math.sqrt(dx*dx + dy*dy);
+        if (distance < 60) {
+          const cx = ((thumb.x + index.x) / 2) * video.videoWidth;
+          const cy = ((thumb.y + index.y) / 2) * video.videoHeight;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 80, 0, 2 * Math.PI);
+          ctx.strokeStyle = '#00ff00';
+          ctx.lineWidth = 12;
+          ctx.stroke();
+          ctx.fillStyle = 'rgba(0, 255, 0, 0.45)';
+          ctx.fill();
+        }
       }
 
-      // Calculate FPS
+      // FPS
       frameCount++;
       const now = Date.now();
       if (now - lastTime > 1000) {
@@ -219,16 +229,18 @@
         frameCount = 0;
         lastTime = now;
       }
-
-      // Continue detection loop
-      requestAnimationFrame(detectHands);
     }
 
     async function main() {
       try {
         await setupCamera();
-        await loadModel();
-        detectHands();
+
+        // Flip the 2D context horizontally so drawings align with mirrored video
+        const dpr = window.devicePixelRatio || 1;
+        // canvas.width is in device pixels; setTransform with negative scale flips horizontally
+        ctx.setTransform(-dpr, 0, 0, dpr, canvas.width, 0);
+
+        setupMediaPipe();
       } catch (error) {
         console.error('Error:', error);
         updateStatus(`Error: ${error.message}`, 'error');
