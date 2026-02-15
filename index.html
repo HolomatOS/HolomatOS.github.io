@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Hand Tracking Test - TensorFlow.js</title>
+  <title>Hand Tracking Test - Minimal</title>
   <style>
     body {
       margin: 0;
@@ -25,7 +25,6 @@
       height: 100%;
       object-fit: cover;
       z-index: 1;
-      /* mirror the video visually so rear camera appears reversed */
       transform: scaleX(-1);
       transform-origin: center center;
     }
@@ -37,7 +36,6 @@
       height: 100%;
       z-index: 2;
       pointer-events: none;
-      /* canvas must NOT be mirrored by CSS; drawing is flipped via the 2D context */
     }
     #status {
       position: absolute;
@@ -85,7 +83,6 @@
     async function setupCamera() {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          // Request the rear-facing camera when available
           facingMode: { ideal: 'environment' },
           width: { ideal: 640 },
           height: { ideal: 480 }
@@ -97,11 +94,9 @@
       return new Promise((resolve) => {
         video.onloadedmetadata = () => {
           video.play();
-          // set backing buffer to account for devicePixelRatio for crisp drawing
           const dpr = window.devicePixelRatio || 1;
           canvas.width = Math.round(video.videoWidth * dpr);
           canvas.height = Math.round(video.videoHeight * dpr);
-          // set CSS size to match displayed video element size
           canvas.style.width = `${video.clientWidth}px`;
           canvas.style.height = `${video.clientHeight}px`;
           resolve(video);
@@ -109,7 +104,6 @@
       });
     }
 
-    // Initialize MediaPipe Hands
     function setupMediaPipe() {
       updateStatus('Loading MediaPipe Hands...', 'loading');
 
@@ -147,9 +141,8 @@
       statusDiv.className = className;
     }
 
-    // MediaPipe results handler
+    // MediaPipe results handler - MINIMAL VISION PRO STYLE
     function onResults(results) {
-      // Clear canvas (use CSS-size coordinates; context transform handles DPR and mirroring)
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       const hands = results.multiHandLandmarks || [];
@@ -159,59 +152,48 @@
       else updateStatus('Show your hand to camera', 'loading');
 
       for (const landmarks of hands) {
-        // Draw connections
+        // MINIMAL CONNECTIONS - Vision Pro style
         const connections = [
-          [0, 1], [1, 2], [2, 3], [3, 4],
-          [0, 5], [5, 6], [6, 7], [7, 8],
-          [0, 9], [9, 10], [10, 11], [11, 12],
-          [0, 13], [13, 14], [14, 15], [15, 16],
-          [0, 17], [17, 18], [18, 19], [19, 20],
-          [5, 9], [9, 13], [13, 17]
+          [0, 1], [1, 2], [2, 3], [3, 4],  // Thumb
+          [0, 5], [5, 6], [6, 7], [7, 8],  // Index
+          [0, 9], [9, 10], [10, 11], [11, 12],  // Middle
+          [0, 13], [13, 14], [14, 15], [15, 16],  // Ring
+          [0, 17], [17, 18], [18, 19], [19, 20],  // Pinky
+          [5, 9], [9, 13], [13, 17]  // Palm
         ];
 
-        ctx.strokeStyle = '#ff00ff';
-        ctx.lineWidth = 10;
+        // Draw connections with pink-to-white gradient
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
         for (const [s, e] of connections) {
           const x1 = landmarks[s].x * video.videoWidth;
           const y1 = landmarks[s].y * video.videoHeight;
           const x2 = landmarks[e].x * video.videoWidth;
           const y2 = landmarks[e].y * video.videoHeight;
+
+          // Create gradient for each line - Pink to White
+          const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
+          gradient.addColorStop(0, 'rgba(255, 150, 200, 0.8)');  // Pink
+          gradient.addColorStop(1, 'rgba(255, 255, 255, 0.6)');  // White
+
+          ctx.strokeStyle = gradient;
           ctx.beginPath();
           ctx.moveTo(x1, y1);
           ctx.lineTo(x2, y2);
           ctx.stroke();
         }
 
-        // Draw keypoints
+        // Small dots at joints - minimal
         for (let j = 0; j < landmarks.length; j++) {
           const lm = landmarks[j];
           const x = lm.x * video.videoWidth;
           const y = lm.y * video.videoHeight;
-          const radius = (j === 4 || j === 8) ? 14 : 10;
+          
           ctx.beginPath();
-          ctx.arc(x, y, radius, 0, 2 * Math.PI);
-          ctx.fillStyle = (j === 4 || j === 8) ? '#00ff00' : '#ffffff';
-          ctx.fill();
-          ctx.strokeStyle = '#000000';
-          ctx.lineWidth = 4;
-          ctx.stroke();
-        }
-
-        // Simple pinch check using thumb tip (4) and index tip (8)
-        const thumb = landmarks[4];
-        const index = landmarks[8];
-        const dx = (thumb.x - index.x) * video.videoWidth;
-        const dy = (thumb.y - index.y) * video.videoHeight;
-        const distance = Math.sqrt(dx*dx + dy*dy);
-        if (distance < 60) {
-          const cx = ((thumb.x + index.x) / 2) * video.videoWidth;
-          const cy = ((thumb.y + index.y) / 2) * video.videoHeight;
-          ctx.beginPath();
-          ctx.arc(cx, cy, 80, 0, 2 * Math.PI);
-          ctx.strokeStyle = '#00ff00';
-          ctx.lineWidth = 12;
-          ctx.stroke();
-          ctx.fillStyle = 'rgba(0, 255, 0, 0.45)';
+          ctx.arc(x, y, 3, 0, 2 * Math.PI);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
           ctx.fill();
         }
       }
@@ -231,9 +213,7 @@
       try {
         await setupCamera();
 
-        // Flip the 2D context horizontally so drawings align with mirrored video
         const dpr = window.devicePixelRatio || 1;
-        // canvas.width is in device pixels; setTransform with negative scale flips horizontally
         ctx.setTransform(-dpr, 0, 0, dpr, canvas.width, 0);
 
         setupMediaPipe();
