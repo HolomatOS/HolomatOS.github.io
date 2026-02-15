@@ -31,6 +31,22 @@
     #handVideo {
       display: none;
     }
+    #debug {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.8);
+      color: #0f0;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: monospace;
+      z-index: 10;
+      min-width: 250px;
+    }
+    .debug-error { color: #f00 !important; }
+    .debug-warning { color: #ff0 !important; }
+    .debug-success { color: #0f0 !important; }
   </style>
 </head>
 <body>
@@ -41,6 +57,13 @@
   </div>
   <canvas id="handCanvas"></canvas>
   <video id="handVideo" playsinline></video>
+  <div id="debug">
+    <div id="debugCamera">Camera: Initializing...</div>
+    <div id="debugModel">Model: Not loaded</div>
+    <div id="debugHands">Hands: 0</div>
+    <div id="debugFPS">FPS: --</div>
+    <div id="debugPinch">Pinch: No</div>
+  </div>
 
   <!-- MediaPipe Hands -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
@@ -61,6 +84,15 @@
     let hands, handVideo, handCanvas, handCtx;
     let lastPinch = false;
     let isInAR = false;
+    let frameCount = 0;
+    let lastFPSTime = Date.now();
+
+    // Debug elements
+    const debugCamera = () => document.getElementById('debugCamera');
+    const debugModel = () => document.getElementById('debugModel');
+    const debugHands = () => document.getElementById('debugHands');
+    const debugFPS = () => document.getElementById('debugFPS');
+    const debugPinch = () => document.getElementById('debugPinch');
 
     init();
     initHandTracking();
@@ -118,6 +150,9 @@
       handCtx = handCanvas.getContext('2d');
 
       try {
+        debugCamera().textContent = 'Camera: Requesting...';
+        debugCamera().className = 'debug-warning';
+
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { exact: 'environment' },
@@ -129,8 +164,17 @@
         handVideo.srcObject = stream;
         await handVideo.play();
 
+        debugCamera().textContent = `Camera: Active (${handVideo.videoWidth}x${handVideo.videoHeight})`;
+        debugCamera().className = 'debug-success';
+
+        debugModel().textContent = 'Model: Loading...';
+        debugModel().className = 'debug-warning';
+
         hands = new Hands({
-          locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+          locateFile: (file) => {
+            console.log('Loading MediaPipe file:', file);
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+          }
         });
 
         hands.setOptions({
@@ -142,22 +186,48 @@
 
         hands.onResults(onHandResults);
 
+        debugModel().textContent = 'Model: Loaded ✓';
+        debugModel().className = 'debug-success';
+
         // Send frames manually
         async function sendFrames() {
           if (handVideo.readyState === handVideo.HAVE_ENOUGH_DATA) {
-            await hands.send({image: handVideo});
+            try {
+              await hands.send({image: handVideo});
+            } catch (e) {
+              console.error('Send frame error:', e);
+              debugModel().textContent = `Model: Error - ${e.message}`;
+              debugModel().className = 'debug-error';
+            }
           }
           requestAnimationFrame(sendFrames);
         }
         sendFrames();
 
-        console.log('Hand tracking initialized');
+        console.log('Hand tracking initialized successfully');
       } catch (error) {
         console.error('Hand tracking error:', error);
+        debugCamera().textContent = `Camera: Error - ${error.message}`;
+        debugCamera().className = 'debug-error';
       }
     }
 
     function onHandResults(results) {
+      // Update FPS
+      frameCount++;
+      const now = Date.now();
+      if (now - lastFPSTime > 1000) {
+        const fps = Math.round(frameCount * 1000 / (now - lastFPSTime));
+        debugFPS().textContent = `FPS: ${fps}`;
+        debugFPS().className = fps > 10 ? 'debug-success' : fps > 5 ? 'debug-warning' : 'debug-error';
+        frameCount = 0;
+        lastFPSTime = now;
+      }
+
+      const hands = results.multiHandLandmarks || [];
+      debugHands().textContent = `Hands: ${hands.length}`;
+      debugHands().className = hands.length > 0 ? 'debug-success' : 'debug-warning';
+
       // Only draw hand skeleton when NOT in AR mode
       if (isInAR) {
         handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
@@ -165,8 +235,6 @@
       }
 
       handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
-
-      const hands = results.multiHandLandmarks || [];
 
       if (hands.length > 0) {
         const landmarks = hands[0];
@@ -220,10 +288,15 @@
         
         const isPinching = distance < 50;
         
+        debugPinch().textContent = `Pinch: ${isPinching ? 'YES ✓' : 'No'} (${Math.round(distance)}px)`;
+        debugPinch().className = isPinching ? 'debug-success' : '';
+        
         if (isPinching && !lastPinch) {
           onPinchDetected();
         }
         lastPinch = isPinching;
+      } else {
+        debugPinch().textContent = 'Pinch: No hand';
       }
     }
 
