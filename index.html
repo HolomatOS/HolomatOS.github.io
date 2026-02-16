@@ -74,7 +74,7 @@
   </style>
 </head>
 <body>
-  <div id="info">📱 MOTO G | 🤏 Pinch = Spawn/Grab | Camera offset: 200px left (adjust HAND_OFFSET_X in code)</div>
+  <div id="info">📱 MOTO G | 🤏 Pinch = Spawn/Grab | Camera offset: 200px UP (adjust HAND_OFFSET_Y in code)</div>
   <div id="hud">
     <div class="reticle"></div>
     <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
@@ -117,10 +117,10 @@
     let peer, connection;
 
     // Offset adjustment for camera position difference
-    // Phone 2 camera is lower/different angle than Moto G
-    const HAND_OFFSET_X = -200; // Pixels to shift left (negative) or right (positive)
-    const HAND_OFFSET_Y = 0;    // Pixels to shift up (negative) or down (positive)
-    const HAND_SCALE = 1.0;     // Scale factor if needed
+    // Phone 2 camera is lower than Moto G, so shift hand UP
+    const HAND_OFFSET_X = 0;     // No horizontal shift
+    const HAND_OFFSET_Y = -100;  // Pixels to shift UP (negative = up, positive = down)
+    const HAND_SCALE = 1.0;      // Scale factor if needed
 
     // Canvas for hand overlay
     const handCanvas = document.getElementById('handCanvas');
@@ -200,7 +200,7 @@
       const isPinching = distance < 50;
       
       document.getElementById('statusPinch').textContent = `Pinch: ${isPinching ? 'YES ✓ (holding)' : `No (${Math.round(distance)}px)`}`;
-      document.getElementById('statusPinch').innerHTML += `<br>Offset: ${HAND_OFFSET_X}px left`;
+      document.getElementById('statusPinch').innerHTML += `<br>Offset: ${Math.abs(HAND_OFFSET_Y)}px up`;
       
       // PINCH START - Grab panel or spawn if no panel
       if (isPinching && !lastPinch) {
