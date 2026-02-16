@@ -25,6 +25,28 @@
     .tick.t2 { left: 50%; top: calc(50% + 32px); transform: translateX(-50%); }
     .tick.t3 { top: 50%; left: calc(50% - 50px); transform: translateY(-50%); }
     .tick.t4 { top: 50%; left: calc(50% + 48px); transform: translateY(-50%); }
+    
+    /* Make AR button visible and styled */
+    #ARButton {
+      position: fixed !important;
+      bottom: 20px !important;
+      left: 50% !important;
+      transform: translateX(-50%) !important;
+      padding: 15px 40px !important;
+      background: #1E88E5 !important;
+      color: white !important;
+      border: none !important;
+      border-radius: 8px !important;
+      font-size: 18px !important;
+      font-weight: bold !important;
+      cursor: pointer !important;
+      z-index: 999 !important;
+      box-shadow: 0 4px 12px rgba(30, 136, 229, 0.4) !important;
+    }
+    
+    #ARButton:hover {
+      background: #1976D2 !important;
+    }
   </style>
 </head>
 <body>
@@ -37,7 +59,6 @@
   <script type="module">
     import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
     import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js";
-    import { RoundedBoxGeometry } from "https://unpkg.com/three@0.160.0/examples/jsm/geometries/RoundedBoxGeometry.js";
 
     let camera, scene, renderer;
     let reticle, controller;
@@ -91,11 +112,13 @@
 
       renderer.domElement.addEventListener("click", onCanvasClick);
 
-      document.body.appendChild(ARButton.createButton(renderer, {
+      const arButton = ARButton.createButton(renderer, {
         requiredFeatures: ["hit-test"],
         optionalFeatures: ["dom-overlay"],
         domOverlay: { root: document.body }
-      }));
+      });
+      arButton.id = 'ARButton';  // Set ID for CSS styling
+      document.body.appendChild(arButton);
 
       window.addEventListener("resize", onWindowResize);
     }
@@ -242,8 +265,8 @@
     function makeTextPanel() {
       const group = new THREE.Group();
 
-      // Background with rounded corners
-      const bgGeom = new RoundedBoxGeometry(1.4, 0.25, 0.01, 4, 0.02);
+      // Simple rounded background
+      const bgGeom = new THREE.PlaneGeometry(1.4, 0.25);
       const bgMat = new THREE.MeshPhysicalMaterial({
         color: 0x3a3a4a,
         transparent: true,
@@ -253,6 +276,12 @@
       });
       const bg = new THREE.Mesh(bgGeom, bgMat);
       group.add(bg);
+
+      // Border for rounded effect
+      const borderGeom = new THREE.EdgesGeometry(bgGeom);
+      const borderMat = new THREE.LineBasicMaterial({ color: 0x5a5a6a, opacity: 0.5, transparent: true });
+      const border = new THREE.LineSegments(borderGeom, borderMat);
+      group.add(border);
 
       // Title "Text preview"
       const titleCanvas = document.createElement('canvas');
@@ -293,8 +322,8 @@
     function makeVisionProKeyboard() {
       const group = new THREE.Group();
 
-      // Main keyboard background - rounded like Vision Pro
-      const kbGeom = new RoundedBoxGeometry(1.5, 0.65, 0.02, 4, 0.03);
+      // Main keyboard background - simple plane
+      const kbGeom = new THREE.PlaneGeometry(1.5, 0.65);
       const kbMat = new THREE.MeshPhysicalMaterial({
         color: 0x4a4a5a,
         transparent: true,
@@ -304,6 +333,12 @@
       });
       const kbBg = new THREE.Mesh(kbGeom, kbMat);
       group.add(kbBg);
+
+      // Border
+      const borderGeom = new THREE.EdgesGeometry(kbGeom);
+      const borderMat = new THREE.LineBasicMaterial({ color: 0x6a6a7a, opacity: 0.6, transparent: true });
+      const border = new THREE.LineSegments(borderGeom, borderMat);
+      group.add(border);
 
       // Suggestion bar
       makeSuggestionBar(group);
@@ -366,7 +401,7 @@
       const y = 0.25;
 
       suggestions.forEach((text, idx) => {
-        const suggBox = new RoundedBoxGeometry(suggWidth, 0.08, 0.01, 2, 0.015);
+        const suggBox = new THREE.PlaneGeometry(suggWidth, 0.08);
         const suggMat = new THREE.MeshPhysicalMaterial({
           color: 0x5a5a6a,
           transparent: true,
@@ -395,7 +430,7 @@
       });
 
       // Microphone icon (right side)
-      const micBox = new RoundedBoxGeometry(0.09, 0.08, 0.01, 2, 0.015);
+      const micBox = new THREE.PlaneGeometry(0.09, 0.08);
       const micMat = new THREE.MeshPhysicalMaterial({
         color: 0x5a5a6a,
         transparent: true,
@@ -425,8 +460,9 @@
     function makeRoundKey(char, width, height) {
       const group = new THREE.Group();
 
-      // Rounded 3D key
-      const keyGeom = new RoundedBoxGeometry(width, height, 0.015, 2, 0.015);
+      // Use circle for round keys (Vision Pro style)
+      const radius = Math.min(width, height) / 2;
+      const keyGeom = new THREE.CircleGeometry(radius, 32);
       const keyMat = new THREE.MeshPhysicalMaterial({
         color: 0x6a6a7a,
         transparent: true,
@@ -437,6 +473,17 @@
       });
       const keyMesh = new THREE.Mesh(keyGeom, keyMat);
       group.add(keyMesh);
+
+      // Subtle border
+      const borderGeom = new THREE.RingGeometry(radius * 0.95, radius, 32);
+      const borderMat = new THREE.MeshBasicMaterial({ 
+        color: 0x8a8a9a, 
+        transparent: true, 
+        opacity: 0.3 
+      });
+      const border = new THREE.Mesh(borderGeom, borderMat);
+      border.position.z = 0.001;
+      group.add(border);
 
       // Label
       const canvas = document.createElement('canvas');
