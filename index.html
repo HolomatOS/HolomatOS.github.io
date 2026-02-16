@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>AR Vision Pro Keyboard</title>
+  <title>Moto G - AR Receiver</title>
   <style>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
     #info {
@@ -25,36 +25,79 @@
     .tick.t2 { left: 50%; top: calc(50% + 32px); transform: translateX(-50%); }
     .tick.t3 { top: 50%; left: calc(50% - 50px); transform: translateY(-50%); }
     .tick.t4 { top: 50%; left: calc(50% + 48px); transform: translateY(-50%); }
-    
-    /* Make AR button visible and styled */
-    #ARButton {
-      position: fixed !important;
-      bottom: 20px !important;
-      left: 50% !important;
-      transform: translateX(-50%) !important;
-      padding: 15px 40px !important;
-      background: #1E88E5 !important;
-      color: white !important;
-      border: none !important;
-      border-radius: 8px !important;
-      font-size: 18px !important;
-      font-weight: bold !important;
-      cursor: pointer !important;
-      z-index: 999 !important;
-      box-shadow: 0 4px 12px rgba(30, 136, 229, 0.4) !important;
+    #handCanvas {
+      position: absolute; inset: 0; pointer-events: none; z-index: 1;
     }
-    
-    #ARButton:hover {
-      background: #1976D2 !important;
+    #connectPanel {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.95);
+      padding: 30px;
+      border-radius: 12px;
+      z-index: 100;
+      text-align: center;
     }
+    #connectPanel input {
+      width: 300px;
+      padding: 15px;
+      font-size: 18px;
+      border: 2px solid #1E88E5;
+      border-radius: 8px;
+      margin: 15px 0;
+      font-family: monospace;
+    }
+    #connectPanel button {
+      background: #1E88E5;
+      color: white;
+      border: none;
+      padding: 15px 40px;
+      font-size: 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    #status {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.8);
+      color: #0f0;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-family: monospace;
+      z-index: 10;
+    }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
-  <div id="info">⌨️ TAP ANYWHERE = Spawn keyboard | Look at key + tap = Type | Grab keyboard = Look at base + tap</div>
+  <div id="info">📱 MOTO G | 🤏 Pinch = Spawn/Grab | Camera offset: 200px left (adjust HAND_OFFSET_X in code)</div>
   <div id="hud">
     <div class="reticle"></div>
     <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
   </div>
+  <canvas id="handCanvas"></canvas>
+
+  <div id="connectPanel">
+    <h2 style="color:#fff;">📱 Connect to Phone 2</h2>
+    <p style="color:#aaa;">Enter the ID shown on Phone 2:</p>
+    <input type="text" id="peerIdInput" placeholder="hand-camera-xxxxx" />
+    <br>
+    <button id="connectBtn">CONNECT</button>
+    <div id="connectionStatus" style="margin-top:15px; color:#ff0;"></div>
+  </div>
+
+  <div id="status">
+    <div id="statusConnection">Connection: Not connected</div>
+    <div id="statusHands">Hands: 0</div>
+    <div id="statusPinch">Pinch: No</div>
+  </div>
+
+  <!-- PeerJS for WebRTC -->
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
 
   <script type="module">
     import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
@@ -67,37 +110,141 @@
     const panels = [];
     const raycaster = new THREE.Raycaster();
     let activePanel = null;
-    let currentText = "";
-    let textDisplayPanel = null;
+
+    // Hand data from Phone 2
+    let handLandmarks = null;
+    let lastPinch = false;
+    let peer, connection;
+
+    // Offset adjustment for camera position difference
+    // Phone 2 camera is lower/different angle than Moto G
+    const HAND_OFFSET_X = -200; // Pixels to shift left (negative) or right (positive)
+    const HAND_OFFSET_Y = 0;    // Pixels to shift up (negative) or down (positive)
+    const HAND_SCALE = 1.0;     // Scale factor if needed
+
+    // Canvas for hand overlay
+    const handCanvas = document.getElementById('handCanvas');
+    const handCtx = handCanvas.getContext('2d');
+    handCanvas.width = window.innerWidth;
+    handCanvas.height = window.innerHeight;
 
     init();
+    setupConnection();
     animate();
+
+    function setupConnection() {
+      const myPeerId = 'moto-receiver-' + Math.random().toString(36).substr(2, 9);
+      peer = new Peer(myPeerId);
+
+      peer.on('open', () => {
+        console.log('Peer ready:', myPeerId);
+      });
+
+      document.getElementById('connectBtn').addEventListener('click', () => {
+        const remotePeerId = document.getElementById('peerIdInput').value.trim();
+        if (!remotePeerId) {
+          alert('Please enter Phone 2 ID');
+          return;
+        }
+
+        document.getElementById('connectionStatus').textContent = 'Connecting...';
+        connection = peer.connect(remotePeerId);
+
+        connection.on('open', () => {
+          document.getElementById('connectPanel').classList.add('hidden');
+          document.getElementById('statusConnection').textContent = 'Connection: Connected ✓';
+          document.getElementById('statusConnection').style.color = '#0f0';
+        });
+
+        connection.on('data', (data) => {
+          if (data.type === 'hand') {
+            handLandmarks = data.landmarks;
+            updateHandDisplay();
+          }
+        });
+
+        connection.on('error', (err) => {
+          document.getElementById('connectionStatus').textContent = 'Error: ' + err;
+          document.getElementById('connectionStatus').style.color = '#f00';
+        });
+      });
+    }
+
+    function updateHandDisplay() {
+      // Clear canvas - no skeleton drawing
+      handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
+
+      if (!handLandmarks) {
+        document.getElementById('statusHands').textContent = 'Hands: 0';
+        document.getElementById('statusPinch').textContent = 'Pinch: No hand';
+        lastPinch = false;
+        return;
+      }
+
+      document.getElementById('statusHands').textContent = 'Hands: 1';
+
+      // Apply offset to compensate for camera position difference
+      // Convert normalized coordinates (0-1) to screen coordinates with offset
+      const thumb = handLandmarks[4];
+      const index = handLandmarks[8];
+      
+      const thumbX = (thumb.x * handCanvas.width) + HAND_OFFSET_X;
+      const thumbY = (thumb.y * handCanvas.height) + HAND_OFFSET_Y;
+      const indexX = (index.x * handCanvas.width) + HAND_OFFSET_X;
+      const indexY = (index.y * handCanvas.height) + HAND_OFFSET_Y;
+      
+      const dx = thumbX - indexX;
+      const dy = thumbY - indexY;
+      const distance = Math.sqrt(dx*dx + dy*dy);
+      
+      const isPinching = distance < 50;
+      
+      document.getElementById('statusPinch').textContent = `Pinch: ${isPinching ? 'YES ✓ (holding)' : `No (${Math.round(distance)}px)`}`;
+      document.getElementById('statusPinch').innerHTML += `<br>Offset: ${HAND_OFFSET_X}px left`;
+      
+      // PINCH START - Grab panel or spawn if no panel
+      if (isPinching && !lastPinch) {
+        const hitPanel = getPanelUnderGaze();
+        if (hitPanel) {
+          // Grab existing panel
+          activePanel = hitPanel;
+          activePanel.userData.selected = true;
+          activePanel.scale.setScalar(1.08);
+        } else if (reticle.visible) {
+          // Spawn new panel and immediately grab it
+          spawnClockPanel();
+          if (panels.length > 0) {
+            activePanel = panels[panels.length - 1];
+            activePanel.userData.selected = true;
+            activePanel.scale.setScalar(1.08);
+          }
+        }
+      }
+      
+      // PINCH RELEASE - Drop panel
+      if (!isPinching && lastPinch) {
+        if (activePanel) {
+          activePanel.userData.selected = false;
+          activePanel.scale.setScalar(1);
+          activePanel = null;
+        }
+      }
+      
+      lastPinch = isPinching;
+    }
 
     function init() {
       scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(85, window.innerWidth / window.innerHeight, 0.01, 20);
+      camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.01, 20);
 
-      renderer = new THREE.WebGLRenderer({ 
-        antialias: true, 
-        alpha: true,
-        powerPreference: "high-performance"
-      });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.xr.enabled = true;
-      renderer.outputEncoding = THREE.sRGBEncoding;
-      
       document.body.appendChild(renderer.domElement);
 
       const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
       scene.add(light);
-
-      const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-      dirLight.position.set(5, 10, 7.5);
-      scene.add(dirLight);
-
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-      scene.add(ambientLight);
 
       const geometry = new THREE.RingGeometry(0.06, 0.075, 32).rotateX(-Math.PI / 2);
       const material = new THREE.MeshBasicMaterial({ color: 0x8cdcff });
@@ -112,28 +259,18 @@
 
       renderer.domElement.addEventListener("click", onCanvasClick);
 
-      const arButton = ARButton.createButton(renderer, {
+      document.body.appendChild(ARButton.createButton(renderer, {
         requiredFeatures: ["hit-test"],
         optionalFeatures: ["dom-overlay"],
         domOverlay: { root: document.body }
-      });
-      arButton.id = 'ARButton';  // Set ID for CSS styling
-      document.body.appendChild(arButton);
+      }));
 
       window.addEventListener("resize", onWindowResize);
     }
 
-    function onSelect() { handleClick(); }
-    function onCanvasClick() { handleClick(); }
-
-    function handleClick() {
-      const hitKey = getKeyUnderGaze();
-      if (hitKey) {
-        handleKeyPress(hitKey.userData.key);
-        return;
-      }
-
+    function onSelect() {
       const hitPanel = getPanelUnderGaze();
+
       if (activePanel) {
         activePanel.userData.selected = false;
         activePanel.scale.setScalar(1);
@@ -141,94 +278,23 @@
         return;
       }
 
-      if (hitPanel && !hitPanel.userData.isKey) {
+      if (hitPanel) {
         activePanel = hitPanel;
         activePanel.userData.selected = true;
-        activePanel.scale.setScalar(1.05);
+        activePanel.scale.setScalar(1.08);
         return;
       }
+    }
 
+    function onCanvasClick() {
       if (reticle.visible) {
-        spawnKeyboard();
+        spawnClockPanel();
       }
-    }
-
-    function handleKeyPress(key) {
-      console.log('Key:', key);
-      
-      if (key === 'space') {
-        currentText += ' ';
-      } else if (key === 'backspace') {
-        currentText = currentText.slice(0, -1);
-      } else if (key === 'return') {
-        currentText += '\n';
-      } else if (key === 'shift') {
-        // Toggle case (simplified)
-      } else if (key === '123') {
-        // Switch to numbers (simplified)
-      } else if (key === 'emoji') {
-        currentText += '😊';
-      } else {
-        currentText += key;
-      }
-
-      updateTextDisplay();
-    }
-
-    function updateTextDisplay() {
-      if (textDisplayPanel && textDisplayPanel.userData.textCtx) {
-        const ctx = textDisplayPanel.userData.textCtx;
-        const tex = textDisplayPanel.userData.textTexture;
-
-        ctx.clearRect(0, 0, 1024, 200);
-        
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '28px system-ui';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'top';
-        
-        const maxWidth = 980;
-        const lineHeight = 35;
-        let y = 20;
-        
-        const lines = currentText.split('\n');
-        lines.forEach(line => {
-          ctx.fillText(line || '', 20, y);
-          y += lineHeight;
-        });
-
-        // Cursor
-        if (Date.now() % 1000 < 500) {
-          const lastLine = lines[lines.length - 1] || '';
-          const cursorX = ctx.measureText(lastLine).width + 20;
-          ctx.fillRect(cursorX, y - lineHeight, 2, 25);
-        }
-
-        tex.needsUpdate = true;
-      }
-    }
-
-    function getKeyUnderGaze() {
-      const origin = new THREE.Vector3();
-      const direction = new THREE.Vector3();
-      camera.getWorldPosition(origin);
-      camera.getWorldDirection(direction);
-      raycaster.set(origin, direction);
-
-      const allKeys = [];
-      panels.forEach(panel => {
-        panel.traverse(child => {
-          if (child.userData && child.userData.isKey) {
-            allKeys.push(child);
-          }
-        });
-      });
-
-      const hits = raycaster.intersectObjects(allKeys, false);
-      return hits.length > 0 ? hits[0].object : null;
     }
 
     function getPanelUnderGaze() {
+      if (panels.length === 0) return null;
+
       const origin = new THREE.Vector3();
       const direction = new THREE.Vector3();
       camera.getWorldPosition(origin);
@@ -238,290 +304,116 @@
       const hits = raycaster.intersectObjects(panels, true);
       if (!hits.length) return null;
 
-      let candidate = hits[0].object;
-      while (candidate && !candidate.userData.isPanel) {
-        candidate = candidate.parent;
-      }
-      return candidate;
+      const candidate = hits[0].object.parent;
+      return candidate && candidate.userData && candidate.userData.isPanel ? candidate : null;
     }
 
-    function spawnKeyboard() {
-      const keyboard = makeVisionProKeyboard();
-      keyboard.position.setFromMatrixPosition(reticle.matrix);
-      keyboard.quaternion.setFromRotationMatrix(reticle.matrix);
-      scene.add(keyboard);
-      panels.push(keyboard);
-
-      // Text panel above
-      const textPanel = makeTextPanel();
-      textPanel.position.setFromMatrixPosition(reticle.matrix);
-      textPanel.quaternion.setFromRotationMatrix(reticle.matrix);
-      textPanel.position.y += 0.35;
-      scene.add(textPanel);
-      panels.push(textPanel);
-      textDisplayPanel = textPanel;
+    function spawnClockPanel() {
+      const panel = makeClockPanel();
+      panel.position.setFromMatrixPosition(reticle.matrix);
+      panel.quaternion.setFromRotationMatrix(reticle.matrix);
+      scene.add(panel);
+      panels.push(panel);
     }
 
-    function makeTextPanel() {
-      const group = new THREE.Group();
-
-      // Simple rounded background
-      const bgGeom = new THREE.PlaneGeometry(1.4, 0.25);
-      const bgMat = new THREE.MeshPhysicalMaterial({
-        color: 0x3a3a4a,
+    function createVisionProGlass() {
+      return new THREE.MeshPhysicalMaterial({
+        color: 0xffffff,
         transparent: true,
-        opacity: 0.95,
+        opacity: 0.15,
+        transmission: 0.9,
         roughness: 0.3,
-        metalness: 0.1
+        metalness: 0,
+        clearcoat: 0.5,
+        clearcoatRoughness: 0.2,
+        reflectivity: 0.4,
+        ior: 1.5,
+        thickness: 0.5,
+        side: THREE.DoubleSide
       });
-      const bg = new THREE.Mesh(bgGeom, bgMat);
-      group.add(bg);
-
-      // Border for rounded effect
-      const borderGeom = new THREE.EdgesGeometry(bgGeom);
-      const borderMat = new THREE.LineBasicMaterial({ color: 0x5a5a6a, opacity: 0.5, transparent: true });
-      const border = new THREE.LineSegments(borderGeom, borderMat);
-      group.add(border);
-
-      // Title "Text preview"
-      const titleCanvas = document.createElement('canvas');
-      titleCanvas.width = 512;
-      titleCanvas.height = 64;
-      const titleCtx = titleCanvas.getContext('2d');
-      titleCtx.fillStyle = 'rgba(180, 180, 190, 0.9)';
-      titleCtx.font = '24px system-ui';
-      titleCtx.textAlign = 'center';
-      titleCtx.fillText('Text preview', 256, 35);
-      
-      const titleTex = new THREE.CanvasTexture(titleCanvas);
-      const titleMat = new THREE.MeshBasicMaterial({ map: titleTex, transparent: true });
-      const titleMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.05), titleMat);
-      titleMesh.position.set(0, 0.08, 0.01);
-      group.add(titleMesh);
-
-      // Text display
-      const textCanvas = document.createElement('canvas');
-      textCanvas.width = 1024;
-      textCanvas.height = 200;
-      const textCtx = textCanvas.getContext('2d');
-      const textTexture = new THREE.CanvasTexture(textCanvas);
-      textTexture.minFilter = THREE.LinearFilter;
-
-      const textMat = new THREE.MeshBasicMaterial({ map: textTexture, transparent: true });
-      const textMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 0.15), textMat);
-      textMesh.position.set(0, -0.02, 0.01);
-      group.add(textMesh);
-
-      group.userData.isPanel = true;
-      group.userData.textCtx = textCtx;
-      group.userData.textTexture = textTexture;
-
-      return group;
     }
 
-    function makeVisionProKeyboard() {
+    function makeClockPanel() {
       const group = new THREE.Group();
 
-      // Main keyboard background - simple plane
-      const kbGeom = new THREE.PlaneGeometry(1.5, 0.65);
-      const kbMat = new THREE.MeshPhysicalMaterial({
-        color: 0x4a4a5a,
-        transparent: true,
-        opacity: 0.95,
-        roughness: 0.4,
-        metalness: 0.1
-      });
-      const kbBg = new THREE.Mesh(kbGeom, kbMat);
-      group.add(kbBg);
+      const panelGeom = new THREE.PlaneGeometry(0.8, 0.3);
+      const panelMat = createVisionProGlass();
+      const panel = new THREE.Mesh(panelGeom, panelMat);
+      group.add(panel);
 
-      // Border
-      const borderGeom = new THREE.EdgesGeometry(kbGeom);
-      const borderMat = new THREE.LineBasicMaterial({ color: 0x6a6a7a, opacity: 0.6, transparent: true });
-      const border = new THREE.LineSegments(borderGeom, borderMat);
-      group.add(border);
-
-      // Suggestion bar
-      makeSuggestionBar(group);
-
-      // Keyboard rows
-      const rows = [
-        ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
-        ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'],
-        ['shift', 'z', 'x', 'c', 'v', 'b', 'n', 'm', 'backspace'],
-        ['123', 'emoji', 'space', 'return']
-      ];
-
-      const keySize = 0.09;
-      const spacing = 0.01;
-      const startY = 0.18;
-
-      rows.forEach((row, rowIdx) => {
-        let xOffset = 0;
-        
-        // Center each row
-        const rowWidth = row.reduce((sum, key) => {
-          let w = keySize;
-          if (key === 'space') w = keySize * 4.5;
-          if (key === 'shift' || key === 'backspace') w = keySize * 1.3;
-          if (key === '123' || key === 'return') w = keySize * 1.5;
-          if (key === 'emoji') w = keySize * 1.2;
-          return sum + w + spacing;
-        }, 0) - spacing;
-        
-        xOffset = -rowWidth / 2;
-
-        row.forEach(char => {
-          let width = keySize;
-          if (char === 'space') width = keySize * 4.5;
-          if (char === 'shift' || char === 'backspace') width = keySize * 1.3;
-          if (char === '123' || char === 'return') width = keySize * 1.5;
-          if (char === 'emoji') width = keySize * 1.2;
-
-          const key = makeRoundKey(char, width, keySize);
-          key.position.x = xOffset + width / 2;
-          key.position.y = startY - rowIdx * (keySize + spacing);
-          key.position.z = 0.02;
-          group.add(key);
-
-          xOffset += width + spacing;
-        });
-      });
-
-      group.userData.isPanel = true;
-      group.userData.isKeyboard = true;
-
-      return group;
-    }
-
-    function makeSuggestionBar(group) {
-      const suggestions = ['I', 'The', "I'm"];
-      const suggWidth = 0.3;
-      const spacing = 0.03;
-      const startX = -0.4;
-      const y = 0.25;
-
-      suggestions.forEach((text, idx) => {
-        const suggBox = new THREE.PlaneGeometry(suggWidth, 0.08);
-        const suggMat = new THREE.MeshPhysicalMaterial({
-          color: 0x5a5a6a,
-          transparent: true,
-          opacity: 0.9,
-          roughness: 0.3
-        });
-        const suggMesh = new THREE.Mesh(suggBox, suggMat);
-        suggMesh.position.set(startX + idx * (suggWidth + spacing), y, 0.02);
-        group.add(suggMesh);
-
-        // Text
-        const canvas = document.createElement('canvas');
-        canvas.width = 256;
-        canvas.height = 128;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 48px system-ui';
-        ctx.textAlign = 'center';
-        ctx.fillText(text, 128, 70);
-
-        const tex = new THREE.CanvasTexture(canvas);
-        const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true });
-        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.25, 0.06), mat);
-        mesh.position.set(startX + idx * (suggWidth + spacing), y, 0.03);
-        group.add(mesh);
-      });
-
-      // Microphone icon (right side)
-      const micBox = new THREE.PlaneGeometry(0.09, 0.08);
-      const micMat = new THREE.MeshPhysicalMaterial({
-        color: 0x5a5a6a,
-        transparent: true,
-        opacity: 0.9
-      });
-      const micMesh = new THREE.Mesh(micBox, micMat);
-      micMesh.position.set(0.6, y, 0.02);
-      group.add(micMesh);
-
-      // Mic icon
-      const micCanvas = document.createElement('canvas');
-      micCanvas.width = 128;
-      micCanvas.height = 128;
-      const micCtx = micCanvas.getContext('2d');
-      micCtx.fillStyle = '#ffffff';
-      micCtx.font = '48px system-ui';
-      micCtx.textAlign = 'center';
-      micCtx.fillText('🎤', 64, 75);
-
-      const micTex = new THREE.CanvasTexture(micCanvas);
-      const micIconMat = new THREE.MeshBasicMaterial({ map: micTex, transparent: true });
-      const micIcon = new THREE.Mesh(new THREE.PlaneGeometry(0.07, 0.06), micIconMat);
-      micIcon.position.set(0.6, y, 0.03);
-      group.add(micIcon);
-    }
-
-    function makeRoundKey(char, width, height) {
-      const group = new THREE.Group();
-
-      // Use circle for round keys (Vision Pro style)
-      const radius = Math.min(width, height) / 2;
-      const keyGeom = new THREE.CircleGeometry(radius, 32);
-      const keyMat = new THREE.MeshPhysicalMaterial({
-        color: 0x6a6a7a,
-        transparent: true,
-        opacity: 0.95,
-        roughness: 0.3,
-        metalness: 0.2,
-        clearcoat: 0.3
-      });
-      const keyMesh = new THREE.Mesh(keyGeom, keyMat);
-      group.add(keyMesh);
-
-      // Subtle border
-      const borderGeom = new THREE.RingGeometry(radius * 0.95, radius, 32);
-      const borderMat = new THREE.MeshBasicMaterial({ 
-        color: 0x8a8a9a, 
+      const borderGeom = new THREE.EdgesGeometry(panelGeom);
+      const borderMat = new THREE.LineBasicMaterial({ 
+        color: 0xffffff, 
         transparent: true, 
-        opacity: 0.3 
+        opacity: 0.4
       });
-      const border = new THREE.Mesh(borderGeom, borderMat);
-      border.position.z = 0.001;
+      const border = new THREE.LineSegments(borderGeom, borderMat);
       group.add(border);
 
-      // Label
-      const canvas = document.createElement('canvas');
-      canvas.width = 128;
-      canvas.height = 128;
-      const ctx = canvas.getContext('2d');
+      const clockCanvas = document.createElement('canvas');
+      clockCanvas.width = 512;
+      clockCanvas.height = 128;
+      const clockCtx = clockCanvas.getContext('2d');
+      const clockTexture = new THREE.CanvasTexture(clockCanvas);
+      clockTexture.minFilter = THREE.LinearFilter;
+      clockTexture.magFilter = THREE.LinearFilter;
+
+      const clockMat = new THREE.MeshBasicMaterial({ map: clockTexture, transparent: true });
+      const clockMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.75, 0.25), clockMat);
+      clockMesh.position.z = 0.002;
+      group.add(clockMesh);
+
+      group.userData.isPanel = true;
+      group.userData.selected = false;
+      group.userData.clockCtx = clockCtx;
+      group.userData.clockTexture = clockTexture;
+      group.scale.setScalar(1);
+
+      updateClock(group);
+
+      return group;
+    }
+
+    function updateClock(panel) {
+      if (!panel.userData.clockCtx) return;
+
+      const now = new Date();
+      const timeString = now.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit',
+        hour12: true 
+      });
+      const dateString = now.toLocaleDateString('en-US', { 
+        weekday: 'short', 
+        month: 'short', 
+        day: 'numeric' 
+      });
+
+      const ctx = panel.userData.clockCtx;
+      const tex = panel.userData.clockTexture;
+
+      ctx.clearRect(0, 0, 512, 128);
+
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 48px system-ui';
+      ctx.font = 'bold 56px system-ui';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
+      ctx.fillText(timeString, 256, 55);
 
-      let displayText = char;
-      if (char === 'space') displayText = 'space';
-      if (char === 'backspace') displayText = '⌫';
-      if (char === 'return') displayText = 'return';
-      if (char === 'shift') displayText = '⇧';
-      if (char === 'emoji') displayText = '😊';
+      ctx.font = '24px system-ui';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.fillText(dateString, 256, 100);
 
-      ctx.fillText(displayText, 64, 64);
-
-      const tex = new THREE.CanvasTexture(canvas);
-      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true });
-      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width * 0.8, height * 0.7), mat);
-      mesh.position.z = 0.01;
-      group.add(mesh);
-
-      keyMesh.userData.isKey = true;
-      keyMesh.userData.key = char;
-      group.userData.isKey = true;
-      group.userData.key = char;
-
-      return group;
+      tex.needsUpdate = true;
     }
 
     function onWindowResize() {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
+      handCanvas.width = window.innerWidth;
+      handCanvas.height = window.innerHeight;
     }
 
     function animate() {
@@ -566,9 +458,11 @@
         activePanel.quaternion.setFromRotationMatrix(reticle.matrix);
       }
 
-      if (textDisplayPanel) {
-        updateTextDisplay();
-      }
+      panels.forEach(panel => {
+        if (panel.userData.clockCtx) {
+          updateClock(panel);
+        }
+      });
 
       renderer.render(scene, camera);
     }
