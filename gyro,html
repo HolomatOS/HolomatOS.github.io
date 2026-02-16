@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Phone Gyro Controller</title>
+  <style>
+    body { font-family: Arial; text-align:center; background:#111; color:#0f0; }
+    h1 { font-size:24px; }
+    .val { font-size:20px; margin:10px; }
+  </style>
+</head>
+<body>
+
+<h1>📱 Gyro Controller</h1>
+<div class="val">Left/Right (Roll): <span id="x">0</span></div>
+<div class="val">Forward/Back (Pitch): <span id="y">0</span></div>
+
+<button onclick="start()">Enable Gyro</button>
+
+<script>
+let ws;
+
+function start() {
+  // Ask permission for iOS / modern Android
+  if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission()
+      .then(response => { if(response==='granted') { initWebSocket(); } });
+  } else {
+    initWebSocket();
+  }
+}
+
+function initWebSocket() {
+  ws = new WebSocket("ws://YOUR_PC_IP:8765"); // replace YOUR_PC_IP
+  ws.onopen = () => { console.log("Connected to PC"); };
+  window.addEventListener('deviceorientation', e => {
+    const data = { gamma: e.gamma, beta: e.beta };
+    document.getElementById("x").innerText = e.gamma.toFixed(1);
+    document.getElementById("y").innerText = e.beta.toFixed(1);
+    if(ws.readyState === 1) ws.send(JSON.stringify(data));
+  });
+}
+</script>
+
+</body>
+</html>
