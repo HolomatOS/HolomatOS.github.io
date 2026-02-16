@@ -74,7 +74,7 @@
   </style>
 </head>
 <body>
-  <div id="info">📱 MOTO G | 🤏 Pinch = Spawn/Grab | Camera offset: 200px UP (adjust HAND_OFFSET_Y in code)</div>
+  <div id="info">📱 MOTO G | 1 Hand 🤏 = Spawn/Grab/Move | 2 Hands ↔️ = Resize panel | Offset: 200px UP</div>
   <div id="hud">
     <div class="reticle"></div>
     <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
@@ -116,10 +116,15 @@
     let lastPinch = false;
     let peer, connection;
 
+    // Two-hand resize tracking
+    let lastTwoHandDistance = null;
+    let isResizing = false;
+    let initialPanelScale = 1.0;
+
     // Offset adjustment for camera position difference
     // Phone 2 camera is lower than Moto G, so shift hand UP
     const HAND_OFFSET_X = 0;     // No horizontal shift
-    const HAND_OFFSET_Y = -100;  // Pixels to shift UP (negative = up, positive = down)
+    const HAND_OFFSET_Y = -200;  // Pixels to shift UP (negative = up, positive = down)
     const HAND_SCALE = 1.0;      // Scale factor if needed
 
     // Canvas for hand overlay
@@ -159,7 +164,10 @@
         connection.on('data', (data) => {
           if (data.type === 'hand') {
             handLandmarks = data.landmarks;
-            updateHandDisplay();
+            const handCount = data.handCount || 0;
+            const twoHandDistance = data.twoHandDistance;
+            
+            updateHandDisplay(handCount, twoHandDistance);
           }
         });
 
@@ -170,23 +178,76 @@
       });
     }
 
-    function updateHandDisplay() {
+    function updateHandDisplay(handCount, twoHandDistance) {
       // Clear canvas - no skeleton drawing
       handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
 
-      if (!handLandmarks) {
-        document.getElementById('statusHands').textContent = 'Hands: 0';
-        document.getElementById('statusPinch').textContent = 'Pinch: No hand';
+      document.getElementById('statusHands').textContent = `Hands: ${handCount}`;
+
+      // NO HANDS
+      if (!handLandmarks || handCount === 0) {
+        document.getElementById('statusPinch').textContent = 'Pinch: No hands';
         lastPinch = false;
+        isResizing = false;
+        lastTwoHandDistance = null;
         return;
       }
 
-      document.getElementById('statusHands').textContent = 'Hands: 1';
+      // TWO HANDS - RESIZE GESTURE
+      if (handCount === 2 && twoHandDistance) {
+        handleTwoHandResize(twoHandDistance);
+        return;
+      }
+
+      // ONE HAND - PINCH GESTURE (spawn/grab)
+      if (handCount === 1) {
+        handleSingleHandPinch();
+      }
+    }
+
+    function handleTwoHandResize(currentDistance) {
+      document.getElementById('statusPinch').textContent = `2 Hands: Resize mode (${Math.round(currentDistance)}px)`;
+
+      if (!isResizing && activePanel) {
+        // Start resizing
+        isResizing = true;
+        lastTwoHandDistance = currentDistance;
+        initialPanelScale = activePanel.scale.x;
+        return;
+      }
+
+      if (isResizing && activePanel && lastTwoHandDistance) {
+        // Calculate scale change
+        const scaleChange = currentDistance / lastTwoHandDistance;
+        const newScale = initialPanelScale * scaleChange;
+        
+        // Clamp scale between 0.5x and 3x
+        const clampedScale = Math.max(0.5, Math.min(3.0, newScale));
+        activePanel.scale.setScalar(clampedScale);
+        
+        document.getElementById('statusPinch').innerHTML = `2 Hands: Resizing<br>Scale: ${clampedScale.toFixed(2)}x`;
+      }
+
+      // Stop resizing when hands separate
+      if (!activePanel) {
+        isResizing = false;
+        lastTwoHandDistance = null;
+      }
+    }
+
+    function handleSingleHandPinch() {
+      // Stop any resize mode
+      if (isResizing) {
+        isResizing = false;
+        lastTwoHandDistance = null;
+      }
+
+      // Get first hand only
+      const landmarks = Array.isArray(handLandmarks[0]) ? handLandmarks[0] : handLandmarks;
 
       // Apply offset to compensate for camera position difference
-      // Convert normalized coordinates (0-1) to screen coordinates with offset
-      const thumb = handLandmarks[4];
-      const index = handLandmarks[8];
+      const thumb = landmarks[4];
+      const index = landmarks[8];
       
       const thumbX = (thumb.x * handCanvas.width) + HAND_OFFSET_X;
       const thumbY = (thumb.y * handCanvas.height) + HAND_OFFSET_Y;
@@ -209,7 +270,8 @@
           // Grab existing panel
           activePanel = hitPanel;
           activePanel.userData.selected = true;
-          activePanel.scale.setScalar(1.08);
+          activePanel.scale.setScalar(activePanel.scale.x * 1.08);
+          initialPanelScale = activePanel.scale.x;
         } else if (reticle.visible) {
           // Spawn new panel and immediately grab it
           spawnClockPanel();
@@ -217,6 +279,7 @@
             activePanel = panels[panels.length - 1];
             activePanel.userData.selected = true;
             activePanel.scale.setScalar(1.08);
+            initialPanelScale = 1.08;
           }
         }
       }
@@ -225,7 +288,7 @@
       if (!isPinching && lastPinch) {
         if (activePanel) {
           activePanel.userData.selected = false;
-          activePanel.scale.setScalar(1);
+          // Keep current scale, don't reset
           activePanel = null;
         }
       }
@@ -318,16 +381,16 @@
 
     function createVisionProGlass() {
       return new THREE.MeshPhysicalMaterial({
-        color: 0xffffff,
+        color: 0x556670,  // Exact Vision Pro blue-gray from image
         transparent: true,
-        opacity: 0.15,
-        transmission: 0.9,
-        roughness: 0.3,
-        metalness: 0,
-        clearcoat: 0.5,
-        clearcoatRoughness: 0.2,
+        opacity: 0.92,  // Mostly opaque like in image
+        transmission: 0.15,  // Slight transparency
+        roughness: 0.25,
+        metalness: 0.05,
+        clearcoat: 0.6,
+        clearcoatRoughness: 0.15,
         reflectivity: 0.4,
-        ior: 1.5,
+        ior: 1.45,
         thickness: 0.5,
         side: THREE.DoubleSide
       });
@@ -336,16 +399,39 @@
     function makeClockPanel() {
       const group = new THREE.Group();
 
-      const panelGeom = new THREE.PlaneGeometry(0.8, 0.3);
+      // Main panel with Vision Pro blue-gray color
+      const panelGeom = new THREE.PlaneGeometry(1.0, 0.4);
       const panelMat = createVisionProGlass();
       const panel = new THREE.Mesh(panelGeom, panelMat);
       group.add(panel);
 
+      // Subtle gradient overlay (darker at top, lighter at bottom)
+      const gradientCanvas = document.createElement('canvas');
+      gradientCanvas.width = 512;
+      gradientCanvas.height = 512;
+      const gradCtx = gradientCanvas.getContext('2d');
+      const gradient = gradCtx.createLinearGradient(0, 0, 0, 512);
+      gradient.addColorStop(0, 'rgba(85, 102, 112, 0.3)');  // Top darker
+      gradient.addColorStop(1, 'rgba(90, 107, 118, 0.1)');  // Bottom lighter
+      gradCtx.fillStyle = gradient;
+      gradCtx.fillRect(0, 0, 512, 512);
+      
+      const gradTexture = new THREE.CanvasTexture(gradientCanvas);
+      const gradMat = new THREE.MeshBasicMaterial({ 
+        map: gradTexture, 
+        transparent: true,
+        opacity: 0.5
+      });
+      const gradMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.4), gradMat);
+      gradMesh.position.z = 0.001;
+      group.add(gradMesh);
+
+      // Subtle border (lighter gray)
       const borderGeom = new THREE.EdgesGeometry(panelGeom);
       const borderMat = new THREE.LineBasicMaterial({ 
-        color: 0xffffff, 
+        color: 0x9a9b9d,  // Light gray border
         transparent: true, 
-        opacity: 0.4
+        opacity: 0.3
       });
       const border = new THREE.LineSegments(borderGeom, borderMat);
       group.add(border);
@@ -359,7 +445,7 @@
       clockTexture.magFilter = THREE.LinearFilter;
 
       const clockMat = new THREE.MeshBasicMaterial({ map: clockTexture, transparent: true });
-      const clockMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.75, 0.25), clockMat);
+      const clockMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.35), clockMat);
       clockMesh.position.z = 0.002;
       group.add(clockMesh);
 
