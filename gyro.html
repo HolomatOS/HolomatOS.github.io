@@ -30,7 +30,7 @@ function start() {
 }
 
 function initWebSocket() {
-  ws = new WebSocket("ws://YOUR_PC_IP:8765"); // replace YOUR_PC_IP
+  ws = new WebSocket("ws://10.0.0.231:8765"); // replace YOUR_PC_IP
   ws.onopen = () => { console.log("Connected to PC"); };
   window.addEventListener('deviceorientation', e => {
     const data = { gamma: e.gamma, beta: e.beta };
