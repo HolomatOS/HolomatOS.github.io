@@ -125,6 +125,9 @@
     const HAND_SCALE = 1.0;
     const ICON_FORWARD_DISTANCE = 1.0;
     const ICON_HEIGHT_ABOVE_GROUND = 1.0;
+    const XR_FRAMEBUFFER_SCALE = 1.35;
+    const MAX_RENDER_PIXEL_RATIO = 2;
+    const PANEL_SHELL_OPACITY = 0.72;
     let groundYEstimate = null;
     let handConnectTimeout = null;
     let hasInitialIconSpawned = false;
@@ -363,10 +366,16 @@
       scene = new THREE.Scene();
       camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.01, 20);
 
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true,
+        powerPreference: "high-performance"
+      });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_RENDER_PIXEL_RATIO));
       renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.xr.enabled = true;
+      renderer.xr.setFramebufferScaleFactor(XR_FRAMEBUFFER_SCALE);
       document.body.appendChild(renderer.domElement);
 
       const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
@@ -478,6 +487,10 @@
         'icon.png',
         (texture) => {
           texture.colorSpace = THREE.SRGBColorSpace;
+          texture.minFilter = THREE.LinearMipmapLinearFilter;
+          texture.magFilter = THREE.LinearFilter;
+          texture.generateMipmaps = true;
+          texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
           const imgW = texture.image.width || 1;
           const imgH = texture.image.height || 1;
           const aspect = imgW / imgH;
@@ -586,7 +599,7 @@
       const panelMat = new THREE.MeshPhysicalMaterial({
         color: 0x3e566b,
         transparent: true,
-        opacity: 0.9,
+        opacity: PANEL_SHELL_OPACITY,
         transmission: 0.2,
         roughness: 0.2,
         metalness: 0.08,
@@ -658,8 +671,10 @@
       mapCtx.fillText('Loading Panel...', 512, 384);
       
       const mapTexture = new THREE.CanvasTexture(mapCanvas);
-      mapTexture.minFilter = THREE.LinearFilter;
+      mapTexture.minFilter = THREE.LinearMipmapLinearFilter;
       mapTexture.magFilter = THREE.LinearFilter;
+      mapTexture.generateMipmaps = true;
+      mapTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
       
       const mapMat = new THREE.MeshBasicMaterial({ 
         map: mapTexture,
@@ -816,8 +831,10 @@
       clockCanvas.height = 128;
       const clockCtx = clockCanvas.getContext('2d');
       const clockTexture = new THREE.CanvasTexture(clockCanvas);
-      clockTexture.minFilter = THREE.LinearFilter;
+      clockTexture.minFilter = THREE.LinearMipmapLinearFilter;
       clockTexture.magFilter = THREE.LinearFilter;
+      clockTexture.generateMipmaps = true;
+      clockTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
       const clockMat = new THREE.MeshBasicMaterial({ map: clockTexture, transparent: true });
       const clockMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.35), clockMat);
