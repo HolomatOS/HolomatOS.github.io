@@ -74,7 +74,7 @@
   </style>
 </head>
 <body>
-  <div id="info">📱 MOTO G | 1 Hand 🤏 = Spawn/Grab/Move | 2 Hands ↔️ = Resize panel | Offset: 200px UP</div>
+  <div id="info">📱 MOTO G | Choose mode: 🖐️ Hand Tracking OR 👆 Tap Only | Icon → Map</div>
   <div id="hud">
     <div class="reticle"></div>
     <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
@@ -82,18 +82,17 @@
   <canvas id="handCanvas"></canvas>
 
   <div id="connectPanel">
-    <h2 style="color:#fff;">📱 Connect to Phone 2</h2>
-    <p style="color:#aaa;">Enter the ID shown on Phone 2:</p>
-    <input type="text" id="peerIdInput" placeholder="hand-camera-xxxxx" />
-    <br>
-    <button id="connectBtn">CONNECT</button>
+    <h2 style="color:#fff;">🖐️ Hand Tracking</h2>
+    <p style="color:#aaa;">Enable hand gestures or use tap only</p>
+    <button id="handTrackingBtn" style="background:#4CAF50;">ENABLE HAND TRACKING</button>
+    <button id="skipHandBtn" style="background:#2196F3; margin-top:10px;">SKIP - USE TAP ONLY</button>
     <div id="connectionStatus" style="margin-top:15px; color:#ff0;"></div>
   </div>
 
   <div id="status">
-    <div id="statusConnection">Connection: Not connected</div>
-    <div id="statusHands">Hands: 0</div>
-    <div id="statusPinch">Pinch: No</div>
+    <div id="statusConnection">Mode: Not selected</div>
+    <div id="statusHands">Hands: --</div>
+    <div id="statusPinch">Action: --</div>
   </div>
 
   <!-- PeerJS for WebRTC -->
@@ -115,6 +114,7 @@
     let handLandmarks = null;
     let lastPinch = false;
     let peer, connection;
+    let handTrackingEnabled = false; // User choice
 
     // Two-hand resize tracking
     let lastTwoHandDistance = null;
@@ -122,10 +122,9 @@
     let initialPanelScale = 1.0;
 
     // Offset adjustment for camera position difference
-    // Phone 2 camera is lower than Moto G, so shift hand UP
-    const HAND_OFFSET_X = 0;     // No horizontal shift
-    const HAND_OFFSET_Y = -200;  // Pixels to shift UP (negative = up, positive = down)
-    const HAND_SCALE = 1.0;      // Scale factor if needed
+    const HAND_OFFSET_X = 0;
+    const HAND_OFFSET_Y = -200;
+    const HAND_SCALE = 1.0;
 
     // Canvas for hand overlay
     const handCanvas = document.getElementById('handCanvas');
@@ -139,42 +138,61 @@
 
     function setupConnection() {
       const myPeerId = 'moto-receiver-' + Math.random().toString(36).substr(2, 9);
-      peer = new Peer(myPeerId);
 
-      peer.on('open', () => {
-        console.log('Peer ready:', myPeerId);
+      // Enable hand tracking button
+      document.getElementById('handTrackingBtn').addEventListener('click', () => {
+        handTrackingEnabled = true;
+        document.getElementById('connectionStatus').textContent = 'Initializing hand tracking...';
+        document.getElementById('connectionStatus').style.color = '#ff0';
+        
+        peer = new Peer(myPeerId);
+
+        peer.on('open', () => {
+          console.log('Peer ready:', myPeerId);
+          document.getElementById('connectionStatus').innerHTML = 
+            `<strong>YOUR ID:</strong><br><span style="color:#0ff; font-size:16px;">${myPeerId}</span><br>Enter this ID on Phone 2 camera app`;
+          document.getElementById('handTrackingBtn').textContent = 'WAITING FOR PHONE 2...';
+          document.getElementById('handTrackingBtn').disabled = true;
+        });
+
+        peer.on('connection', (conn) => {
+          connection = conn;
+          document.getElementById('connectPanel').classList.add('hidden');
+          document.getElementById('statusConnection').textContent = 'Hand Tracking: Connected ✓';
+          document.getElementById('statusConnection').style.color = '#0f0';
+          
+          conn.on('open', () => {
+            console.log('Phone 2 connected!');
+          });
+
+          conn.on('data', (data) => {
+            if (data.type === 'hand') {
+              handLandmarks = data.landmarks;
+              const handCount = data.handCount || 0;
+              const twoHandDistance = data.twoHandDistance;
+              updateHandDisplay(handCount, twoHandDistance);
+            }
+          });
+
+          conn.on('close', () => {
+            document.getElementById('statusConnection').textContent = 'Hand Tracking: Disconnected';
+            document.getElementById('statusConnection').style.color = '#f00';
+          });
+
+          conn.on('error', (err) => {
+            console.error('Connection error:', err);
+          });
+        });
       });
 
-      document.getElementById('connectBtn').addEventListener('click', () => {
-        const remotePeerId = document.getElementById('peerIdInput').value.trim();
-        if (!remotePeerId) {
-          alert('Please enter Phone 2 ID');
-          return;
-        }
-
-        document.getElementById('connectionStatus').textContent = 'Connecting...';
-        connection = peer.connect(remotePeerId);
-
-        connection.on('open', () => {
-          document.getElementById('connectPanel').classList.add('hidden');
-          document.getElementById('statusConnection').textContent = 'Connection: Connected ✓';
-          document.getElementById('statusConnection').style.color = '#0f0';
-        });
-
-        connection.on('data', (data) => {
-          if (data.type === 'hand') {
-            handLandmarks = data.landmarks;
-            const handCount = data.handCount || 0;
-            const twoHandDistance = data.twoHandDistance;
-            
-            updateHandDisplay(handCount, twoHandDistance);
-          }
-        });
-
-        connection.on('error', (err) => {
-          document.getElementById('connectionStatus').textContent = 'Error: ' + err;
-          document.getElementById('connectionStatus').style.color = '#f00';
-        });
+      // Skip hand tracking button
+      document.getElementById('skipHandBtn').addEventListener('click', () => {
+        handTrackingEnabled = false;
+        document.getElementById('connectPanel').classList.add('hidden');
+        document.getElementById('statusConnection').textContent = 'Hand Tracking: Disabled (Tap only)';
+        document.getElementById('statusConnection').style.color = '#aaa';
+        document.getElementById('statusHands').textContent = 'Mode: Tap & Gaze';
+        document.getElementById('statusPinch').textContent = 'Tap screen to interact';
       });
     }
 
@@ -265,6 +283,13 @@
       
       // PINCH START - Grab panel or spawn if no panel
       if (isPinching && !lastPinch) {
+        // Check if clicking icon
+        const hitIcon = getIconUnderGaze();
+        if (hitIcon) {
+          openMapPanel(hitIcon);
+          return;
+        }
+
         const hitPanel = getPanelUnderGaze();
         if (hitPanel) {
           // Grab existing panel
@@ -273,14 +298,8 @@
           activePanel.scale.setScalar(activePanel.scale.x * 1.08);
           initialPanelScale = activePanel.scale.x;
         } else if (reticle.visible) {
-          // Spawn new panel and immediately grab it
-          spawnClockPanel();
-          if (panels.length > 0) {
-            activePanel = panels[panels.length - 1];
-            activePanel.userData.selected = true;
-            activePanel.scale.setScalar(1.08);
-            initialPanelScale = 1.08;
-          }
+          // Spawn icon (not clock)
+          spawnMapIcon();
         }
       }
       
@@ -350,8 +369,16 @@
     }
 
     function onCanvasClick() {
+      // Check if clicking on icon
+      const hitIcon = getIconUnderGaze();
+      if (hitIcon) {
+        openMapPanel(hitIcon);
+        return;
+      }
+
+      // Otherwise spawn icon
       if (reticle.visible) {
-        spawnClockPanel();
+        spawnMapIcon();
       }
     }
 
@@ -367,16 +394,247 @@
       const hits = raycaster.intersectObjects(panels, true);
       if (!hits.length) return null;
 
-      const candidate = hits[0].object.parent;
-      return candidate && candidate.userData && candidate.userData.isPanel ? candidate : null;
+      let candidate = hits[0].object;
+      while (candidate && !candidate.userData.isPanel) {
+        candidate = candidate.parent;
+      }
+      return candidate;
     }
 
-    function spawnClockPanel() {
-      const panel = makeClockPanel();
-      panel.position.setFromMatrixPosition(reticle.matrix);
-      panel.quaternion.setFromRotationMatrix(reticle.matrix);
-      scene.add(panel);
-      panels.push(panel);
+    function getIconUnderGaze() {
+      if (panels.length === 0) return null;
+
+      const origin = new THREE.Vector3();
+      const direction = new THREE.Vector3();
+      camera.getWorldPosition(origin);
+      camera.getWorldDirection(direction);
+      raycaster.set(origin, direction);
+
+      const allIcons = [];
+      panels.forEach(panel => {
+        if (panel.userData.isIcon) {
+          allIcons.push(panel);
+        }
+      });
+
+      const hits = raycaster.intersectObjects(allIcons, true);
+      return hits.length > 0 ? hits[0].object.parent || hits[0].object : null;
+    }
+
+    function spawnMapIcon() {
+      const icon = makeMapIcon();
+      icon.position.setFromMatrixPosition(reticle.matrix);
+      icon.quaternion.setFromRotationMatrix(reticle.matrix);
+      scene.add(icon);
+      panels.push(icon);
+    }
+
+    function makeMapIcon() {
+      const group = new THREE.Group();
+
+      // Circular background for icon (matches circular icon.png)
+      const circleBgGeom = new THREE.CircleGeometry(0.08, 32);
+      const circleBgMat = new THREE.MeshBasicMaterial({ 
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.1
+      });
+      const circleBg = new THREE.Mesh(circleBgGeom, circleBgMat);
+      circleBg.position.z = -0.001;
+      group.add(circleBg);
+
+      // Load icon.png (circular Google Maps icon)
+      const textureLoader = new THREE.TextureLoader();
+      textureLoader.load(
+        'icon.png',
+        (texture) => {
+          const iconMat = new THREE.MeshBasicMaterial({ 
+            map: texture, 
+            transparent: true,
+            side: THREE.DoubleSide
+          });
+          // Use circle geometry to match circular icon
+          const iconMesh = new THREE.Mesh(
+            new THREE.CircleGeometry(0.075, 32),
+            iconMat
+          );
+          group.add(iconMesh);
+        },
+        undefined,
+        (error) => {
+          console.error('Error loading icon.png:', error);
+          // Fallback: Google Maps colors (red pin on colorful bg)
+          const fallbackMat = new THREE.MeshBasicMaterial({ color: 0xEA4335 });
+          const fallbackMesh = new THREE.Mesh(
+            new THREE.CircleGeometry(0.075, 32),
+            fallbackMat
+          );
+          group.add(fallbackMesh);
+        }
+      );
+
+      // Subtle glow effect
+      const glowGeom = new THREE.CircleGeometry(0.09, 32);
+      const glowMat = new THREE.MeshBasicMaterial({
+        color: 0x4285F4,
+        transparent: true,
+        opacity: 0.2
+      });
+      const glow = new THREE.Mesh(glowGeom, glowMat);
+      glow.position.z = -0.002;
+      group.add(glow);
+
+      group.userData.isIcon = true;
+      group.userData.isPanel = false;
+      group.scale.setScalar(1);
+
+      return group;
+    }
+
+    function openMapPanel(icon) {
+      // Check if map already open for this icon
+      if (icon.userData.mapPanel) return;
+
+      const mapPanel = makeMapPanel();
+      
+      // Position map panel to the RIGHT of the icon
+      mapPanel.position.copy(icon.position);
+      mapPanel.quaternion.copy(icon.quaternion);
+      
+      // Offset 0.8 units to the right
+      const offset = new THREE.Vector3(0.8, 0, 0);
+      offset.applyQuaternion(icon.quaternion);
+      mapPanel.position.add(offset);
+      
+      scene.add(mapPanel);
+      panels.push(mapPanel);
+      
+      // Link map to icon
+      icon.userData.mapPanel = mapPanel;
+    }
+
+    function makeMapPanel() {
+      const group = new THREE.Group();
+
+      // Panel background
+      const panelGeom = new THREE.PlaneGeometry(1.2, 1.0);
+      const panelMat = createVisionProGlass();
+      const panel = new THREE.Mesh(panelGeom, panelMat);
+      group.add(panel);
+
+      // Border
+      const borderGeom = new THREE.EdgesGeometry(panelGeom);
+      const borderMat = new THREE.LineBasicMaterial({ 
+        color: 0x9a9b9d, 
+        transparent: true, 
+        opacity: 0.3
+      });
+      const border = new THREE.LineSegments(borderGeom, borderMat);
+      group.add(border);
+
+      // Map canvas
+      const mapCanvas = document.createElement('canvas');
+      mapCanvas.width = 1024;
+      mapCanvas.height = 768;
+      const mapCtx = mapCanvas.getContext('2d');
+      
+      // Loading screen
+      mapCtx.fillStyle = '#556670';
+      mapCtx.fillRect(0, 0, 1024, 768);
+      mapCtx.fillStyle = '#ffffff';
+      mapCtx.font = 'bold 32px system-ui';
+      mapCtx.textAlign = 'center';
+      mapCtx.fillText('Loading OpenStreetMap...', 512, 384);
+      
+      const mapTexture = new THREE.CanvasTexture(mapCanvas);
+      mapTexture.minFilter = THREE.LinearFilter;
+      mapTexture.magFilter = THREE.LinearFilter;
+      
+      const mapMat = new THREE.MeshBasicMaterial({ 
+        map: mapTexture,
+        transparent: false
+      });
+      const mapDisplay = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.15, 0.95),
+        mapMat
+      );
+      mapDisplay.position.z = 0.002;
+      group.add(mapDisplay);
+
+      // Title
+      const titleCanvas = document.createElement('canvas');
+      titleCanvas.width = 512;
+      titleCanvas.height = 64;
+      const titleCtx = titleCanvas.getContext('2d');
+      titleCtx.fillStyle = '#ffffff';
+      titleCtx.font = 'bold 28px system-ui';
+      titleCtx.textAlign = 'center';
+      titleCtx.fillText('🗺️ OpenStreetMap', 256, 40);
+      
+      const titleTexture = new THREE.CanvasTexture(titleCanvas);
+      const titleMat = new THREE.MeshBasicMaterial({ map: titleTexture, transparent: true });
+      const titleMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.08), titleMat);
+      titleMesh.position.set(0, 0.46, 0.003);
+      group.add(titleMesh);
+
+      group.userData.isPanel = true;
+      group.userData.isMapPanel = true;
+      group.userData.mapCanvas = mapCanvas;
+      group.userData.mapCtx = mapCtx;
+      group.userData.mapTexture = mapTexture;
+
+      // Load actual map
+      loadMapTiles(mapCtx, mapTexture, 40.7608, -111.8910, 13); // Salt Lake City
+
+      return group;
+    }
+
+    function loadMapTiles(ctx, texture, lat, lon, zoom) {
+      const n = Math.pow(2, zoom);
+      const xtile = Math.floor((lon + 180) / 360 * n);
+      const ytile = Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n);
+      
+      // Load 3x3 grid
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          const x = xtile + dx;
+          const y = ytile + dy;
+          const url = `https://tile.openstreetmap.org/${zoom}/${x}/${y}.png`;
+          
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = function() {
+            const offsetX = (dx + 1) * 256 + 128;
+            const offsetY = (dy + 1) * 256 + 128;
+            ctx.drawImage(img, offsetX, offsetY, 256, 256);
+            
+            // Add marker
+            ctx.fillStyle = '#EA4335';
+            ctx.beginPath();
+            ctx.arc(512, 384, 15, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(512, 384, 6, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Location text
+            ctx.fillStyle = '#000000';
+            ctx.font = 'bold 24px system-ui';
+            ctx.textAlign = 'center';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 4;
+            ctx.strokeText('Salt Lake City, UT', 512, 50);
+            ctx.fillText('Salt Lake City, UT', 512, 50);
+            
+            texture.needsUpdate = true;
+          };
+          img.onerror = function() {
+            console.error('Failed to load tile:', url);
+          };
+          img.src = url;
+        }
+      }
     }
 
     function createVisionProGlass() {
