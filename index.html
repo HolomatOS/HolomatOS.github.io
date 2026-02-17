@@ -71,7 +71,7 @@
   </style>
 </head>
 <body>
-  <div id="info">Icon auto-spawns | Click icon to open weather panel | Vision Pro style</div>
+  <div id="info">Icon auto-spawns | Click icon to open utility panel | Vision Pro style</div>
   <div id="hud">
     <div class="reticle"></div>
     <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
@@ -125,12 +125,9 @@
     const HAND_SCALE = 1.0;
     const ICON_FORWARD_DISTANCE = 1.0;
     const ICON_HEIGHT_ABOVE_GROUND = 1.0;
-    const DEFAULT_WEATHER_COORDS = { lat: 40.7608, lon: -111.8910 };
     let groundYEstimate = null;
     let handConnectTimeout = null;
     let hasInitialIconSpawned = false;
-    let weatherCoords = null;
-    let weatherCoordsPromise = null;
 
     // Reuse vectors to reduce per-frame allocations on mobile AR.
     const tmpOrigin = new THREE.Vector3();
@@ -534,12 +531,12 @@
     }
 
     function openMapPanel(icon) {
-      // Check if weather panel already open for this icon
+      // Check if utility panel already open for this icon
       if (icon.userData.mapPanel) return;
 
       const mapPanel = makeMapPanel();
       
-      // Position weather panel next to icon (not on top)
+      // Position utility panel next to icon (not on top)
       mapPanel.position.copy(icon.position);
       mapPanel.quaternion.copy(icon.quaternion);
       
@@ -646,7 +643,7 @@
       shadowMesh.position.set(0.012, -0.015, -0.0015);
       group.add(shadowMesh);
 
-      // Weather canvas
+      // Utility canvas
       const mapCanvas = document.createElement('canvas');
       mapCanvas.width = 1024;
       mapCanvas.height = 768;
@@ -658,7 +655,7 @@
       mapCtx.fillStyle = '#e8f4ff';
       mapCtx.font = '600 34px system-ui';
       mapCtx.textAlign = 'center';
-      mapCtx.fillText('Loading Weather...', 512, 384);
+      mapCtx.fillText('Loading Panel...', 512, 384);
       
       const mapTexture = new THREE.CanvasTexture(mapCanvas);
       mapTexture.minFilter = THREE.LinearFilter;
@@ -699,67 +696,9 @@
       group.userData.hoverGlow = hoverGlow;
       group.userData.hoverTime = 0;
 
-      // Load live weather using device location (fallback if unavailable).
-      getPreferredWeatherCoords().then((coords) => {
-        loadWeatherData(mapCtx, mapTexture, coords.lat, coords.lon);
-        group.userData.weatherTimer = setInterval(() => {
-          loadWeatherData(mapCtx, mapTexture, coords.lat, coords.lon);
-        }, 10 * 60 * 1000);
-      });
+      drawUtilityPanel(mapCtx, mapTexture);
 
       return group;
-    }
-
-    function weatherCodeToLabel(code) {
-      if (code === 0) return 'Clear';
-      if (code <= 3) return 'Partly cloudy';
-      if (code <= 48) return 'Fog';
-      if (code <= 67) return 'Rain';
-      if (code <= 77) return 'Snow';
-      if (code <= 82) return 'Showers';
-      if (code <= 99) return 'Storm';
-      return 'Weather';
-    }
-
-    function weatherCodeToSymbol(code, isDay) {
-      if (code === 0) return isDay ? '☀' : '☾';
-      if (code <= 3) return isDay ? '⛅' : '☁';
-      if (code <= 48) return '🌫';
-      if (code <= 67) return '🌧';
-      if (code <= 77) return '❄';
-      if (code <= 82) return '🌦';
-      return '⛈';
-    }
-
-    function getPreferredWeatherCoords() {
-      if (weatherCoords) return Promise.resolve(weatherCoords);
-      if (weatherCoordsPromise) return weatherCoordsPromise;
-
-      weatherCoordsPromise = new Promise((resolve) => {
-        const fallback = () => {
-          weatherCoords = DEFAULT_WEATHER_COORDS;
-          resolve(weatherCoords);
-        };
-
-        if (!navigator.geolocation) {
-          fallback();
-          return;
-        }
-
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            weatherCoords = {
-              lat: pos.coords.latitude,
-              lon: pos.coords.longitude
-            };
-            resolve(weatherCoords);
-          },
-          () => fallback(),
-          { enableHighAccuracy: true, timeout: 9000, maximumAge: 300000 }
-        );
-      });
-
-      return weatherCoordsPromise;
     }
 
     function fillRoundedRect(ctx, x, y, width, height, radius) {
@@ -778,209 +717,41 @@
       ctx.fill();
     }
 
-    function drawWeatherPanel(ctx, texture, weather) {
+    function drawUtilityPanel(ctx, texture) {
       ctx.clearRect(0, 0, 1024, 768);
-      const safeX = 44;
-      const safeY = 44;
-      const safeW = 936;
-      const safeH = 680;
-
-      // Backdrop tuned to example.webp (cold blue forest tone).
       const bg = ctx.createLinearGradient(0, 0, 0, 768);
       bg.addColorStop(0, '#33495e');
-      bg.addColorStop(0.55, '#3f5870');
-      bg.addColorStop(1, '#7b97ad');
+      bg.addColorStop(1, '#6e879e');
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, 1024, 768);
 
-      // Forest haze bands.
-      for (let i = 0; i < 5; i++) {
-        const y = 140 + i * 78;
-        const haze = ctx.createLinearGradient(0, y - 30, 0, y + 30);
-        haze.addColorStop(0, 'rgba(255,255,255,0)');
-        haze.addColorStop(0.5, `rgba(220,235,248,${0.04 + i * 0.01})`);
-        haze.addColorStop(1, 'rgba(255,255,255,0)');
-        ctx.fillStyle = haze;
-        ctx.fillRect(0, y - 30, 1024, 60);
-      }
-
-      // Soft "orb" circles around center like the reference.
-      const orbs = [
-        { x: 110, y: 156, r: 58, c: '#8aa8bd', a: 0.6 },
-        { x: 300, y: 164, r: 62, c: '#93acc2', a: 0.58 },
-        { x: 555, y: 156, r: 58, c: '#8db0c8', a: 0.56 },
-        { x: 805, y: 170, r: 66, c: '#d79f9d', a: 0.58 },
-        { x: 40, y: 430, r: 66, c: '#9fb3c4', a: 0.44 },
-        { x: 220, y: 450, r: 58, c: '#a9bfcd', a: 0.44 },
-        { x: 500, y: 458, r: 62, c: '#8fa7be', a: 0.42 },
-        { x: 706, y: 452, r: 60, c: '#c7af8f', a: 0.45 },
-        { x: 940, y: 442, r: 58, c: '#d4b28f', a: 0.45 },
-        { x: 102, y: 688, r: 70, c: '#6d8091', a: 0.38 },
-        { x: 372, y: 690, r: 64, c: '#aebfcb', a: 0.38 },
-        { x: 590, y: 696, r: 62, c: '#9db2c4', a: 0.36 },
-        { x: 818, y: 690, r: 58, c: '#c8d4e0', a: 0.32 }
-      ];
-      for (const orb of orbs) {
-        const g = ctx.createRadialGradient(orb.x - orb.r * 0.25, orb.y - orb.r * 0.25, orb.r * 0.1, orb.x, orb.y, orb.r);
-        g.addColorStop(0, `rgba(255,255,255,${orb.a})`);
-        g.addColorStop(1, `rgba(255,255,255,0.06)`);
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(orb.x, orb.y, orb.r, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      // Top status row.
-      ctx.fillStyle = '#eff7ff';
-      ctx.font = '600 42px system-ui';
-      ctx.textAlign = 'left';
-      ctx.fillText(weather.timeLabel, safeX + 392, safeY + 150);
-
-      ctx.fillStyle = 'rgba(235,245,255,0.85)';
-      ctx.font = '500 36px system-ui';
-      ctx.fillText(weather.dayLabel, safeX + 596, safeY + 150);
-
-      ctx.font = '600 32px system-ui';
-      ctx.fillText('o', safeX + 328, safeY + 148);
-      ctx.fillStyle = '#52d769';
-      ctx.fillText('o', safeX + 348, safeY + 148);
-      ctx.fillStyle = '#eff7ff';
-      ctx.fillText('wifi', safeX + 786, safeY + 148);
-      ctx.fillText(`${weather.battery}%`, safeX + 846, safeY + 148);
-
-      // Central control card.
-      const panelX = safeX + 201;
-      const panelY = safeY + 182;
-      const panelW = 534;
-      const panelH = 288;
-
+      const panelX = 176;
+      const panelY = 172;
+      const panelW = 672;
+      const panelH = 404;
       const cardGrad = ctx.createLinearGradient(panelX, panelY, panelX, panelY + panelH);
       cardGrad.addColorStop(0, 'rgba(52,75,96,0.92)');
       cardGrad.addColorStop(1, 'rgba(74,103,128,0.9)');
       ctx.fillStyle = cardGrad;
       fillRoundedRect(ctx, panelX, panelY, panelW, panelH, 52);
 
-      ctx.strokeStyle = 'rgba(210,230,245,0.26)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(panelX + 1, panelY + 52);
-      ctx.lineTo(panelX + panelW - 1, panelY + 52);
-      ctx.stroke();
-
-      // Top row icons on card.
-      const iconY = panelY + 100;
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '600 34px system-ui';
-      ctx.textAlign = 'center';
-      ctx.fillText('✿', panelX + 76, iconY);
-      ctx.fillText('⛰', panelX + 196, iconY);
-      ctx.fillText('▭', panelX + 316, iconY);
-      ctx.fillText('🔔', panelX + 436, iconY);
-
-      // Highlight center icon like the red focus box in reference.
-      ctx.strokeStyle = '#ff2d2d';
-      ctx.lineWidth = 5;
-      ctx.fillStyle = 'rgba(255,45,45,0.95)';
-      fillRoundedRect(ctx, panelX + 254, panelY + 58, 124, 74, 14);
-      ctx.globalCompositeOperation = 'destination-out';
-      fillRoundedRect(ctx, panelX + 258, panelY + 62, 116, 66, 11);
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.strokeRect(panelX + 254, panelY + 58, 124, 74);
-
-      // Slider row.
-      ctx.fillStyle = '#d8e9f7';
-      ctx.font = '600 36px system-ui';
+      ctx.fillStyle = '#e9f4ff';
       ctx.textAlign = 'left';
-      ctx.fillText('›', panelX + 28, panelY + 210);
+      ctx.font = '600 56px system-ui';
+      ctx.fillText('Utility Hub', panelX + 52, panelY + 92);
 
-      ctx.fillStyle = 'rgba(255,255,255,0.88)';
-      fillRoundedRect(ctx, panelX + 108, panelY + 186, 308, 24, 12);
-      ctx.fillStyle = '#e5f0fa';
-      ctx.fillText('vol', panelX + 448, panelY + 212);
-
-      // Weather details integrated into lower area in same style.
+      ctx.font = '500 33px system-ui';
       ctx.fillStyle = 'rgba(230,242,252,0.92)';
-      ctx.font = '600 34px system-ui';
-      ctx.textAlign = 'left';
-      ctx.fillText(`${Math.round(weather.temp)}° ${weather.symbol} ${weather.label}`, safeX + 210, safeY + 534);
-      ctx.font = '500 28px system-ui';
-      ctx.fillText(`Feels ${Math.round(weather.feelsLike)}°   Wind ${Math.round(weather.wind)} km/h   Rain ${Math.round(weather.rainChance)}%`, safeX + 210, safeY + 572);
+      ctx.fillText('Utility panel is ready.', panelX + 52, panelY + 162);
+      ctx.fillText('Pick a module to add next:', panelX + 52, panelY + 212);
 
-      // Hourly mini row.
-      const startX = safeX + 216;
-      const stepX = 96;
-      weather.hourly.forEach((h, i) => {
-        const x = startX + i * stepX;
-        ctx.fillStyle = 'rgba(255,255,255,0.16)';
-        fillRoundedRect(ctx, x - 40, safeY + 598, 86, 82, 22);
-
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '500 24px system-ui';
-        ctx.textAlign = 'center';
-        ctx.fillText(h.time, x + 2, safeY + 628);
-        ctx.font = '600 30px system-ui';
-        ctx.fillText(h.symbol, x + 2, safeY + 656);
-        ctx.font = '600 26px system-ui';
-        ctx.fillText(`${Math.round(h.temp)}°`, x + 2, safeY + 677);
-      });
+      ctx.font = '500 31px system-ui';
+      ctx.fillText('1. Calendar and reminders', panelX + 72, panelY + 272);
+      ctx.fillText('2. Messages quick glance', panelX + 72, panelY + 322);
+      ctx.fillText('3. Timer and focus control', panelX + 72, panelY + 372);
+      ctx.fillText('4. Commute ETA', panelX + 72, panelY + 422);
 
       texture.needsUpdate = true;
-    }
-
-    async function loadWeatherData(ctx, texture, lat, lon) {
-      try {
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m,is_day&hourly=temperature_2m,weather_code,precipitation_probability&timezone=auto&forecast_days=1`;
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-
-        const now = new Date();
-        const timeLabel = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-        const dayLabel = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-        const current = data.current || {};
-        const hourly = [];
-        const timeArr = data.hourly?.time || [];
-        const tempArr = data.hourly?.temperature_2m || [];
-        const codeArr = data.hourly?.weather_code || [];
-        const rainArr = data.hourly?.precipitation_probability || [];
-        const startIdx = Math.max(0, timeArr.findIndex(t => new Date(t) >= now));
-
-        for (let i = 0; i < 5; i++) {
-          const idx = Math.min(startIdx + i, timeArr.length - 1);
-          const t = new Date(timeArr[idx]);
-          const isDay = t.getHours() >= 6 && t.getHours() < 19;
-          hourly.push({
-            time: t.toLocaleTimeString('en-US', { hour: 'numeric' }),
-            temp: tempArr[idx] ?? current.temperature_2m ?? 0,
-            symbol: weatherCodeToSymbol(codeArr[idx] ?? current.weather_code ?? 0, isDay)
-          });
-        }
-
-        drawWeatherPanel(ctx, texture, {
-          temp: current.temperature_2m ?? 0,
-          feelsLike: current.apparent_temperature ?? current.temperature_2m ?? 0,
-          wind: current.wind_speed_10m ?? 0,
-          humidity: current.relative_humidity_2m ?? 0,
-          rainChance: rainArr[startIdx] ?? 0,
-          label: weatherCodeToLabel(current.weather_code ?? 0),
-          symbol: weatherCodeToSymbol(current.weather_code ?? 0, (current.is_day ?? 1) === 1),
-          hourly,
-          timeLabel,
-          dayLabel,
-          battery: Math.max(20, Math.min(100, 100 - Math.round((current.wind_speed_10m ?? 0) * 1.2)))
-        });
-      } catch (error) {
-        console.error('Weather fetch failed:', error);
-        ctx.fillStyle = '#2b3f53';
-        ctx.fillRect(0, 0, 1024, 768);
-        ctx.fillStyle = '#e8f4ff';
-        ctx.font = '600 44px system-ui';
-        ctx.textAlign = 'center';
-        ctx.fillText('Unable to load weather', 512, 340);
-        ctx.font = '500 30px system-ui';
-        ctx.fillText('Check internet and try again', 512, 405);
-        texture.needsUpdate = true;
-      }
     }
 
     function createVisionProGlass() {
