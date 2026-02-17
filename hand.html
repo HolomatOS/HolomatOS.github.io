@@ -118,27 +118,6 @@
       transform: translateY(1px) scale(0.995);
     }
 
-    #debugBox {
-      position: fixed;
-      right: 8px;
-      top: 8px;
-      width: min(92vw, 420px);
-      max-height: 42vh;
-      overflow: auto;
-      z-index: 20;
-      font: 12px/1.35 Consolas, "Courier New", monospace;
-      color: #dbeafe;
-      background: rgba(2, 6, 23, 0.9);
-      border: 1px solid rgba(77, 163, 255, 0.5);
-      border-radius: 10px;
-      padding: 8px;
-      white-space: pre-wrap;
-    }
-
-    #debugBox b {
-      color: #93c5fd;
-    }
-
     @media (max-width: 900px) {
       #app {
         grid-template-columns: 1fr;
@@ -164,30 +143,9 @@
   <div id="startOverlay">
     <button id="startBtn" type="button">Start</button>
   </div>
-  <div id="debugBox"><b>Debug</b>\nPage loaded.</div>
 
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
-  <script>
-    (function () {
-      const box = document.getElementById("debugBox");
-      function line(msg) {
-        if (!box) return;
-        const t = new Date().toLocaleTimeString();
-        box.textContent += "\n[" + t + "] " + msg;
-        box.scrollTop = box.scrollHeight;
-      }
-      window.__dbg = line;
-      window.addEventListener("error", function (e) {
-        line("ERROR: " + (e.message || "unknown"));
-      });
-      window.addEventListener("unhandledrejection", function (e) {
-        const m = e && e.reason ? (e.reason.message || String(e.reason)) : "unknown rejection";
-        line("PROMISE: " + m);
-      });
-      line("Classic script ready.");
-    })();
-  </script>
 
   <script type="importmap">
     {
@@ -223,20 +181,15 @@
       targetPos: new THREE.Vector3(0, 0, 0),
       targetQuat: new THREE.Quaternion(),
       hasPose: false,
-      mirrorInput: true,
-      started: false
+      mirrorInput: false,
+      started: false,
+      fingerRigReady: false,
+      fingerTarget: { thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0 },
+      fingerSmooth: { thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0 }
     };
-
-    const dbg = (msg) => {
-      if (window.__dbg) window.__dbg(msg);
-    };
-
-    dbg("Module script loaded.");
-    dbg("UserAgent: " + navigator.userAgent);
 
     function setStatus(text) {
       statusEl.textContent = text;
-      dbg("STATUS: " + text);
     }
 
     function fitCanvases() {
@@ -293,12 +246,64 @@
     handRoot.add(fallbackHand);
 
     let handModel = null;
+    const fingerBones = { thumb: [], index: [], middle: [], ring: [], pinky: [] };
+    const boneAxis = {
+      thumb: new THREE.Vector3(0, 0, 1),
+      index: new THREE.Vector3(1, 0, 0),
+      middle: new THREE.Vector3(1, 0, 0),
+      ring: new THREE.Vector3(1, 0, 0),
+      pinky: new THREE.Vector3(1, 0, 0)
+    };
+    const curlMax = {
+      thumb: [0.6, 0.8, 0.7],
+      index: [0.4, 1.05, 0.75],
+      middle: [0.4, 1.1, 0.75],
+      ring: [0.4, 1.1, 0.75],
+      pinky: [0.4, 1.05, 0.75]
+    };
 
     const loader = new GLTFLoader();
     const modelCandidates = [
       "./assets/realistic-right-hand.glb",
       "https://cdn.jsdelivr.net/npm/@webxr-input-profiles/assets@1.0/dist/profiles/generic-hand/right.glb"
     ];
+
+    function rankBoneName(name) {
+      const n = name.toLowerCase();
+      if (n.includes("metacarp") || n.includes("mcp") || n.includes("prox")) return 1;
+      if (n.includes("inter") || n.includes("mid") || n.includes("pip")) return 2;
+      if (n.includes("dist") || n.includes("dip") || n.includes("tip")) return 3;
+      const m = n.match(/(\d+)/);
+      return m ? Number(m[1]) : 99;
+    }
+
+    function classifyFinger(name) {
+      const n = name.toLowerCase();
+      if (n.includes("thumb")) return "thumb";
+      if (n.includes("index") || n.includes("fore")) return "index";
+      if (n.includes("middle")) return "middle";
+      if (n.includes("ring")) return "ring";
+      if (n.includes("pinky") || n.includes("little")) return "pinky";
+      return null;
+    }
+
+    function setupFingerRig(root) {
+      for (const key of Object.keys(fingerBones)) fingerBones[key] = [];
+      root.traverse((obj) => {
+        if (!obj.isBone) return;
+        const finger = classifyFinger(obj.name || "");
+        if (!finger) return;
+        fingerBones[finger].push(obj);
+        obj.userData.baseQuat = obj.quaternion.clone();
+      });
+
+      let found = false;
+      for (const key of Object.keys(fingerBones)) {
+        fingerBones[key].sort((a, b) => rankBoneName(a.name) - rankBoneName(b.name));
+        if (fingerBones[key].length >= 2) found = true;
+      }
+      state.fingerRigReady = found;
+    }
 
     function tintBlue(object3d) {
       object3d.traverse((obj) => {
@@ -328,11 +333,14 @@
           const gltf = await loader.loadAsync(url);
           handModel = gltf.scene;
           handModel.scale.setScalar(1.35);
-          handModel.rotation.x = -Math.PI * 0.1;
+          handModel.rotation.set(-0.2, Math.PI, 0.06);
           tintBlue(handModel);
+          setupFingerRig(handModel);
           handRoot.add(handModel);
           state.modelLoaded = true;
-          setStatus("Rear camera active. Move your hand in front of the camera.");
+          setStatus(state.fingerRigReady
+            ? "Rear camera active. Move your hand in front of the camera."
+            : "Rear camera active. Model loaded (no finger rig found).");
           return;
         } catch (_) {
           // try next candidate
@@ -385,6 +393,51 @@
       return out;
     }
 
+    function pointToVec(p) {
+      return new THREE.Vector3(p.x, p.y, p.z);
+    }
+
+    function fingerCurlFromLandmarks(landmarks, mcp, pip, dip, tip) {
+      const pmcp = pointToVec(landmarks[mcp]);
+      const ppip = pointToVec(landmarks[pip]);
+      const pdip = pointToVec(landmarks[dip]);
+      const ptip = pointToVec(landmarks[tip]);
+
+      const v1 = pmcp.clone().sub(ppip).normalize();
+      const v2 = pdip.clone().sub(ppip).normalize();
+      const v3 = ppip.clone().sub(pdip).normalize();
+      const v4 = ptip.clone().sub(pdip).normalize();
+
+      const a1 = Math.acos(THREE.MathUtils.clamp(v1.dot(v2), -1, 1));
+      const a2 = Math.acos(THREE.MathUtils.clamp(v3.dot(v4), -1, 1));
+      const curl = ((Math.PI - a1) * 0.65 + (Math.PI - a2) * 0.35) / Math.PI;
+      return THREE.MathUtils.clamp(curl, 0, 1);
+    }
+
+    function updateFingerTargets(landmarks) {
+      state.fingerTarget.thumb = fingerCurlFromLandmarks(landmarks, 1, 2, 3, 4);
+      state.fingerTarget.index = fingerCurlFromLandmarks(landmarks, 5, 6, 7, 8);
+      state.fingerTarget.middle = fingerCurlFromLandmarks(landmarks, 9, 10, 11, 12);
+      state.fingerTarget.ring = fingerCurlFromLandmarks(landmarks, 13, 14, 15, 16);
+      state.fingerTarget.pinky = fingerCurlFromLandmarks(landmarks, 17, 18, 19, 20);
+    }
+
+    function applyRigCurl(finger, curl) {
+      if (!state.fingerRigReady) return;
+      const chain = fingerBones[finger];
+      if (!chain || chain.length === 0) return;
+      const axis = boneAxis[finger];
+      const strengths = curlMax[finger];
+
+      for (let i = 0; i < Math.min(chain.length, 3); i++) {
+        const bone = chain[i];
+        const baseQuat = bone.userData.baseQuat;
+        if (!baseQuat) continue;
+        const q = new THREE.Quaternion().setFromAxisAngle(axis, -curl * strengths[i]);
+        bone.quaternion.copy(baseQuat).multiply(q);
+      }
+    }
+
     function applyHandPose(landmarks) {
       const wrist = landmarks[0];
       const indexMcp = landmarks[5];
@@ -412,6 +465,7 @@
 
       const adjust = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, Math.PI));
       state.targetQuat.multiply(adjust);
+      updateFingerTargets(landmarks);
       state.hasPose = true;
     }
 
@@ -455,6 +509,13 @@
         });
 
         applyHandPose(lm);
+      } else {
+        state.hasPose = false;
+        state.fingerTarget.thumb = 0;
+        state.fingerTarget.index = 0;
+        state.fingerTarget.middle = 0;
+        state.fingerTarget.ring = 0;
+        state.fingerTarget.pinky = 0;
       }
     });
 
@@ -462,18 +523,13 @@
       if (state.started) return;
       state.started = true;
       try {
-        dbg("Start handler entered.");
         setStatus("Starting fullscreen...");
         if (document.fullscreenElement == null && document.documentElement.requestFullscreen) {
           try {
             await document.documentElement.requestFullscreen();
-            dbg("Fullscreen success.");
           } catch (_) {
             // Continue even if fullscreen is rejected by browser policy.
-            dbg("Fullscreen rejected/blocked.");
           }
-        } else {
-          dbg("Fullscreen API unavailable or already active.");
         }
 
         setStatus("Loading 3D hand...");
@@ -481,10 +537,8 @@
 
         setStatus("Opening rear camera...");
         const stream = await openRearCamera();
-        dbg("Rear camera stream obtained.");
         video.srcObject = stream;
         await video.play();
-        dbg("Video play success.");
 
         fitCanvases();
         window.addEventListener("resize", fitCanvases, { passive: true });
@@ -494,11 +548,9 @@
           : statusEl.textContent);
 
         startOverlay.style.display = "none";
-        dbg("Overlay hidden, loop starting.");
         requestAnimationFrame(loop);
       } catch (err) {
         state.started = false;
-        dbg("Start failed: " + (err && err.message ? err.message : String(err)));
         setStatus(`Failed to start: ${err.message}`);
       }
     }
@@ -517,21 +569,23 @@
         handRoot.quaternion.copy(state.smoothQuat);
       }
 
+      state.fingerSmooth.thumb = THREE.MathUtils.lerp(state.fingerSmooth.thumb, state.fingerTarget.thumb, 0.28);
+      state.fingerSmooth.index = THREE.MathUtils.lerp(state.fingerSmooth.index, state.fingerTarget.index, 0.28);
+      state.fingerSmooth.middle = THREE.MathUtils.lerp(state.fingerSmooth.middle, state.fingerTarget.middle, 0.28);
+      state.fingerSmooth.ring = THREE.MathUtils.lerp(state.fingerSmooth.ring, state.fingerTarget.ring, 0.28);
+      state.fingerSmooth.pinky = THREE.MathUtils.lerp(state.fingerSmooth.pinky, state.fingerTarget.pinky, 0.28);
+      applyRigCurl("thumb", state.fingerSmooth.thumb);
+      applyRigCurl("index", state.fingerSmooth.index);
+      applyRigCurl("middle", state.fingerSmooth.middle);
+      applyRigCurl("ring", state.fingerSmooth.ring);
+      applyRigCurl("pinky", state.fingerSmooth.pinky);
+
       renderer.render(scene, camera);
       requestAnimationFrame(loop);
     }
 
-    startBtn.addEventListener("click", (e) => {
-      dbg("Start click event.");
-      start();
-    });
-    startBtn.addEventListener("pointerup", (e) => {
-      dbg("Start pointerup event.");
-    });
-    startBtn.addEventListener("touchstart", () => {
-      dbg("Start touchstart event.");
-    }, { passive: true });
-    dbg("Start listeners attached.");
+    startBtn.addEventListener("click", start);
+    startBtn.addEventListener("pointerup", start);
   </script>
 </body>
 </html>
