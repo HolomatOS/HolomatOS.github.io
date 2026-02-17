@@ -88,6 +88,36 @@
       line-height: 1.35;
     }
 
+    #startOverlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+    }
+
+    #startBtn {
+      appearance: none;
+      border: 1px solid rgba(77, 163, 255, 0.7);
+      background: linear-gradient(180deg, rgba(16, 60, 130, 0.9), rgba(8, 33, 78, 0.95));
+      color: #dbeafe;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      padding: 14px 24px;
+      border-radius: 14px;
+      min-width: 180px;
+      cursor: pointer;
+      box-shadow: 0 0 28px var(--blue-soft), inset 0 0 18px rgba(147, 197, 253, 0.2);
+      touch-action: manipulation;
+    }
+
+    #startBtn:active {
+      transform: translateY(1px) scale(0.995);
+    }
+
     @media (max-width: 900px) {
       #app {
         grid-template-columns: 1fr;
@@ -109,7 +139,10 @@
   </div>
 
   <video id="camera" playsinline autoplay muted></video>
-  <div id="status">Initializing rear camera and hand tracker...</div>
+  <div id="status">Press Start to run rear camera hand tracking.</div>
+  <div id="startOverlay">
+    <button id="startBtn" type="button">Start</button>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
@@ -119,6 +152,8 @@
     import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js";
 
     const statusEl = document.getElementById("status");
+    const startOverlay = document.getElementById("startOverlay");
+    const startBtn = document.getElementById("startBtn");
     const video = document.getElementById("camera");
     const trackingCanvas = document.getElementById("trackingCanvas");
     const trackingCtx = trackingCanvas.getContext("2d", { alpha: false, desynchronized: true });
@@ -137,7 +172,8 @@
       targetPos: new THREE.Vector3(0, 0, 0),
       targetQuat: new THREE.Quaternion(),
       hasPose: false,
-      mirrorInput: true
+      mirrorInput: true,
+      started: false
     };
 
     function setStatus(text) {
@@ -364,9 +400,22 @@
     });
 
     async function start() {
+      if (state.started) return;
+      state.started = true;
       try {
+        setStatus("Starting fullscreen...");
+        if (document.fullscreenElement == null && document.documentElement.requestFullscreen) {
+          try {
+            await document.documentElement.requestFullscreen();
+          } catch (_) {
+            // Continue even if fullscreen is rejected by browser policy.
+          }
+        }
+
+        setStatus("Loading 3D hand...");
         await loadModel();
 
+        setStatus("Opening rear camera...");
         const stream = await openRearCamera();
         video.srcObject = stream;
         await video.play();
@@ -378,8 +427,10 @@
           ? "Rear camera locked. Move your hand to drive the 3D hand."
           : statusEl.textContent);
 
+        startOverlay.style.display = "none";
         requestAnimationFrame(loop);
       } catch (err) {
+        state.started = false;
         setStatus(`Failed to start: ${err.message}`);
       }
     }
@@ -402,7 +453,8 @@
       requestAnimationFrame(loop);
     }
 
-    start();
+    startBtn.addEventListener("click", start);
+    startBtn.addEventListener("touchstart", () => {}, { passive: true });
   </script>
 </body>
 </html>
