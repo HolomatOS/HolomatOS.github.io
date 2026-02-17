@@ -264,6 +264,7 @@
 
     const loader = new GLTFLoader();
     const modelCandidates = [
+      "https://sketchfab.com/3d-models/robot-hand-6ff3bb0c3fde4063a6677d9056d356d7",
       "./hand.glb",
       "https://cdn.jsdelivr.net/npm/@webxr-input-profiles/assets@1.0/dist/profiles/generic-hand/right.glb",
       "./assets/realistic-right-hand.glb"
@@ -285,6 +286,13 @@
       if (n.includes("middle")) return "middle";
       if (n.includes("ring")) return "ring";
       if (n.includes("pinky") || n.includes("little")) return "pinky";
+      if (n.includes("finger")) {
+        const m = n.match(/finger[_\\-\\s]?([1-5])/);
+        if (m) {
+          const map = { "1": "thumb", "2": "index", "3": "middle", "4": "ring", "5": "pinky" };
+          return map[m[1]] || null;
+        }
+      }
       return null;
     }
 
@@ -335,6 +343,7 @@
           handModel = gltf.scene;
           handModel.scale.setScalar(1.35);
           handModel.rotation.set(-0.2, Math.PI, 0.06);
+          handModel.position.set(0.0, -0.42, 0.05);
           tintBlue(handModel);
           setupFingerRig(handModel);
           handRoot.add(handModel);
@@ -453,10 +462,10 @@
       if (state.mirrorInput) nx = -nx;
 
       const depth = THREE.MathUtils.clamp(-center.z * 2.0, -0.35, 0.65);
-      const anchorX = 0.86;
-      const anchorY = -0.92;
-      const swayX = THREE.MathUtils.clamp(nx * 0.2, -0.16, 0.16);
-      const swayY = THREE.MathUtils.clamp(ny * 0.2, -0.12, 0.12);
+      const anchorX = 0.9;
+      const anchorY = -0.94;
+      const swayX = THREE.MathUtils.clamp(nx * 0.08, -0.07, 0.07);
+      const swayY = THREE.MathUtils.clamp(ny * 0.06, -0.05, 0.05);
       const px = THREE.MathUtils.clamp(anchorX + swayX, 0.7, 1.02);
       const py = THREE.MathUtils.clamp(anchorY + swayY, -0.98, -0.72);
       const pz = THREE.MathUtils.clamp(depth * 0.5, -0.25, 0.4);
@@ -471,7 +480,13 @@
       basis.makeBasis(vIndex, vOrthoUp, vForward);
       state.targetQuat.setFromRotationMatrix(basis);
 
+      const palmRoll = Math.atan2(indexMcp.y - pinkyMcp.y, indexMcp.x - pinkyMcp.x);
+      const palmPitch = Math.atan2(middleMcp.z - wrist.z, Math.abs(middleMcp.y - wrist.y) + 1e-4);
+      const tilt = new THREE.Quaternion().setFromEuler(
+        new THREE.Euler(palmPitch * 0.55, 0, -palmRoll * 0.4)
+      );
       const adjust = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, Math.PI));
+      state.targetQuat.multiply(tilt);
       state.targetQuat.multiply(adjust);
       updateFingerTargets(landmarks);
       state.hasPose = true;
