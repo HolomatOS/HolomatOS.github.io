@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -28,16 +28,69 @@
     #handCanvas {
       position: absolute; inset: 0; pointer-events: none; z-index: 1;
     }
+    #connectPanel {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.95);
+      padding: 30px;
+      border-radius: 16px;
+      z-index: 100;
+      text-align: center;
+      min-width: 300px;
+    }
+    #connectPanel h2 { color: #fff; margin: 0 0 10px; }
+    #connectPanel p { color: #aaa; margin: 0 0 20px; font-size: 14px; }
+    .modeBtn {
+      display: block;
+      width: 100%;
+      padding: 15px;
+      font-size: 18px;
+      font-weight: bold;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      margin-bottom: 12px;
+      color: white;
+    }
+    #handTrackingBtn { background: #4CAF50; }
+    #skipHandBtn { background: #2196F3; }
+    #connectionStatus { margin-top: 10px; color: #ff0; font-size: 13px; font-family: monospace; }
+    #status {
+      position: absolute;
+      bottom: 10px; left: 10px;
+      background: rgba(0,0,0,0.7);
+      color: #0f0;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-family: monospace;
+      z-index: 10;
+    }
     .hidden { display: none; }
   </style>
 </head>
 <body>
-  <div id="info">📱 Icon auto-spawns | Click icon → Map opens | Vision Pro style</div>
+  <div id="info">ðŸ“± Icon auto-spawns | Click icon â†’ Map opens | Vision Pro style</div>
   <div id="hud">
     <div class="reticle"></div>
     <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
   </div>
   <canvas id="handCanvas"></canvas>
+
+  <div id="connectPanel">
+    <h2>ðŸ–ï¸ Choose Mode</h2>
+    <p>Use hand tracking from Phone 2<br>or just tap & gaze</p>
+    <button class="modeBtn" id="handTrackingBtn">ðŸ–ï¸ ENABLE HAND TRACKING</button>
+    <button class="modeBtn" id="skipHandBtn">ðŸ‘† SKIP - TAP ONLY</button>
+    <div id="connectionStatus"></div>
+  </div>
+
+  <div id="status">
+    <div id="statusConnection">Mode: Not selected</div>
+    <div id="statusHands">Hands: --</div>
+    <div id="statusPinch">Action: --</div>
+  </div>
 
   <!-- PeerJS for WebRTC -->
   <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
@@ -70,6 +123,17 @@
     const HAND_OFFSET_X = 0;
     const HAND_OFFSET_Y = -200;
     const HAND_SCALE = 1.0;
+    const ICON_FORWARD_DISTANCE = 1.0;
+    const ICON_HEIGHT_ABOVE_GROUND = 1.3;
+    let groundYEstimate = null;
+    let handConnectTimeout = null;
+
+    // Reuse vectors to reduce per-frame allocations on mobile AR.
+    const tmpOrigin = new THREE.Vector3();
+    const tmpDirection = new THREE.Vector3();
+    const tmpCamPos = new THREE.Vector3();
+    const tmpForward = new THREE.Vector3();
+    const tmpReticlePos = new THREE.Vector3();
 
     // Canvas for hand overlay
     const handCanvas = document.getElementById('handCanvas');
@@ -83,19 +147,113 @@
 
     function setupConnection() {
       const myPeerId = 'moto-receiver-' + Math.random().toString(36).substr(2, 9);
+      const handBtn = document.getElementById('handTrackingBtn');
+      const statusEl = document.getElementById('connectionStatus');
 
-      // Auto-enable tap-only mode (no hand tracking setup needed)
-      handTrackingEnabled = false;
-      console.log('Tap-only mode enabled');
+      function showConnectError(message) {
+        statusEl.textContent = message;
+        statusEl.style.color = '#ff6b6b';
+        handBtn.disabled = false;
+        handBtn.textContent = 'RETRY HAND TRACKING';
+      }
+
+      // HAND TRACKING button
+      handBtn.addEventListener('click', () => {
+        handTrackingEnabled = true;
+        statusEl.textContent = 'Initializing...';
+        statusEl.style.color = '#ff0';
+        handBtn.disabled = true;
+        handBtn.textContent = 'Initializing...';
+
+        if (peer && !peer.destroyed) {
+          peer.destroy();
+        }
+
+        peer = new Peer(myPeerId);
+        peer.on('open', (id) => {
+          statusEl.innerHTML =
+            `YOUR ID:<br><span style="color:#0ff;font-size:18px;">${id}</span><br><small>Enter on Phone 2</small>`;
+          handBtn.textContent = 'Waiting for Phone 2...';
+
+          if (handConnectTimeout) clearTimeout(handConnectTimeout);
+          handConnectTimeout = setTimeout(() => {
+            if (!connection || !connection.open) {
+              showConnectError('No connection from Phone 2. Check peer ID and retry.');
+            }
+          }, 20000);
+        });
+
+        peer.on('connection', (conn) => {
+          connection = conn;
+          if (handConnectTimeout) clearTimeout(handConnectTimeout);
+          document.getElementById('connectPanel').classList.add('hidden');
+          document.getElementById('statusConnection').textContent = 'Hand Tracking: Connected';
+          document.getElementById('statusConnection').style.color = '#0f0';
+
+          conn.on('data', (data) => {
+            if (data.type === 'hand') {
+              handLandmarks = data.landmarks;
+              updateHandDisplay(data.handCount || 0, data.twoHandDistance);
+            }
+          });
+
+          conn.on('close', () => {
+            document.getElementById('statusConnection').textContent = 'Hand Tracking: Disconnected';
+            document.getElementById('statusConnection').style.color = '#f00';
+            document.getElementById('statusHands').textContent = 'Hands: --';
+            document.getElementById('statusPinch').textContent = 'Action: --';
+            handLandmarks = null;
+            lastPinch = false;
+          });
+
+          conn.on('error', () => {
+            document.getElementById('statusConnection').textContent = 'Hand Tracking: Connection error';
+            document.getElementById('statusConnection').style.color = '#f00';
+          });
+        });
+
+        peer.on('error', (err) => {
+          showConnectError(`Peer error: ${err.type || 'unknown'}`);
+        });
+      });
+
+      // TAP ONLY button
+      document.getElementById('skipHandBtn').addEventListener('click', () => {
+        handTrackingEnabled = false;
+        document.getElementById('connectPanel').classList.add('hidden');
+        document.getElementById('statusConnection').textContent = 'Mode: Tap & Gaze Only';
+        document.getElementById('statusConnection').style.color = '#4fc3f7';
+        document.getElementById('statusHands').textContent = 'Hand Tracking: Off';
+        document.getElementById('statusPinch').textContent = 'Tap screen to interact';
+      });
     }
+    // Spawn icon in AIR in front of camera (not on floor)
+    function spawnIconInAir() {
+      if (panels.length > 0) return; // Only spawn once
+      if (groundYEstimate === null) return;
+      const icon = makeMapIcon();
 
+      // Place icon 1m in front of camera and 1m above detected ground.
+      camera.getWorldDirection(tmpForward);
+      tmpForward.y = 0;
+      if (tmpForward.lengthSq() < 1e-6) {
+        tmpForward.set(0, 0, -1);
+      } else {
+        tmpForward.normalize();
+      }
+      camera.getWorldPosition(tmpCamPos);
+
+      icon.position.copy(tmpCamPos).addScaledVector(tmpForward, ICON_FORWARD_DISTANCE);
+      icon.position.y = groundYEstimate + ICON_HEIGHT_ABOVE_GROUND;
+      icon.lookAt(tmpCamPos); // Face toward user
+
+      scene.add(icon);
+      panels.push(icon);
+    }
     function updateHandDisplay(handCount, twoHandDistance) {
-      // Clear canvas - no skeleton drawing
       handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
-
       document.getElementById('statusHands').textContent = `Hands: ${handCount}`;
 
-      // NO HANDS
       if (!handLandmarks || handCount === 0) {
         document.getElementById('statusPinch').textContent = 'Pinch: No hands';
         lastPinch = false;
@@ -104,23 +262,20 @@
         return;
       }
 
-      // TWO HANDS - RESIZE GESTURE
       if (handCount === 2 && twoHandDistance) {
         handleTwoHandResize(twoHandDistance);
         return;
       }
 
-      // ONE HAND - PINCH GESTURE (spawn/grab)
       if (handCount === 1) {
         handleSingleHandPinch();
       }
     }
 
     function handleTwoHandResize(currentDistance) {
-      document.getElementById('statusPinch').textContent = `2 Hands: Resize mode (${Math.round(currentDistance)}px)`;
+      document.getElementById('statusPinch').textContent = `Resize: ${Math.round(currentDistance)}px`;
 
       if (!isResizing && activePanel) {
-        // Start resizing
         isResizing = true;
         lastTwoHandDistance = currentDistance;
         initialPanelScale = activePanel.scale.x;
@@ -128,18 +283,13 @@
       }
 
       if (isResizing && activePanel && lastTwoHandDistance) {
-        // Calculate scale change
         const scaleChange = currentDistance / lastTwoHandDistance;
         const newScale = initialPanelScale * scaleChange;
-        
-        // Clamp scale between 0.5x and 3x
         const clampedScale = Math.max(0.5, Math.min(3.0, newScale));
         activePanel.scale.setScalar(clampedScale);
-        
-        document.getElementById('statusPinch').innerHTML = `2 Hands: Resizing<br>Scale: ${clampedScale.toFixed(2)}x`;
+        document.getElementById('statusPinch').textContent = `Scale: ${clampedScale.toFixed(2)}x`;
       }
 
-      // Stop resizing when hands separate
       if (!activePanel) {
         isResizing = false;
         lastTwoHandDistance = null;
@@ -171,8 +321,7 @@
       
       const isPinching = distance < 50;
       
-      document.getElementById('statusPinch').textContent = `Pinch: ${isPinching ? 'YES ✓ (holding)' : `No (${Math.round(distance)}px)`}`;
-      document.getElementById('statusPinch').innerHTML += `<br>Offset: ${Math.abs(HAND_OFFSET_Y)}px up`;
+      document.getElementById('statusPinch').textContent = `Pinch: ${isPinching ? 'YES âœ“' : `No (${Math.round(distance)}px)`}`;
       
       // PINCH START - Grab panel or spawn if no panel
       if (isPinching && !lastPinch) {
@@ -248,7 +397,7 @@
 
       if (activePanel) {
         activePanel.userData.selected = false;
-        activePanel.scale.setScalar(1);
+
         activePanel = null;
         return;
       }
@@ -278,11 +427,9 @@
     function getPanelUnderGaze() {
       if (panels.length === 0) return null;
 
-      const origin = new THREE.Vector3();
-      const direction = new THREE.Vector3();
-      camera.getWorldPosition(origin);
-      camera.getWorldDirection(direction);
-      raycaster.set(origin, direction);
+      camera.getWorldPosition(tmpOrigin);
+      camera.getWorldDirection(tmpDirection);
+      raycaster.set(tmpOrigin, tmpDirection);
 
       const hits = raycaster.intersectObjects(panels, true);
       if (!hits.length) return null;
@@ -297,11 +444,9 @@
     function getIconUnderGaze() {
       if (panels.length === 0) return null;
 
-      const origin = new THREE.Vector3();
-      const direction = new THREE.Vector3();
-      camera.getWorldPosition(origin);
-      camera.getWorldDirection(direction);
-      raycaster.set(origin, direction);
+      camera.getWorldPosition(tmpOrigin);
+      camera.getWorldDirection(tmpDirection);
+      raycaster.set(tmpOrigin, tmpDirection);
 
       const allIcons = [];
       panels.forEach(panel => {
@@ -325,18 +470,26 @@
     function makeMapIcon() {
       const group = new THREE.Group();
 
-      // Load icon.png (circular Google Maps icon)
+      // Render icon.png exactly as-is (no shape clipping or overlay).
       const textureLoader = new THREE.TextureLoader();
       textureLoader.load(
         'icon.png',
         (texture) => {
+          texture.colorSpace = THREE.SRGBColorSpace;
+          const imgW = texture.image.width || 1;
+          const imgH = texture.image.height || 1;
+          const aspect = imgW / imgH;
+          const height = 0.15;
+          const width = height * aspect;
+
           const iconMat = new THREE.MeshBasicMaterial({ 
             map: texture, 
             transparent: true,
+            depthWrite: false,
             side: THREE.DoubleSide
           });
           const iconMesh = new THREE.Mesh(
-            new THREE.CircleGeometry(0.075, 32),
+            new THREE.PlaneGeometry(width, height),
             iconMat
           );
           group.add(iconMesh);
@@ -344,30 +497,14 @@
         undefined,
         (error) => {
           console.error('Error loading icon.png:', error);
-          const fallbackMat = new THREE.MeshBasicMaterial({ color: 0xEA4335 });
-          const fallbackMesh = new THREE.Mesh(
-            new THREE.CircleGeometry(0.075, 32),
-            fallbackMat
-          );
+          const fallbackMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
+          const fallbackMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.16), fallbackMat);
           group.add(fallbackMesh);
         }
       );
 
-      // Hover ring (hidden by default)
-      const hoverRingGeom = new THREE.RingGeometry(0.08, 0.09, 32);
-      const hoverRingMat = new THREE.MeshBasicMaterial({
-        color: 0x00ffff,  // Cyan glow
-        transparent: true,
-        opacity: 0,
-        side: THREE.DoubleSide
-      });
-      const hoverRing = new THREE.Mesh(hoverRingGeom, hoverRingMat);
-      hoverRing.position.z = 0.001;
-      group.add(hoverRing);
-
       group.userData.isIcon = true;
       group.userData.isPanel = false;
-      group.userData.hoverRing = hoverRing;
       group.userData.hoverTime = 0;
       group.scale.setScalar(1);
 
@@ -400,36 +537,59 @@
       mapPanel.userData.iconRef = icon;
     }
 
+    function makeRoundedRectShape(width, height, radius) {
+      const shape = new THREE.Shape();
+      const w = width;
+      const h = height;
+      const r = Math.min(radius, w * 0.5, h * 0.5);
+      shape.moveTo(-w / 2 + r, -h / 2);
+      shape.lineTo(w / 2 - r, -h / 2);
+      shape.quadraticCurveTo(w / 2, -h / 2, w / 2, -h / 2 + r);
+      shape.lineTo(w / 2, h / 2 - r);
+      shape.quadraticCurveTo(w / 2, h / 2, w / 2 - r, h / 2);
+      shape.lineTo(-w / 2 + r, h / 2);
+      shape.quadraticCurveTo(-w / 2, h / 2, -w / 2, h / 2 - r);
+      shape.lineTo(-w / 2, -h / 2 + r);
+      shape.quadraticCurveTo(-w / 2, -h / 2, -w / 2 + r, -h / 2);
+      return shape;
+    }
+
     function makeMapPanel() {
       const group = new THREE.Group();
 
-      // Vision Pro style frosted glass background
-      const panelGeom = new THREE.PlaneGeometry(1.2, 1.0);
+      // Vision Pro inspired layered rounded glass shell.
+      const panelW = 1.2;
+      const panelH = 1.0;
+      const cornerR = 0.1;
+      const panelShape = makeRoundedRectShape(panelW, panelH, cornerR);
+      const panelGeom = new THREE.ShapeGeometry(panelShape, 24);
+
       const panelMat = new THREE.MeshPhysicalMaterial({
-        color: 0x556670,  // Vision Pro blue-gray
+        color: 0x5e7281,
         transparent: true,
-        opacity: 0.92,
-        transmission: 0.15,
-        roughness: 0.25,
-        metalness: 0.05,
-        clearcoat: 0.6,
-        clearcoatRoughness: 0.15,
-        reflectivity: 0.4,
-        ior: 1.45,
-        thickness: 0.5,
+        opacity: 0.93,
+        transmission: 0.22,
+        roughness: 0.16,
+        metalness: 0.08,
+        clearcoat: 1.0,
+        clearcoatRoughness: 0.12,
+        reflectivity: 0.5,
+        ior: 1.5,
+        thickness: 0.75,
         side: THREE.DoubleSide
       });
       const panel = new THREE.Mesh(panelGeom, panelMat);
       group.add(panel);
 
-      // Gradient overlay (darker top, lighter bottom)
+      // Soft top highlight.
       const gradientCanvas = document.createElement('canvas');
       gradientCanvas.width = 512;
       gradientCanvas.height = 512;
       const gradCtx = gradientCanvas.getContext('2d');
       const gradient = gradCtx.createLinearGradient(0, 0, 0, 512);
-      gradient.addColorStop(0, 'rgba(85, 102, 112, 0.3)');
-      gradient.addColorStop(1, 'rgba(90, 107, 118, 0.1)');
+      gradient.addColorStop(0, 'rgba(255,255,255,0.32)');
+      gradient.addColorStop(0.45, 'rgba(180,205,220,0.12)');
+      gradient.addColorStop(1, 'rgba(120,145,165,0.05)');
       gradCtx.fillStyle = gradient;
       gradCtx.fillRect(0, 0, 512, 512);
       
@@ -437,21 +597,32 @@
       const gradMat = new THREE.MeshBasicMaterial({ 
         map: gradTexture, 
         transparent: true,
-        opacity: 0.5
+        opacity: 0.72
       });
-      const gradMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.0), gradMat);
+      const gradMesh = new THREE.Mesh(new THREE.ShapeGeometry(panelShape, 24), gradMat);
       gradMesh.position.z = 0.001;
       group.add(gradMesh);
 
-      // Subtle light gray border
-      const borderGeom = new THREE.EdgesGeometry(panelGeom);
+      // Inner edge line.
+      const borderGeom = new THREE.EdgesGeometry(new THREE.ShapeGeometry(panelShape, 24));
       const borderMat = new THREE.LineBasicMaterial({ 
-        color: 0x9a9b9d,  // Light gray
+        color: 0xd7e6f0,
         transparent: true, 
-        opacity: 0.3
+        opacity: 0.42
       });
       const border = new THREE.LineSegments(borderGeom, borderMat);
       group.add(border);
+
+      // Subtle glass shadow for depth.
+      const shadowMat = new THREE.MeshBasicMaterial({
+        color: 0x000000,
+        transparent: true,
+        opacity: 0.12,
+        depthWrite: false
+      });
+      const shadowMesh = new THREE.Mesh(new THREE.ShapeGeometry(panelShape, 24), shadowMat);
+      shadowMesh.position.set(0.012, -0.015, -0.0015);
+      group.add(shadowMesh);
 
       // Map canvas
       const mapCanvas = document.createElement('canvas');
@@ -476,7 +647,7 @@
         transparent: false
       });
       const mapDisplay = new THREE.Mesh(
-        new THREE.PlaneGeometry(1.15, 0.95),
+        new THREE.ShapeGeometry(makeRoundedRectShape(1.13, 0.92, 0.07), 20),
         mapMat
       );
       mapDisplay.position.z = 0.002;
@@ -490,7 +661,7 @@
       titleCtx.fillStyle = '#ffffff';
       titleCtx.font = 'bold 28px system-ui';
       titleCtx.textAlign = 'center';
-      titleCtx.fillText('🗺️ OpenStreetMap', 256, 40);
+      titleCtx.fillText('ðŸ—ºï¸ OpenStreetMap', 256, 40);
       
       const titleTexture = new THREE.CanvasTexture(titleCanvas);
       const titleMat = new THREE.MeshBasicMaterial({ map: titleTexture, transparent: true });
@@ -503,11 +674,14 @@
       group.userData.mapCanvas = mapCanvas;
       group.userData.mapCtx = mapCtx;
       group.userData.mapTexture = mapTexture;
+      group.userData.glassShell = panel;
+      group.userData.innerBorder = border;
+      group.userData.shadowMesh = shadowMesh;
 
       // Add hover glow border
-      const hoverGlowGeom = new THREE.EdgesGeometry(panelGeom);
+      const hoverGlowGeom = new THREE.EdgesGeometry(new THREE.ShapeGeometry(panelShape, 24));
       const hoverGlowMat = new THREE.LineBasicMaterial({ 
-        color: 0x00ffff,  // Cyan
+        color: 0xe9f6ff,
         transparent: true, 
         opacity: 0,
         linewidth: 3
@@ -562,6 +736,14 @@
             ctx.lineWidth = 4;
             ctx.strokeText('Salt Lake City, UT', 512, 50);
             ctx.fillText('Salt Lake City, UT', 512, 50);
+
+            // OSM attribution (required by tile usage policy).
+            ctx.fillStyle = 'rgba(0,0,0,0.55)';
+            ctx.fillRect(685, 730, 330, 30);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '18px system-ui';
+            ctx.textAlign = 'right';
+            ctx.fillText('(c) OpenStreetMap contributors', 1000, 751);
             
             texture.needsUpdate = true;
           };
@@ -727,14 +909,14 @@
             const pose = hit.getPose(referenceSpace);
             reticle.visible = true;
             reticle.matrix.fromArray(pose.transform.matrix);
-            
-            // Auto-spawn icon on first hit test (only once)
-            if (panels.length === 0 && !activePanel) {
-              spawnMapIcon();
-            }
+            tmpReticlePos.setFromMatrixPosition(reticle.matrix);
+            groundYEstimate = tmpReticlePos.y;
           } else {
             reticle.visible = false;
           }
+          
+          // Spawn icon in the air in front of camera (only once after AR starts)
+          spawnIconInAir();
         }
       }
 
@@ -759,11 +941,9 @@
     }
 
     function detectHover() {
-      const origin = new THREE.Vector3();
-      const direction = new THREE.Vector3();
-      camera.getWorldPosition(origin);
-      camera.getWorldDirection(direction);
-      raycaster.set(origin, direction);
+      camera.getWorldPosition(tmpOrigin);
+      camera.getWorldDirection(tmpDirection);
+      raycaster.set(tmpOrigin, tmpDirection);
 
       const hits = raycaster.intersectObjects(panels, true);
       
@@ -802,32 +982,49 @@
       
       const isHovered = (hoveredObject === object);
       
-      // Animate hover time
+      // Smooth hover ramp similar to Vision Pro focus transitions.
       if (isHovered) {
-        object.userData.hoverTime = Math.min(object.userData.hoverTime + 0.05, 1);
+        object.userData.hoverTime = Math.min(object.userData.hoverTime + 0.045, 1);
       } else {
-        object.userData.hoverTime = Math.max(object.userData.hoverTime - 0.1, 0);
+        object.userData.hoverTime = Math.max(object.userData.hoverTime - 0.055, 0);
       }
       
       const hoverAmount = object.userData.hoverTime;
-      
-      // Icon hover ring animation
-      if (object.userData.hoverRing) {
-        const ring = object.userData.hoverRing;
-        // Pulsing sweep effect
-        const pulse = Math.sin(Date.now() * 0.005) * 0.3 + 0.7;
-        ring.material.opacity = hoverAmount * pulse * 0.8;
-        ring.scale.setScalar(1 + hoverAmount * 0.1);
+
+      if (object.userData.isIcon) {
+        object.scale.setScalar(1 + hoverAmount * 0.04);
       }
       
-      // Panel hover glow animation
+      // Icon hover: brighter ring + slight scale up.
+      if (object.userData.hoverRing) {
+        const ring = object.userData.hoverRing;
+        const pulse = Math.sin(Date.now() * 0.0045) * 0.18 + 0.82;
+        ring.material.opacity = hoverAmount * pulse * 0.9;
+        ring.scale.setScalar(1 + hoverAmount * 0.12);
+        object.scale.setScalar(1 + hoverAmount * 0.06);
+      }
+      
+      // Panel hover: edge light + subtle shell refinement.
       if (object.userData.hoverGlow) {
         const glow = object.userData.hoverGlow;
-        // Sweeping glow effect
-        const sweep = Math.sin(Date.now() * 0.004) * 0.5 + 0.5;
-        glow.material.opacity = hoverAmount * sweep * 0.6;
+        const sweep = Math.sin(Date.now() * 0.0035) * 0.25 + 0.75;
+        glow.material.opacity = hoverAmount * sweep * 0.75;
+      }
+
+      if (object.userData.glassShell) {
+        object.userData.glassShell.material.clearcoat = 1.0 - (0.15 * (1 - hoverAmount));
+        object.userData.glassShell.material.transmission = 0.18 + (hoverAmount * 0.08);
+      }
+
+      if (object.userData.innerBorder) {
+        object.userData.innerBorder.material.opacity = 0.35 + (hoverAmount * 0.35);
+      }
+
+      if (object.userData.shadowMesh) {
+        object.userData.shadowMesh.material.opacity = 0.08 + (hoverAmount * 0.08);
       }
     }
   </script>
 </body>
 </html>
+
