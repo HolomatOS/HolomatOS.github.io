@@ -118,6 +118,27 @@
       transform: translateY(1px) scale(0.995);
     }
 
+    #debugBox {
+      position: fixed;
+      right: 8px;
+      top: 8px;
+      width: min(92vw, 420px);
+      max-height: 42vh;
+      overflow: auto;
+      z-index: 20;
+      font: 12px/1.35 Consolas, "Courier New", monospace;
+      color: #dbeafe;
+      background: rgba(2, 6, 23, 0.9);
+      border: 1px solid rgba(77, 163, 255, 0.5);
+      border-radius: 10px;
+      padding: 8px;
+      white-space: pre-wrap;
+    }
+
+    #debugBox b {
+      color: #93c5fd;
+    }
+
     @media (max-width: 900px) {
       #app {
         grid-template-columns: 1fr;
@@ -143,9 +164,30 @@
   <div id="startOverlay">
     <button id="startBtn" type="button">Start</button>
   </div>
+  <div id="debugBox"><b>Debug</b>\nPage loaded.</div>
 
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script>
+    (function () {
+      const box = document.getElementById("debugBox");
+      function line(msg) {
+        if (!box) return;
+        const t = new Date().toLocaleTimeString();
+        box.textContent += "\n[" + t + "] " + msg;
+        box.scrollTop = box.scrollHeight;
+      }
+      window.__dbg = line;
+      window.addEventListener("error", function (e) {
+        line("ERROR: " + (e.message || "unknown"));
+      });
+      window.addEventListener("unhandledrejection", function (e) {
+        const m = e && e.reason ? (e.reason.message || String(e.reason)) : "unknown rejection";
+        line("PROMISE: " + m);
+      });
+      line("Classic script ready.");
+    })();
+  </script>
 
   <script type="module">
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
@@ -176,8 +218,16 @@
       started: false
     };
 
+    const dbg = (msg) => {
+      if (window.__dbg) window.__dbg(msg);
+    };
+
+    dbg("Module script loaded.");
+    dbg("UserAgent: " + navigator.userAgent);
+
     function setStatus(text) {
       statusEl.textContent = text;
+      dbg("STATUS: " + text);
     }
 
     function fitCanvases() {
@@ -403,13 +453,18 @@
       if (state.started) return;
       state.started = true;
       try {
+        dbg("Start handler entered.");
         setStatus("Starting fullscreen...");
         if (document.fullscreenElement == null && document.documentElement.requestFullscreen) {
           try {
             await document.documentElement.requestFullscreen();
+            dbg("Fullscreen success.");
           } catch (_) {
             // Continue even if fullscreen is rejected by browser policy.
+            dbg("Fullscreen rejected/blocked.");
           }
+        } else {
+          dbg("Fullscreen API unavailable or already active.");
         }
 
         setStatus("Loading 3D hand...");
@@ -417,8 +472,10 @@
 
         setStatus("Opening rear camera...");
         const stream = await openRearCamera();
+        dbg("Rear camera stream obtained.");
         video.srcObject = stream;
         await video.play();
+        dbg("Video play success.");
 
         fitCanvases();
         window.addEventListener("resize", fitCanvases, { passive: true });
@@ -428,9 +485,11 @@
           : statusEl.textContent);
 
         startOverlay.style.display = "none";
+        dbg("Overlay hidden, loop starting.");
         requestAnimationFrame(loop);
       } catch (err) {
         state.started = false;
+        dbg("Start failed: " + (err && err.message ? err.message : String(err)));
         setStatus(`Failed to start: ${err.message}`);
       }
     }
@@ -453,8 +512,17 @@
       requestAnimationFrame(loop);
     }
 
-    startBtn.addEventListener("click", start);
-    startBtn.addEventListener("touchstart", () => {}, { passive: true });
+    startBtn.addEventListener("click", (e) => {
+      dbg("Start click event.");
+      start();
+    });
+    startBtn.addEventListener("pointerup", (e) => {
+      dbg("Start pointerup event.");
+    });
+    startBtn.addEventListener("touchstart", () => {
+      dbg("Start touchstart event.");
+    }, { passive: true });
+    dbg("Start listeners attached.");
   </script>
 </body>
 </html>
