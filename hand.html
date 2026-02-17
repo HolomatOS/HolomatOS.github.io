@@ -168,8 +168,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/GLTFLoader.js"></script>
   <script>
     (function () {
       const box = document.getElementById("debugBox");
@@ -191,7 +189,19 @@
     })();
   </script>
 
-  <script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+
     const statusEl = document.getElementById("status");
     const startOverlay = document.getElementById("startOverlay");
     const startBtn = document.getElementById("startBtn");
@@ -284,7 +294,7 @@
 
     let handModel = null;
 
-    const loader = new THREE.GLTFLoader();
+    const loader = new GLTFLoader();
     const modelCandidates = [
       "./assets/realistic-right-hand.glb",
       "https://cdn.jsdelivr.net/npm/@webxr-input-profiles/assets@1.0/dist/profiles/generic-hand/right.glb"
