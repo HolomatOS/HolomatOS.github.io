@@ -264,8 +264,9 @@
 
     const loader = new GLTFLoader();
     const modelCandidates = [
-      "./assets/realistic-right-hand.glb",
-      "https://cdn.jsdelivr.net/npm/@webxr-input-profiles/assets@1.0/dist/profiles/generic-hand/right.glb"
+      "./hand.glb",
+      "https://cdn.jsdelivr.net/npm/@webxr-input-profiles/assets@1.0/dist/profiles/generic-hand/right.glb",
+      "./assets/realistic-right-hand.glb"
     ];
 
     function rankBoneName(name) {
@@ -447,12 +448,19 @@
 
       const center = averagePoints([wrist, indexMcp, middleMcp, ringMcp, pinkyMcp]);
 
-      let nx = (center.x - 0.5) * 2.0;
-      const ny = (0.5 - center.y) * 2.0;
+      let nx = (wrist.x - 0.5) * 2.0;
+      const ny = (0.5 - wrist.y) * 2.0;
       if (state.mirrorInput) nx = -nx;
 
       const depth = THREE.MathUtils.clamp(-center.z * 2.0, -0.35, 0.65);
-      state.targetPos.set(nx * 0.9, ny * 0.9, depth);
+      const anchorX = 0.86;
+      const anchorY = -0.92;
+      const swayX = THREE.MathUtils.clamp(nx * 0.2, -0.16, 0.16);
+      const swayY = THREE.MathUtils.clamp(ny * 0.2, -0.12, 0.12);
+      const px = THREE.MathUtils.clamp(anchorX + swayX, 0.7, 1.02);
+      const py = THREE.MathUtils.clamp(anchorY + swayY, -0.98, -0.72);
+      const pz = THREE.MathUtils.clamp(depth * 0.5, -0.25, 0.4);
+      state.targetPos.set(px, py, pz);
 
       const vIndex = new THREE.Vector3(indexMcp.x - pinkyMcp.x, pinkyMcp.y - indexMcp.y, indexMcp.z - pinkyMcp.z).normalize();
       const vUp = new THREE.Vector3(middleMcp.x - wrist.x, wrist.y - middleMcp.y, middleMcp.z - wrist.z).normalize();
