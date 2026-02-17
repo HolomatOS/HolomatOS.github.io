@@ -71,7 +71,7 @@
   </style>
 </head>
 <body>
-  <div id="info">ðŸ“± Icon auto-spawns | Click icon â†’ Weather panel opens | Vision Pro style</div>
+  <div id="info">Icon auto-spawns | Click icon to open weather panel | Vision Pro style</div>
   <div id="hud">
     <div class="reticle"></div>
     <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
@@ -79,10 +79,10 @@
   <canvas id="handCanvas"></canvas>
 
   <div id="connectPanel">
-    <h2>ðŸ–ï¸ Choose Mode</h2>
+    <h2>Choose Mode</h2>
     <p>Use hand tracking from Phone 2<br>or just tap & gaze</p>
-    <button class="modeBtn" id="handTrackingBtn">ðŸ–ï¸ ENABLE HAND TRACKING</button>
-    <button class="modeBtn" id="skipHandBtn">ðŸ‘† SKIP - TAP ONLY</button>
+    <button class="modeBtn" id="handTrackingBtn">ENABLE HAND TRACKING</button>
+    <button class="modeBtn" id="skipHandBtn">SKIP - TAP ONLY</button>
     <div id="connectionStatus"></div>
   </div>
 
@@ -128,6 +128,7 @@
     const DEFAULT_WEATHER_COORDS = { lat: 40.7608, lon: -111.8910 };
     let groundYEstimate = null;
     let handConnectTimeout = null;
+    let hasInitialIconSpawned = false;
     let weatherCoords = null;
     let weatherCoordsPromise = null;
 
@@ -232,7 +233,7 @@
     }
     // Spawn icon in AIR in front of camera (not on floor)
     function spawnIconInAir() {
-      if (panels.length > 0) return; // Only spawn once
+      if (hasInitialIconSpawned) return; // Spawn only once per load
       if (groundYEstimate === null) return;
       const icon = makeMapIcon();
 
@@ -252,6 +253,7 @@
 
       scene.add(icon);
       panels.push(icon);
+      hasInitialIconSpawned = true;
     }
     function updateHandDisplay(handCount, twoHandDistance) {
       handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
@@ -324,7 +326,7 @@
       
       const isPinching = distance < 50;
       
-      document.getElementById('statusPinch').textContent = `Pinch: ${isPinching ? 'YES âœ“' : `No (${Math.round(distance)}px)`}`;
+      document.getElementById('statusPinch').textContent = `Pinch: ${isPinching ? 'YES' : `No (${Math.round(distance)}px)`}`;
       
       // PINCH START - Grab panel or spawn if no panel
       if (isPinching && !lastPinch) {
@@ -496,6 +498,7 @@
             iconMat
           );
           group.add(iconMesh);
+          group.userData.iconMesh = iconMesh;
         },
         undefined,
         (error) => {
@@ -503,12 +506,28 @@
           const fallbackMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
           const fallbackMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.16), fallbackMat);
           group.add(fallbackMesh);
+          group.userData.iconMesh = fallbackMesh;
         }
       );
 
+      const hoverHalo = new THREE.Mesh(
+        new THREE.CircleGeometry(0.12, 48),
+        new THREE.MeshBasicMaterial({
+          color: 0xbfe7ff,
+          transparent: true,
+          opacity: 0,
+          depthWrite: false,
+          side: THREE.DoubleSide
+        })
+      );
+      hoverHalo.position.z = -0.001;
+      group.add(hoverHalo);
+
       group.userData.isIcon = true;
       group.userData.isPanel = false;
+      group.userData.hoverHalo = hoverHalo;
       group.userData.hoverTime = 0;
+      group.userData.baseZ = 0;
       group.scale.setScalar(1);
 
       return group;
@@ -537,6 +556,7 @@
       // Link map to icon
       icon.userData.mapPanel = mapPanel;
       mapPanel.userData.iconRef = icon;
+      mapPanel.userData.baseZ = mapPanel.position.z;
     }
 
     function makeRoundedRectShape(width, height, radius) {
@@ -760,6 +780,10 @@
 
     function drawWeatherPanel(ctx, texture, weather) {
       ctx.clearRect(0, 0, 1024, 768);
+      const safeX = 44;
+      const safeY = 44;
+      const safeW = 936;
+      const safeH = 680;
 
       // Backdrop tuned to example.webp (cold blue forest tone).
       const bg = ctx.createLinearGradient(0, 0, 0, 768);
@@ -810,25 +834,25 @@
       ctx.fillStyle = '#eff7ff';
       ctx.font = '600 42px system-ui';
       ctx.textAlign = 'left';
-      ctx.fillText(weather.timeLabel, 436, 198);
+      ctx.fillText(weather.timeLabel, safeX + 392, safeY + 150);
 
       ctx.fillStyle = 'rgba(235,245,255,0.85)';
       ctx.font = '500 36px system-ui';
-      ctx.fillText(weather.dayLabel, 640, 198);
+      ctx.fillText(weather.dayLabel, safeX + 596, safeY + 150);
 
       ctx.font = '600 32px system-ui';
-      ctx.fillText('◉', 372, 196);
+      ctx.fillText('o', safeX + 328, safeY + 148);
       ctx.fillStyle = '#52d769';
-      ctx.fillText('●', 392, 196);
+      ctx.fillText('o', safeX + 348, safeY + 148);
       ctx.fillStyle = '#eff7ff';
-      ctx.fillText('◔', 830, 196);
-      ctx.fillText(`${weather.battery}%`, 872, 196);
+      ctx.fillText('wifi', safeX + 786, safeY + 148);
+      ctx.fillText(`${weather.battery}%`, safeX + 846, safeY + 148);
 
       // Central control card.
-      const panelX = 245;
-      const panelY = 230;
+      const panelX = safeX + 201;
+      const panelY = safeY + 182;
       const panelW = 534;
-      const panelH = 300;
+      const panelH = 288;
 
       const cardGrad = ctx.createLinearGradient(panelX, panelY, panelX, panelY + panelH);
       cardGrad.addColorStop(0, 'rgba(52,75,96,0.92)');
@@ -872,32 +896,32 @@
       ctx.fillStyle = 'rgba(255,255,255,0.88)';
       fillRoundedRect(ctx, panelX + 108, panelY + 186, 308, 24, 12);
       ctx.fillStyle = '#e5f0fa';
-      ctx.fillText('🔊', panelX + 448, panelY + 212);
+      ctx.fillText('vol', panelX + 448, panelY + 212);
 
       // Weather details integrated into lower area in same style.
       ctx.fillStyle = 'rgba(230,242,252,0.92)';
       ctx.font = '600 34px system-ui';
       ctx.textAlign = 'left';
-      ctx.fillText(`${Math.round(weather.temp)}° ${weather.symbol} ${weather.label}`, 254, 582);
+      ctx.fillText(`${Math.round(weather.temp)}° ${weather.symbol} ${weather.label}`, safeX + 210, safeY + 534);
       ctx.font = '500 28px system-ui';
-      ctx.fillText(`Feels ${Math.round(weather.feelsLike)}°   Wind ${Math.round(weather.wind)} km/h   Rain ${Math.round(weather.rainChance)}%`, 254, 620);
+      ctx.fillText(`Feels ${Math.round(weather.feelsLike)}°   Wind ${Math.round(weather.wind)} km/h   Rain ${Math.round(weather.rainChance)}%`, safeX + 210, safeY + 572);
 
       // Hourly mini row.
-      const startX = 260;
+      const startX = safeX + 216;
       const stepX = 96;
       weather.hourly.forEach((h, i) => {
         const x = startX + i * stepX;
         ctx.fillStyle = 'rgba(255,255,255,0.16)';
-        fillRoundedRect(ctx, x - 40, 648, 86, 92, 24);
+        fillRoundedRect(ctx, x - 40, safeY + 598, 86, 82, 22);
 
         ctx.fillStyle = '#ffffff';
         ctx.font = '500 24px system-ui';
         ctx.textAlign = 'center';
-        ctx.fillText(h.time, x + 2, 682);
+        ctx.fillText(h.time, x + 2, safeY + 628);
         ctx.font = '600 30px system-ui';
-        ctx.fillText(h.symbol, x + 2, 715);
+        ctx.fillText(h.symbol, x + 2, safeY + 656);
         ctx.font = '600 26px system-ui';
-        ctx.fillText(`${Math.round(h.temp)}°`, x + 2, 740);
+        ctx.fillText(`${Math.round(h.temp)}°`, x + 2, safeY + 677);
       });
 
       texture.needsUpdate = true;
@@ -1198,6 +1222,10 @@
       if (object.userData.isIcon) {
         const pulse = Math.sin(Date.now() * 0.006) * 0.25 + 0.75;
         object.scale.setScalar(1 + hoverAmount * (0.06 + pulse * 0.03));
+        if (object.userData.hoverHalo) {
+          object.userData.hoverHalo.material.opacity = hoverAmount * (0.22 + pulse * 0.16);
+          object.userData.hoverHalo.scale.setScalar(1 + hoverAmount * 0.18);
+        }
       }
       
       // Icon hover: brighter ring + slight scale up.
@@ -1214,6 +1242,7 @@
         const glow = object.userData.hoverGlow;
         const sweep = Math.sin(Date.now() * 0.0035) * 0.25 + 0.75;
         glow.material.opacity = hoverAmount * sweep * 0.75;
+        object.position.z = (object.userData.baseZ || object.position.z) + hoverAmount * 0.01;
       }
 
       if (object.userData.glassShell) {
