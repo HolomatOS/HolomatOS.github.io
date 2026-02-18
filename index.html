@@ -220,122 +220,13 @@
     window.addEventListener('resize', resizePointerCanvas);
 
     // Pointer toggle button click
-    pointerToggleBtn.addEventListener('click', () => {
-      pointerEnabled = !pointerEnabled;
-      if (pointerEnabled) {
-        pointerToggleBtn.classList.add('active');
-        pointerCanvas.style.display = 'block';
-      } else {
-        pointerToggleBtn.classList.remove('active');
-        pointerCanvas.style.display = 'none';
-        pointerCtx.clearRect(0, 0, pointerCanvas.width, pointerCanvas.height);
-      }
-    });
+    // Pointer toggle button removed — pinch now simulates taps
 
     function showPointerToggle() {
-      // flex display, inline-flex style
-      pointerToggleBtn.style.display = 'inline-flex';
+      // Pointer toggle removed — pinch now simulates taps
     }
 
-    // ── Draw the Vision Pro style pointer (wrist → index ray) ──────
-    function drawPointer(landmarks) {
-      pointerCtx.clearRect(0, 0, pointerCanvas.width, pointerCanvas.height);
-      if (!pointerEnabled || !landmarks) return;
-
-      // Use first hand
-      const lm = Array.isArray(landmarks[0]) ? landmarks[0] : landmarks;
-      if (!lm || lm.length < 21) return;
-
-      const W = pointerCanvas.width;
-      const H = pointerCanvas.height;
-
-      // Wrist = landmark 0, index tip = landmark 8
-      const wrist = lm[0];
-      const indexTip = lm[8];
-      const middleTip = lm[12]; // use middle too to average direction
-
-      const wx = wrist.x * W + HAND_OFFSET_X;
-      const wy = wrist.y * H + HAND_OFFSET_Y;
-      const ix = indexTip.x * W + HAND_OFFSET_X;
-      const iy = indexTip.y * H + HAND_OFFSET_Y;
-
-      // Direction from wrist toward index finger tip, extended far beyond it
-      const dx = ix - wx;
-      const dy = iy - wy;
-      const len = Math.sqrt(dx*dx + dy*dy) || 1;
-      const nx = dx / len;
-      const ny = dy / len;
-
-      // Ray starts at wrist, extends past fingertip to edge of screen
-      const RAY_EXTEND = Math.max(W, H) * 1.5;
-      const rayEndX = wx + nx * RAY_EXTEND;
-      const rayEndY = wy + ny * RAY_EXTEND;
-
-      // ── Draw the stick/ray ──────────────────────────────────────
-      // Outer glow
-      pointerCtx.save();
-      pointerCtx.beginPath();
-      pointerCtx.moveTo(wx, wy);
-      pointerCtx.lineTo(rayEndX, rayEndY);
-      const grad = pointerCtx.createLinearGradient(wx, wy, ix, iy);
-      grad.addColorStop(0, 'rgba(255,255,255,0.0)');
-      grad.addColorStop(0.18, 'rgba(200,235,255,0.55)');
-      grad.addColorStop(0.65, 'rgba(180,225,255,0.35)');
-      grad.addColorStop(1, 'rgba(140,210,255,0.0)');
-      pointerCtx.strokeStyle = grad;
-      pointerCtx.lineWidth = 6;
-      pointerCtx.lineCap = 'round';
-      pointerCtx.filter = 'blur(3px)';
-      pointerCtx.stroke();
-      pointerCtx.restore();
-
-      // Core ray (sharp white line)
-      pointerCtx.save();
-      pointerCtx.beginPath();
-      pointerCtx.moveTo(wx, wy);
-      pointerCtx.lineTo(rayEndX, rayEndY);
-      const coreGrad = pointerCtx.createLinearGradient(wx, wy, ix, iy);
-      coreGrad.addColorStop(0, 'rgba(255,255,255,0.0)');
-      coreGrad.addColorStop(0.15, 'rgba(255,255,255,0.9)');
-      coreGrad.addColorStop(0.6, 'rgba(200,235,255,0.5)');
-      coreGrad.addColorStop(1, 'rgba(180,225,255,0.0)');
-      pointerCtx.strokeStyle = coreGrad;
-      pointerCtx.lineWidth = 1.8;
-      pointerCtx.lineCap = 'round';
-      pointerCtx.filter = 'none';
-      pointerCtx.stroke();
-      pointerCtx.restore();
-
-      // ── Cursor dot at the ray's aim point ──────────────────────
-      // Aim point: extend ~2.2x from wrist through index finger
-      const aimDist = len * 2.2;
-      const aimX = wx + nx * aimDist;
-      const aimY = wy + ny * aimDist;
-
-      // Outer ring
-      pointerCtx.save();
-      pointerCtx.beginPath();
-      pointerCtx.arc(aimX, aimY, 14, 0, Math.PI * 2);
-      pointerCtx.strokeStyle = 'rgba(200,235,255,0.5)';
-      pointerCtx.lineWidth = 1.5;
-      pointerCtx.filter = 'blur(1px)';
-      pointerCtx.stroke();
-      pointerCtx.restore();
-
-      // Inner bright dot
-      pointerCtx.save();
-      pointerCtx.beginPath();
-      pointerCtx.arc(aimX, aimY, 5, 0, Math.PI * 2);
-      const dotGrad = pointerCtx.createRadialGradient(aimX, aimY, 0, aimX, aimY, 5);
-      dotGrad.addColorStop(0, 'rgba(255,255,255,1)');
-      dotGrad.addColorStop(1, 'rgba(140,215,255,0.6)');
-      pointerCtx.fillStyle = dotGrad;
-      pointerCtx.shadowColor = '#8cd8ff';
-      pointerCtx.shadowBlur = 10;
-      pointerCtx.fill();
-      pointerCtx.restore();
-    }
-    // ──────────────────────────────────────────────────────────────
+    // Pointer rendering removed — pinch simulates taps instead
 
     // Two-hand resize tracking
     let lastTwoHandDistance = null;
@@ -425,19 +316,12 @@
             if (data.type === 'hand') {
               handLandmarks = data.landmarks;
               updateHandDisplay(data.handCount || 0, data.twoHandDistance);
-              if (pointerEnabled) {
-                drawPointer(handLandmarks);
-              }
             }
           });
 
           connection.on('close', () => {
             handLandmarks = null;
             lastPinch = false;
-            pointerCtx.clearRect(0, 0, pointerCanvas.width, pointerCanvas.height);
-            pointerToggleBtn.style.display = 'none';
-            pointerCanvas.style.display = 'none';
-            pointerEnabled = false;
             statusEl.textContent = 'Connection lost';
             statusEl.style.color = '#f00';
           });
@@ -611,12 +495,9 @@
 
     function updateHandDisplay(handCount, twoHandDistance) {
       handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
-      
 
       if (!handLandmarks || handCount === 0) {
-        
         lastPinch = false; isResizing = false; lastTwoHandDistance = null;
-        if (pointerEnabled) pointerCtx.clearRect(0, 0, pointerCanvas.width, pointerCanvas.height);
         return;
       }
 
@@ -651,23 +532,19 @@
       const dx = thumbX - indexX; const dy = thumbY - indexY;
       const distance = Math.sqrt(dx*dx + dy*dy);
       const isPinching = distance < 50;
-      
 
       if (isPinching && !lastPinch) {
-        const hitIcon = getIconUnderGaze();
-        if (hitIcon) { openPanelForIcon(hitIcon); return; }
-        const hitPanel = getPanelUnderGaze();
-        if (hitPanel) {
-          activePanel = hitPanel;
-          activePanel.userData.selected = true;
-          activePanel.scale.setScalar(activePanel.scale.x * 1.08);
-          initialPanelScale = activePanel.scale.x;
-        }
+        // Simulate a tap at the center of the screen
+        const tapEvent = new PointerEvent('click', {
+          bubbles: true,
+          cancelable: true,
+          view: window,
+          clientX: window.innerWidth / 2,
+          clientY: window.innerHeight / 2
+        });
+        renderer.domElement.dispatchEvent(tapEvent);
       }
 
-      if (!isPinching && lastPinch) {
-        if (activePanel) { activePanel.userData.selected = false; activePanel = null; }
-      }
       lastPinch = isPinching;
     }
 
