@@ -167,9 +167,10 @@
   </button>
 
   <div id="connectPanel">
-    <h2>Choose Mode</h2>
-    <p>Use hand tracking from Phone 2<br>or just tap & gaze</p>
-    <button class="modeBtn" id="handTrackingBtn" type="button" aria-label="Enable hand tracking">ENABLE HAND TRACKING</button>
+    <h2>Connect to Phone 2</h2>
+    <p>Enter Phone 2's Peer ID below</p>
+    <input id="peerIdInput" type="text" placeholder="hand-camera-xxx..." style="width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #ccc; font-size: 14px; box-sizing: border-box;">
+    <button class="modeBtn" id="handTrackingBtn" type="button" aria-label="Connect to hand tracking">CONNECT</button>
     <button class="modeBtn" id="skipHandBtn" type="button" aria-label="Skip hand tracking and use tap only">SKIP - TAP ONLY</button>
     <div id="connectionStatus"></div>
   </div>
@@ -376,87 +377,86 @@
     animate();
 
     function setupConnection() {
-      const myPeerId = 'moto-receiver-' + Math.random().toString(36).substr(2, 9);
       const handBtn = document.getElementById('handTrackingBtn');
       const statusEl = document.getElementById('connectionStatus');
+      const peerIdInput = document.getElementById('peerIdInput');
 
       function showConnectError(message) {
         statusEl.textContent = message;
         statusEl.style.color = '#ff6b6b';
         handBtn.disabled = false;
-        handBtn.textContent = 'RETRY HAND TRACKING';
+        handBtn.textContent = 'RETRY';
+        peerIdInput.disabled = false;
       }
 
       handBtn.addEventListener('click', (e) => {
-        e.preventDefault(); e.stopPropagation(); console.log('handTrackingBtn clicked');
+        e.preventDefault(); e.stopPropagation();
+        const phone2Id = peerIdInput.value.trim();
+        
+        if (!phone2Id) {
+          statusEl.textContent = 'Please enter Phone 2\'s Peer ID';
+          statusEl.style.color = '#f00';
+          return;
+        }
+
         handTrackingEnabled = true;
-        statusEl.textContent = 'Initializing...';
+        statusEl.textContent = 'Connecting to Phone 2...';
         statusEl.style.color = '#ff0';
         handBtn.disabled = true;
-        handBtn.textContent = 'Initializing...';
+        handBtn.textContent = 'Connecting...';
+        peerIdInput.disabled = true;
 
         if (peer && !peer.destroyed) { peer.destroy(); }
 
-        peer = new Peer(myPeerId);
+        peer = new Peer();
         peer.on('open', (id) => {
-          statusEl.innerHTML =
-            `YOUR ID:<br><span style="color:#0ff;font-size:18px;">${id}</span><br><small>Enter on Phone 2</small>`;
-          handBtn.textContent = 'Waiting for Phone 2...';
-
-          if (handConnectTimeout) clearTimeout(handConnectTimeout);
-          handConnectTimeout = setTimeout(() => {
-            if (!connection || !connection.open) {
-              showConnectError('No connection from Phone 2. Check peer ID and retry.');
-            }
-          }, 20000);
-        });
-
-        peer.on('connection', (conn) => {
-          connection = conn;
-          if (handConnectTimeout) clearTimeout(handConnectTimeout);
-          document.getElementById('connectPanel').classList.add('hidden');
+          console.log('Receiver Peer ID:', id);
+          connection = peer.connect(phone2Id, { reliable: true });
           
-          
+          connection.on('open', () => {
+            statusEl.textContent = 'Connected to Phone 2 ✓';
+            statusEl.style.color = '#0f0';
+            document.getElementById('connectPanel').classList.add('hidden');
+            showPointerToggle();
+            if (handConnectTimeout) clearTimeout(handConnectTimeout);
+          });
 
-          // ── Show the pointer toggle button now that hand tracking is active ──
-          showPointerToggle();
-
-
-          conn.on('data', (data) => {
+          connection.on('data', (data) => {
             if (data.type === 'hand') {
               handLandmarks = data.landmarks;
               updateHandDisplay(data.handCount || 0, data.twoHandDistance);
-
-              // Draw pointer every frame we get hand data
               if (pointerEnabled) {
                 drawPointer(handLandmarks);
               }
             }
           });
 
-          conn.on('close', () => {
-            
-            
-            
-            
+          connection.on('close', () => {
             handLandmarks = null;
             lastPinch = false;
-            // Hide pointer
             pointerCtx.clearRect(0, 0, pointerCanvas.width, pointerCanvas.height);
             pointerToggleBtn.style.display = 'none';
             pointerCanvas.style.display = 'none';
             pointerEnabled = false;
+            statusEl.textContent = 'Connection lost';
+            statusEl.style.color = '#f00';
           });
 
-          conn.on('error', () => {
-            
-            
+          connection.on('error', (err) => {
+            showConnectError('Connection error: ' + (err.message || 'unknown'));
           });
         });
 
         peer.on('error', (err) => {
           showConnectError(`Peer error: ${err.type || 'unknown'}`);
         });
+
+        if (handConnectTimeout) clearTimeout(handConnectTimeout);
+        handConnectTimeout = setTimeout(() => {
+          if (!connection || !connection.open) {
+            showConnectError('Connection timeout. Check ID and retry.');
+          }
+        }, 15000);
       });
 
       // TAP ONLY button — no pointer toggle shown
@@ -599,25 +599,14 @@
       else tmpForward.normalize();
       camera.getWorldPosition(tmpCamPos);
 
-      // Right vector perpendicular to forward, in XZ plane
-      tmpRight.crossVectors(tmpForward, new THREE.Vector3(0, 1, 0)).normalize();
-
       const base = tmpCamPos.clone().addScaledVector(tmpForward, ICON_FORWARD_DISTANCE);
       base.y = groundYEstimate + ICON_HEIGHT_ABOVE_GROUND;
 
-      // icon1.png = clock (left of center)
+      // icon1.png = clock (center only, no background)
       const icon1 = makeIcon('icon1.png', 'clock');
-      icon1.position.copy(base).addScaledVector(tmpRight, -0.22);
+      icon1.position.copy(base);
       icon1.lookAt(tmpCamPos);
-      icon1.userData._baseY = icon1.position.y;
       scene.add(icon1); panels.push(icon1);
-
-      // icon2.png = weather (right of center)
-      const icon2 = makeIcon('icon2.png', 'weather');
-      icon2.position.copy(base).addScaledVector(tmpRight, 0.22);
-      icon2.lookAt(tmpCamPos);
-      icon2.userData._baseY = icon2.position.y;
-      scene.add(icon2); panels.push(icon2);
     }
 
     function updateHandDisplay(handCount, twoHandDistance) {
@@ -757,72 +746,12 @@
       return hits.length > 0 ? hits[0].object.parent || hits[0].object : null;
     }
 
-    // ── Icon factory: accepts filename + type ('clock' | 'weather') ──────
+    // ── Icon factory: simple icon with no background ──────────────────────
     function makeIcon(filename, type) {
       const group = new THREE.Group();
-      group.userData = { isIcon: true, isPanel: false, iconType: type, hoverTime: 0 };
+      group.userData = { isIcon: true, isPanel: false, iconType: type };
 
-      // Frosted glass disc backing
-      const disc = new THREE.Mesh(
-        new THREE.CircleGeometry(0.096, 64),
-        new THREE.MeshPhysicalMaterial({
-          color: type === 'clock' ? 0x0d1a2e : 0x0a1e30,
-          transparent: true, opacity: 0.80,
-          transmission: 0.35, roughness: 0.08, metalness: 0,
-          clearcoat: 1.0, clearcoatRoughness: 0.04, ior: 1.52,
-          side: THREE.DoubleSide
-        })
-      );
-      disc.position.z = -0.002; group.add(disc); group.userData.disc = disc;
-
-      // Specular edge ring
-      const ring = new THREE.Mesh(
-        new THREE.RingGeometry(0.091, 0.098, 64),
-        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.20, side: THREE.DoubleSide })
-      );
-      ring.position.z = -0.001; group.add(ring); group.userData.ring = ring;
-
-      // Top highlight arc
-      const arcCvs = document.createElement('canvas');
-      arcCvs.width = arcCvs.height = 256;
-      const arcCtx = arcCvs.getContext('2d');
-      const arcGrad = arcCtx.createLinearGradient(0, 0, 0, 256);
-      arcGrad.addColorStop(0, 'rgba(255,255,255,0.30)');
-      arcGrad.addColorStop(0.45, 'rgba(255,255,255,0.05)');
-      arcGrad.addColorStop(1, 'rgba(255,255,255,0)');
-      arcCtx.fillStyle = arcGrad;
-      arcCtx.beginPath(); arcCtx.arc(128, 128, 120, 0, Math.PI * 2); arcCtx.fill();
-      const arcMesh = new THREE.Mesh(
-        new THREE.CircleGeometry(0.095, 64),
-        new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(arcCvs), transparent: true, depthWrite: false, side: THREE.DoubleSide })
-      );
-      arcMesh.position.z = 0.001; group.add(arcMesh);
-      group.userData.arcMesh = arcMesh;
-      group.userData.arcCanvas = arcCvs;
-      group.userData.arcCtx = arcCtx;
-      group.userData.arcTexture = arcMesh.material.map;
-
-      // Inner hover glow halo
-      const halo = new THREE.Mesh(
-        new THREE.RingGeometry(0.098, 0.150, 64),
-        new THREE.MeshBasicMaterial({
-          color: type === 'clock' ? 0x5588ff : 0x33ccee,
-          transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false
-        })
-      );
-      halo.position.z = -0.003; group.add(halo); group.userData.hoverHalo = halo;
-
-      // Outer pulse ring
-      const halo2 = new THREE.Mesh(
-        new THREE.RingGeometry(0.150, 0.195, 64),
-        new THREE.MeshBasicMaterial({
-          color: type === 'clock' ? 0x3366ff : 0x1199cc,
-          transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false
-        })
-      );
-      halo2.position.z = -0.004; group.add(halo2); group.userData.hoverHalo2 = halo2;
-
-      // Icon image
+      // Icon image only — no background, no styling
       new THREE.TextureLoader().load(filename, tex => {
         tex.colorSpace = THREE.SRGBColorSpace;
         tex.minFilter = THREE.LinearMipmapLinearFilter;
@@ -830,7 +759,7 @@
         tex.generateMipmaps = true;
         tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
         const aspect = (tex.image.width || 1) / (tex.image.height || 1);
-        const h = 0.10, w = h * aspect;
+        const h = 0.15, w = h * aspect;
         const m = new THREE.Mesh(
           new THREE.PlaneGeometry(w, h),
           new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide })
@@ -838,8 +767,8 @@
         group.add(m); group.userData.iconMesh = m;
       }, undefined, () => {
         const fb = new THREE.Mesh(
-          new THREE.CircleGeometry(0.055, 32),
-          new THREE.MeshBasicMaterial({ color: type === 'clock' ? 0x3366ff : 0x22aacc, transparent: true, opacity: 0.9 })
+          new THREE.CircleGeometry(0.075, 32),
+          new THREE.MeshBasicMaterial({ color: 0x3366ff, transparent: true, opacity: 0.5 })
         );
         group.add(fb);
       });
@@ -1225,10 +1154,8 @@
       panels.forEach(panel => {
         if (panel.userData.isClockPanel) drawClockFace(panel.userData.clockCtx, panel.userData.clockCanvas);
         if (panel.userData.isClockPanel) panel.userData.clockTexture.needsUpdate = true;
-        updateHoverEffect(panel);
       });
 
-      detectHover();
       renderer.render(scene, camera);
     }
 
