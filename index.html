@@ -342,7 +342,7 @@
     let initialPanelScale = 1.0;
 
     const HAND_OFFSET_X = 0;
-    const HAND_OFFSET_Y = -200;
+    const HAND_OFFSET_Y = -270;
     const HAND_SCALE = 1.0;
     const ICON_FORWARD_DISTANCE = 1.0;
     const ICON_HEIGHT_ABOVE_GROUND = 1.0;
@@ -353,10 +353,16 @@
     let handConnectTimeout = null;
     let hasInitialIconSpawned = false;
 
+    // Weather
+    let weatherData = null, weatherFetchedAt = 0;
+    const WEATHER_TTL = 5 * 60 * 1000;
+    let userLat = 40.7128, userLon = -74.006;
+
     const tmpOrigin = new THREE.Vector3();
     const tmpDirection = new THREE.Vector3();
     const tmpCamPos = new THREE.Vector3();
     const tmpForward = new THREE.Vector3();
+    const tmpRight = new THREE.Vector3();
     const tmpReticlePos = new THREE.Vector3();
 
     const handCanvas = document.getElementById('handCanvas');
@@ -366,6 +372,7 @@
 
     init();
     setupConnection();
+    prefetchWeather();
     animate();
 
     function setupConnection() {
@@ -573,18 +580,33 @@
     function spawnIconInAir() {
       if (hasInitialIconSpawned) return;
       if (groundYEstimate === null) return;
-      const icon = makeMapIcon();
+      hasInitialIconSpawned = true;
+
       camera.getWorldDirection(tmpForward);
       tmpForward.y = 0;
-      if (tmpForward.lengthSq() < 1e-6) { tmpForward.set(0, 0, -1); }
-      else { tmpForward.normalize(); }
+      if (tmpForward.lengthSq() < 1e-6) tmpForward.set(0, 0, -1);
+      else tmpForward.normalize();
       camera.getWorldPosition(tmpCamPos);
-      icon.position.copy(tmpCamPos).addScaledVector(tmpForward, ICON_FORWARD_DISTANCE);
-      icon.position.y = groundYEstimate + ICON_HEIGHT_ABOVE_GROUND;
-      icon.lookAt(tmpCamPos);
-      scene.add(icon);
-      panels.push(icon);
-      hasInitialIconSpawned = true;
+
+      // Right vector perpendicular to forward, in XZ plane
+      tmpRight.crossVectors(tmpForward, new THREE.Vector3(0, 1, 0)).normalize();
+
+      const base = tmpCamPos.clone().addScaledVector(tmpForward, ICON_FORWARD_DISTANCE);
+      base.y = groundYEstimate + ICON_HEIGHT_ABOVE_GROUND;
+
+      // icon1.png = clock (left of center)
+      const icon1 = makeIcon('icon1.png', 'clock');
+      icon1.position.copy(base).addScaledVector(tmpRight, -0.22);
+      icon1.lookAt(tmpCamPos);
+      icon1.userData._baseY = icon1.position.y;
+      scene.add(icon1); panels.push(icon1);
+
+      // icon2.png = weather (right of center)
+      const icon2 = makeIcon('icon2.png', 'weather');
+      icon2.position.copy(base).addScaledVector(tmpRight, 0.22);
+      icon2.lookAt(tmpCamPos);
+      icon2.userData._baseY = icon2.position.y;
+      scene.add(icon2); panels.push(icon2);
     }
 
     function updateHandDisplay(handCount, twoHandDistance) {
@@ -633,14 +655,14 @@
 
       if (isPinching && !lastPinch) {
         const hitIcon = getIconUnderGaze();
-        if (hitIcon) { openMapPanel(hitIcon); return; }
+        if (hitIcon) { openPanelForIcon(hitIcon); return; }
         const hitPanel = getPanelUnderGaze();
         if (hitPanel) {
           activePanel = hitPanel;
           activePanel.userData.selected = true;
           activePanel.scale.setScalar(activePanel.scale.x * 1.08);
           initialPanelScale = activePanel.scale.x;
-        } else if (reticle.visible) { spawnMapIcon(); }
+        }
       }
 
       if (!isPinching && lastPinch) {
@@ -698,8 +720,7 @@
 
     function onCanvasClick() {
       const hitIcon = getIconUnderGaze();
-      if (hitIcon) { openMapPanel(hitIcon); return; }
-      if (reticle.visible) { spawnMapIcon(); }
+      if (hitIcon) { openPanelForIcon(hitIcon); return; }
     }
 
     function getPanelUnderGaze() {
@@ -725,184 +746,429 @@
       return hits.length > 0 ? hits[0].object.parent || hits[0].object : null;
     }
 
-    function spawnMapIcon() {
-      const icon = makeMapIcon();
-      icon.position.setFromMatrixPosition(reticle.matrix);
-      icon.quaternion.setFromRotationMatrix(reticle.matrix);
-      scene.add(icon); panels.push(icon);
-    }
-
-    function makeMapIcon() {
+    // ── Icon factory: accepts filename + type ('clock' | 'weather') ──────
+    function makeIcon(filename, type) {
       const group = new THREE.Group();
-      const textureLoader = new THREE.TextureLoader();
-      textureLoader.load('icon.png', (texture) => {
-        texture.colorSpace = THREE.SRGBColorSpace;
-        texture.minFilter = THREE.LinearMipmapLinearFilter;
-        texture.magFilter = THREE.LinearFilter;
-        texture.generateMipmaps = true;
-        texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-        const imgW = texture.image.width || 1;
-        const imgH = texture.image.height || 1;
-        const aspect = imgW / imgH;
-        const height = 0.15; const width = height * aspect;
-        const iconMat = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, side: THREE.DoubleSide });
-        const iconMesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), iconMat);
-        group.add(iconMesh); group.userData.iconMesh = iconMesh;
-      }, undefined, (error) => {
-        const fallbackMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
-        const fallbackMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.16), fallbackMat);
-        group.add(fallbackMesh); group.userData.iconMesh = fallbackMesh;
+      group.userData = { isIcon: true, isPanel: false, iconType: type, hoverTime: 0 };
+
+      // Frosted glass disc backing
+      const disc = new THREE.Mesh(
+        new THREE.CircleGeometry(0.096, 64),
+        new THREE.MeshPhysicalMaterial({
+          color: type === 'clock' ? 0x0d1a2e : 0x0a1e30,
+          transparent: true, opacity: 0.80,
+          transmission: 0.35, roughness: 0.08, metalness: 0,
+          clearcoat: 1.0, clearcoatRoughness: 0.04, ior: 1.52,
+          side: THREE.DoubleSide
+        })
+      );
+      disc.position.z = -0.002; group.add(disc); group.userData.disc = disc;
+
+      // Specular edge ring
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(0.091, 0.098, 64),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.20, side: THREE.DoubleSide })
+      );
+      ring.position.z = -0.001; group.add(ring); group.userData.ring = ring;
+
+      // Top highlight arc
+      const arcCvs = document.createElement('canvas');
+      arcCvs.width = arcCvs.height = 256;
+      const arcCtx = arcCvs.getContext('2d');
+      const arcGrad = arcCtx.createLinearGradient(0, 0, 0, 256);
+      arcGrad.addColorStop(0, 'rgba(255,255,255,0.30)');
+      arcGrad.addColorStop(0.45, 'rgba(255,255,255,0.05)');
+      arcGrad.addColorStop(1, 'rgba(255,255,255,0)');
+      arcCtx.fillStyle = arcGrad;
+      arcCtx.beginPath(); arcCtx.arc(128, 128, 120, 0, Math.PI * 2); arcCtx.fill();
+      const arcMesh = new THREE.Mesh(
+        new THREE.CircleGeometry(0.095, 64),
+        new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(arcCvs), transparent: true, depthWrite: false, side: THREE.DoubleSide })
+      );
+      arcMesh.position.z = 0.001; group.add(arcMesh);
+      group.userData.arcMesh = arcMesh;
+      group.userData.arcCanvas = arcCvs;
+      group.userData.arcCtx = arcCtx;
+      group.userData.arcTexture = arcMesh.material.map;
+
+      // Inner hover glow halo
+      const halo = new THREE.Mesh(
+        new THREE.RingGeometry(0.098, 0.150, 64),
+        new THREE.MeshBasicMaterial({
+          color: type === 'clock' ? 0x5588ff : 0x33ccee,
+          transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false
+        })
+      );
+      halo.position.z = -0.003; group.add(halo); group.userData.hoverHalo = halo;
+
+      // Outer pulse ring
+      const halo2 = new THREE.Mesh(
+        new THREE.RingGeometry(0.150, 0.195, 64),
+        new THREE.MeshBasicMaterial({
+          color: type === 'clock' ? 0x3366ff : 0x1199cc,
+          transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false
+        })
+      );
+      halo2.position.z = -0.004; group.add(halo2); group.userData.hoverHalo2 = halo2;
+
+      // Icon image
+      new THREE.TextureLoader().load(filename, tex => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.minFilter = THREE.LinearMipmapLinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        tex.generateMipmaps = true;
+        tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        const aspect = (tex.image.width || 1) / (tex.image.height || 1);
+        const h = 0.10, w = h * aspect;
+        const m = new THREE.Mesh(
+          new THREE.PlaneGeometry(w, h),
+          new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide })
+        );
+        group.add(m); group.userData.iconMesh = m;
+      }, undefined, () => {
+        const fb = new THREE.Mesh(
+          new THREE.CircleGeometry(0.055, 32),
+          new THREE.MeshBasicMaterial({ color: type === 'clock' ? 0x3366ff : 0x22aacc, transparent: true, opacity: 0.9 })
+        );
+        group.add(fb);
       });
 
-      const hoverHalo = new THREE.Mesh(
-        new THREE.CircleGeometry(0.12, 48),
-        new THREE.MeshBasicMaterial({ color: 0xbfe7ff, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide })
-      );
-      hoverHalo.position.z = -0.001;
-      group.add(hoverHalo);
-
-      group.userData.isIcon = true; group.userData.isPanel = false;
-      group.userData.hoverHalo = hoverHalo; group.userData.hoverTime = 0;
-      group.userData.baseZ = 0; group.scale.setScalar(1);
       return group;
     }
 
-    function openMapPanel(icon) {
-      if (icon.userData.mapPanel) return;
-      const mapPanel = makeMapPanel();
-      mapPanel.position.copy(icon.position);
-      mapPanel.quaternion.copy(icon.quaternion);
-      const offset = new THREE.Vector3(0.72, 0, 0.04);
-      offset.applyQuaternion(icon.quaternion);
-      mapPanel.position.add(offset);
-      scene.add(mapPanel); panels.push(mapPanel);
+    // ── Open the correct panel to the SIDE of the icon ────────────────
+    function openPanelForIcon(icon) {
+      if (icon.userData.openPanel) return;
+      const type = icon.userData.iconType;
+      const panel = type === 'clock' ? makeClockPanel() : makeWeatherPanel();
+
+      // Spawn panel 0.82m to the right of the icon (in icon's local space)
+      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(icon.quaternion);
+      panel.position.copy(icon.position).addScaledVector(right, 0.82);
+      panel.quaternion.copy(icon.quaternion);
+      panel.userData.baseZ = panel.position.z;
+
+      scene.add(panel); panels.push(panel);
       icon.visible = false;
-      icon.userData.mapPanel = mapPanel;
-      mapPanel.userData.iconRef = icon;
-      mapPanel.userData.baseZ = mapPanel.position.z;
+      icon.userData.openPanel = panel;
+      panel.userData.iconRef = icon;
     }
 
+    // ── Shared: rounded rect THREE.Shape ─────────────────────────────
     function makeRoundedRectShape(width, height, radius) {
       const shape = new THREE.Shape();
-      const w = width; const h = height;
-      const r = Math.min(radius, w*0.5, h*0.5);
-      shape.moveTo(-w/2+r, -h/2);
-      shape.lineTo(w/2-r, -h/2);
+      const w = width, h = height, r = Math.min(radius, w * 0.5, h * 0.5);
+      shape.moveTo(-w/2+r, -h/2); shape.lineTo(w/2-r, -h/2);
       shape.quadraticCurveTo(w/2, -h/2, w/2, -h/2+r);
-      shape.lineTo(w/2, h/2-r);
-      shape.quadraticCurveTo(w/2, h/2, w/2-r, h/2);
-      shape.lineTo(-w/2+r, h/2);
-      shape.quadraticCurveTo(-w/2, h/2, -w/2, h/2-r);
-      shape.lineTo(-w/2, -h/2+r);
-      shape.quadraticCurveTo(-w/2, -h/2, -w/2+r, -h/2);
+      shape.lineTo(w/2, h/2-r); shape.quadraticCurveTo(w/2, h/2, w/2-r, h/2);
+      shape.lineTo(-w/2+r, h/2); shape.quadraticCurveTo(-w/2, h/2, -w/2, h/2-r);
+      shape.lineTo(-w/2, -h/2+r); shape.quadraticCurveTo(-w/2, -h/2, -w/2+r, -h/2);
       return shape;
     }
 
-    function makeMapPanel() {
+    // ── Shared: Vision Pro glass shell ────────────────────────────────
+    function makeGlassShell(w, h, r, tint) {
+      const shape = makeRoundedRectShape(w, h, r);
+      const geom = new THREE.ShapeGeometry(shape, 28);
       const group = new THREE.Group();
-      const panelW = 1.2; const panelH = 1.0; const cornerR = 0.12;
-      const panelShape = makeRoundedRectShape(panelW, panelH, cornerR);
-      const panelGeom = new THREE.ShapeGeometry(panelShape, 24);
-      const panelMat = new THREE.MeshPhysicalMaterial({
-        color: 0x3e566b, transparent: true, opacity: PANEL_SHELL_OPACITY,
-        transmission: 0.2, roughness: 0.2, metalness: 0.08,
-        clearcoat: 1.0, clearcoatRoughness: 0.12, reflectivity: 0.5,
-        ior: 1.5, thickness: 0.75, side: THREE.DoubleSide
-      });
-      const panel = new THREE.Mesh(panelGeom, panelMat);
-      group.add(panel);
 
-      const gradientCanvas = document.createElement('canvas');
-      gradientCanvas.width = 512; gradientCanvas.height = 512;
-      const gradCtx = gradientCanvas.getContext('2d');
-      const gradient = gradCtx.createLinearGradient(0, 0, 0, 512);
-      gradient.addColorStop(0, 'rgba(190,215,235,0.35)');
-      gradient.addColorStop(0.35, 'rgba(110,145,175,0.16)');
-      gradient.addColorStop(1, 'rgba(50,72,92,0.08)');
-      gradCtx.fillStyle = gradient; gradCtx.fillRect(0, 0, 512, 512);
-      const gradTexture = new THREE.CanvasTexture(gradientCanvas);
-      const gradMat = new THREE.MeshBasicMaterial({ map: gradTexture, transparent: true, opacity: 0.8 });
-      const gradMesh = new THREE.Mesh(new THREE.ShapeGeometry(panelShape, 24), gradMat);
-      gradMesh.position.z = 0.001; group.add(gradMesh);
+      const shell = new THREE.Mesh(geom, new THREE.MeshPhysicalMaterial({
+        color: tint, transparent: true, opacity: PANEL_SHELL_OPACITY + 0.06,
+        transmission: 0.28, roughness: 0.10, metalness: 0,
+        clearcoat: 1.0, clearcoatRoughness: 0.05,
+        reflectivity: 0.65, ior: 1.52, thickness: 0.9,
+        side: THREE.DoubleSide
+      }));
+      group.add(shell);
 
-      const borderGeom = new THREE.EdgesGeometry(new THREE.ShapeGeometry(panelShape, 24));
-      const borderMat = new THREE.LineBasicMaterial({ color: 0xcfe1ee, transparent: true, opacity: 0.36 });
-      const border = new THREE.LineSegments(borderGeom, borderMat); group.add(border);
+      // Specular top sheen
+      const shineCvs = document.createElement('canvas');
+      shineCvs.width = shineCvs.height = 512;
+      const shineCtx = shineCvs.getContext('2d');
+      const shineGrad = shineCtx.createLinearGradient(0, 0, 0, 512);
+      shineGrad.addColorStop(0, 'rgba(255,255,255,0.24)');
+      shineGrad.addColorStop(0.20, 'rgba(255,255,255,0.07)');
+      shineGrad.addColorStop(0.50, 'rgba(255,255,255,0.02)');
+      shineGrad.addColorStop(1, 'rgba(0,0,0,0)');
+      shineCtx.fillStyle = shineGrad; shineCtx.fillRect(0, 0, 512, 512);
+      const shineMesh = new THREE.Mesh(new THREE.ShapeGeometry(shape, 28),
+        new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(shineCvs), transparent: true, opacity: 1 }));
+      shineMesh.position.z = 0.001; group.add(shineMesh);
 
-      const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.12, depthWrite: false });
-      const shadowMesh = new THREE.Mesh(new THREE.ShapeGeometry(panelShape, 24), shadowMat);
-      shadowMesh.position.set(0.012, -0.015, -0.0015); group.add(shadowMesh);
+      // Bottom blue accent glow
+      const glowCvs = document.createElement('canvas');
+      glowCvs.width = glowCvs.height = 512;
+      const glowCtx = glowCvs.getContext('2d');
+      const glowGrad = glowCtx.createLinearGradient(0, 460, 0, 512);
+      glowGrad.addColorStop(0, 'rgba(80,160,255,0)');
+      glowGrad.addColorStop(1, 'rgba(80,160,255,0.12)');
+      glowCtx.fillStyle = glowGrad; glowCtx.fillRect(0, 0, 512, 512);
+      const glowMesh = new THREE.Mesh(new THREE.ShapeGeometry(shape, 28),
+        new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(glowCvs), transparent: true, opacity: 1 }));
+      glowMesh.position.z = 0.0015; group.add(glowMesh);
 
-      const mapCanvas = document.createElement('canvas');
-      mapCanvas.width = 1024; mapCanvas.height = 768;
-      const mapCtx = mapCanvas.getContext('2d');
-      mapCtx.fillStyle = '#243949'; mapCtx.fillRect(0, 0, 1024, 768);
-      mapCtx.fillStyle = '#e8f4ff'; mapCtx.font = '600 34px system-ui';
-      mapCtx.textAlign = 'center'; mapCtx.fillText('Loading Panel...', 512, 384);
+      // Border
+      const border = new THREE.LineSegments(
+        new THREE.EdgesGeometry(geom),
+        new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.16 })
+      );
+      group.add(border);
 
-      const mapTexture = new THREE.CanvasTexture(mapCanvas);
-      mapTexture.minFilter = THREE.LinearMipmapLinearFilter;
-      mapTexture.magFilter = THREE.LinearFilter;
-      mapTexture.generateMipmaps = true;
-      mapTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-      const mapMat = new THREE.MeshBasicMaterial({ map: mapTexture, transparent: false });
-      const mapDisplay = new THREE.Mesh(new THREE.ShapeGeometry(makeRoundedRectShape(1.13, 0.92, 0.08), 20), mapMat);
-      mapDisplay.position.z = 0.002; group.add(mapDisplay);
+      // Drop shadow
+      const shadowMesh = new THREE.Mesh(new THREE.ShapeGeometry(shape, 28),
+        new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false }));
+      shadowMesh.position.set(0.013, -0.02, -0.002); group.add(shadowMesh);
 
-      group.userData.isPanel = true; group.userData.isMapPanel = true;
-      group.userData.mapCanvas = mapCanvas; group.userData.mapCtx = mapCtx;
-      group.userData.mapTexture = mapTexture; group.userData.glassShell = panel;
-      group.userData.innerBorder = border; group.userData.shadowMesh = shadowMesh;
+      // Hover edge glow
+      const hoverGlow = new THREE.LineSegments(
+        new THREE.EdgesGeometry(geom),
+        new THREE.LineBasicMaterial({ color: 0x88ccff, transparent: true, opacity: 0 })
+      );
+      hoverGlow.position.z = 0.006; group.add(hoverGlow);
 
-      const hoverGlowGeom = new THREE.EdgesGeometry(new THREE.ShapeGeometry(panelShape, 24));
-      const hoverGlowMat = new THREE.LineBasicMaterial({ color: 0xe9f6ff, transparent: true, opacity: 0, linewidth: 3 });
-      const hoverGlow = new THREE.LineSegments(hoverGlowGeom, hoverGlowMat);
-      hoverGlow.position.z = 0.005; group.add(hoverGlow);
-      group.userData.hoverGlow = hoverGlow; group.userData.hoverTime = 0;
+      group.userData.isPanel = true; group.userData.hoverTime = 0;
+      group.userData.glassShell = shell;
+      group.userData.innerBorder = border;
+      group.userData.shadowMesh = shadowMesh;
+      group.userData.hoverGlow = hoverGlow;
+      return { group, shape };
+    }
 
-      drawUtilityPanel(mapCtx, mapTexture);
+    // ── Canvas texture helper ─────────────────────────────────────────
+    function makeCanvasTex(w, h, drawFn) {
+      const cvs = document.createElement('canvas');
+      cvs.width = w; cvs.height = h;
+      const ctx = cvs.getContext('2d');
+      drawFn(ctx, cvs);
+      const tex = new THREE.CanvasTexture(cvs);
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      tex.generateMipmaps = true;
+      tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      return { tex, cvs, ctx };
+    }
+
+    function fillRR(ctx, x, y, w, h, r, fill) {
+      r = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x+r, y); ctx.lineTo(x+w-r, y);
+      ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+      ctx.lineTo(x+w, y+h-r); ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+      ctx.lineTo(x+r, y+h); ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+      ctx.lineTo(x, y+r); ctx.quadraticCurveTo(x, y, x+r, y);
+      ctx.closePath();
+      if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  CLOCK PANEL
+    // ════════════════════════════════════════════════════════════════
+    function makeClockPanel() {
+      const PW = 0.90, PH = 0.62, CR = 0.09;
+      const { group, shape } = makeGlassShell(PW, PH, CR, 0x071422);
+      const { tex, cvs, ctx } = makeCanvasTex(960, 640, drawClockFace);
+      const content = new THREE.Mesh(
+        new THREE.ShapeGeometry(makeRoundedRectShape(PW - 0.055, PH - 0.045, 0.065), 20),
+        new THREE.MeshBasicMaterial({ map: tex, transparent: false })
+      );
+      content.position.z = 0.003; group.add(content);
+      Object.assign(group.userData, { isClockPanel: true, clockCanvas: cvs, clockCtx: ctx, clockTexture: tex });
       return group;
     }
 
-    function fillRoundedRect(ctx, x, y, width, height, radius) {
-      const r = Math.min(radius, width*0.5, height*0.5);
+    function drawClockFace(ctx, cvs) {
+      const W = cvs.width, H = cvs.height;
+      ctx.clearRect(0, 0, W, H);
+      fillRR(ctx, 0, 0, W, H, 48, '#050e1c');
+      const bgG = ctx.createLinearGradient(0, 0, 0, H);
+      bgG.addColorStop(0, '#07121f'); bgG.addColorStop(1, '#0c1e35');
+      ctx.fillStyle = bgG; ctx.fillRect(0, 0, W, H);
+
+      const now = new Date();
+      const h12 = String(now.getHours() % 12 || 12).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      const ss = String(now.getSeconds()).padStart(2, '0');
+      const ampm = now.getHours() >= 12 ? 'PM' : 'AM';
+      const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+      const cx = W / 2, cy = H * 0.47;
+      const ringR = 148;
+
+      // Track ring
+      ctx.save();
+      ctx.beginPath(); ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.restore();
+
+      // Seconds progress arc
+      ctx.save();
       ctx.beginPath();
-      ctx.moveTo(x+r, y); ctx.lineTo(x+width-r, y);
-      ctx.quadraticCurveTo(x+width, y, x+width, y+r);
-      ctx.lineTo(x+width, y+height-r);
-      ctx.quadraticCurveTo(x+width, y+height, x+width-r, y+height);
-      ctx.lineTo(x+r, y+height);
-      ctx.quadraticCurveTo(x, y+height, x, y+height-r);
-      ctx.lineTo(x, y+r);
-      ctx.quadraticCurveTo(x, y, x+r, y);
-      ctx.closePath(); ctx.fill();
+      ctx.arc(cx, cy, ringR, -Math.PI / 2, -Math.PI / 2 + (now.getSeconds() / 60) * Math.PI * 2);
+      const arcG = ctx.createLinearGradient(cx - ringR, cy, cx + ringR, cy);
+      arcG.addColorStop(0, 'rgba(50,130,255,0.5)');
+      arcG.addColorStop(0.5, 'rgba(80,180,255,0.95)');
+      arcG.addColorStop(1, 'rgba(120,220,255,0.6)');
+      ctx.strokeStyle = arcG; ctx.lineWidth = 3.5; ctx.lineCap = 'round';
+      ctx.shadowColor = 'rgba(80,180,255,0.7)'; ctx.shadowBlur = 12; ctx.stroke();
+      ctx.restore();
+
+      // HH:MM
+      ctx.save();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = '200 152px system-ui';
+      ctx.fillStyle = 'rgba(255,255,255,0.97)';
+      ctx.shadowColor = 'rgba(80,180,255,0.25)'; ctx.shadowBlur = 24;
+      ctx.fillText(`${h12}:${mm}`, cx - 10, cy);
+      ctx.restore();
+
+      // AM/PM badge
+      ctx.save();
+      ctx.font = '300 30px system-ui';
+      ctx.fillStyle = 'rgba(255,255,255,0.42)';
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(ampm, cx + 190, cy - 44);
+      ctx.restore();
+
+      // Seconds
+      ctx.save();
+      ctx.font = '200 26px system-ui';
+      ctx.fillStyle = 'rgba(80,200,255,0.82)';
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(`:${ss}`, cx + 190, cy - 4);
+      ctx.restore();
+
+      // Divider
+      const divG = ctx.createLinearGradient(W*0.2, 0, W*0.8, 0);
+      divG.addColorStop(0, 'rgba(255,255,255,0)');
+      divG.addColorStop(0.5, 'rgba(255,255,255,0.1)');
+      divG.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.save(); ctx.strokeStyle = divG; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(W*0.2, H-92); ctx.lineTo(W*0.8, H-92); ctx.stroke(); ctx.restore();
+
+      // Date
+      ctx.save();
+      ctx.textAlign = 'center'; ctx.font = '300 27px system-ui';
+      ctx.fillStyle = 'rgba(255,255,255,0.36)';
+      ctx.fillText(dateStr.toUpperCase(), cx, H - 56); ctx.restore();
     }
 
-    function drawUtilityPanel(ctx, texture) {
-      ctx.clearRect(0, 0, 1024, 768);
-      const bg = ctx.createLinearGradient(0, 0, 0, 768);
-      bg.addColorStop(0, '#33495e'); bg.addColorStop(1, '#6e879e');
-      ctx.fillStyle = bg; ctx.fillRect(0, 0, 1024, 768);
-      const panelX=176,panelY=172,panelW=672,panelH=404;
-      const cardGrad = ctx.createLinearGradient(panelX, panelY, panelX, panelY+panelH);
-      cardGrad.addColorStop(0, 'rgba(52,75,96,0.92)');
-      cardGrad.addColorStop(1, 'rgba(74,103,128,0.9)');
-      ctx.fillStyle = cardGrad;
-      fillRoundedRect(ctx, panelX, panelY, panelW, panelH, 52);
-      ctx.fillStyle='#e9f4ff'; ctx.textAlign='left';
-      ctx.font='600 56px system-ui'; ctx.fillText('Utility Hub', panelX+52, panelY+92);
-      ctx.font='500 33px system-ui'; ctx.fillStyle='rgba(230,242,252,0.92)';
-      ctx.fillText('Utility panel is ready.', panelX+52, panelY+162);
-      ctx.fillText('Pick a module to add next:', panelX+52, panelY+212);
-      ctx.font='500 31px system-ui';
-      ctx.fillText('1. Calendar and reminders', panelX+72, panelY+272);
-      ctx.fillText('2. Messages quick glance', panelX+72, panelY+322);
-      ctx.fillText('3. Timer and focus control', panelX+72, panelY+372);
-      ctx.fillText('4. Commute ETA', panelX+72, panelY+422);
-      texture.needsUpdate = true;
+    // ════════════════════════════════════════════════════════════════
+    //  WEATHER PANEL
+    // ════════════════════════════════════════════════════════════════
+    function makeWeatherPanel() {
+      const PW = 0.95, PH = 0.72, CR = 0.09;
+      const { group, shape } = makeGlassShell(PW, PH, CR, 0x081624);
+      const { tex, cvs, ctx } = makeCanvasTex(1024, 768, (c, cv) => drawWeatherFace(c, cv, weatherData));
+      const content = new THREE.Mesh(
+        new THREE.ShapeGeometry(makeRoundedRectShape(PW - 0.055, PH - 0.045, 0.065), 20),
+        new THREE.MeshBasicMaterial({ map: tex, transparent: false })
+      );
+      content.position.z = 0.003; group.add(content);
+      Object.assign(group.userData, {
+        isWeatherPanel: true, weatherCanvas: cvs, weatherCtx: ctx, weatherTexture: tex
+      });
+      // Refresh weather every WEATHER_TTL ms
+      const timer = setInterval(async () => {
+        navigator.geolocation.getCurrentPosition(async pos => {
+          await fetchWeather(pos.coords.latitude, pos.coords.longitude);
+          drawWeatherFace(group.userData.weatherCtx, group.userData.weatherCanvas, weatherData);
+          group.userData.weatherTexture.needsUpdate = true;
+        }, async () => {
+          await fetchWeather(userLat, userLon);
+          drawWeatherFace(group.userData.weatherCtx, group.userData.weatherCanvas, weatherData);
+          group.userData.weatherTexture.needsUpdate = true;
+        });
+      }, WEATHER_TTL);
+      group.userData.weatherTimer = timer;
+      return group;
     }
 
-    function onWindowResize() {
+    function wCode(code) {
+      if (code === 0) return { label: 'Clear Sky', emoji: '☀️', sky: ['#0a1a3a','#1a4080'] };
+      if (code <= 2)  return { label: 'Partly Cloudy', emoji: '🌤️', sky: ['#1a2a45','#243560'] };
+      if (code === 3) return { label: 'Overcast', emoji: '☁️', sky: ['#1e2a38','#2a3848'] };
+      if (code <= 49) return { label: 'Foggy', emoji: '🌫️', sky: ['#222830','#303848'] };
+      if (code <= 59) return { label: 'Drizzle', emoji: '🌦️', sky: ['#182030','#222c3a'] };
+      if (code <= 69) return { label: 'Rain', emoji: '🌧️', sky: ['#101820','#1a2430'] };
+      if (code <= 79) return { label: 'Snow', emoji: '❄️', sky: ['#1a2848','#243060'] };
+      if (code <= 84) return { label: 'Showers', emoji: '🌧️', sky: ['#101820','#1c2835'] };
+      return { label: 'Thunderstorm', emoji: '⛈️', sky: ['#0c1020','#18202c'] };
+    }
+
+    function drawWeatherFace(ctx, cvs, data) {
+      const W = cvs.width, H = cvs.height;
+      ctx.clearRect(0, 0, W, H);
+
+      if (!data) {
+        fillRR(ctx, 0, 0, W, H, 48, '#08131e');
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '300 38px system-ui'; ctx.fillStyle = 'rgba(255,255,255,0.38)';
+        ctx.fillText('Fetching weather…', W/2, H/2); return;
+      }
+
+      const info = wCode(data.weather_code || 0);
+      const bg = ctx.createLinearGradient(0, 0, 0, H);
+      bg.addColorStop(0, info.sky[0]); bg.addColorStop(1, info.sky[1]);
+      fillRR(ctx, 0, 0, W, H, 48, null); ctx.fillStyle = bg; ctx.fill();
+
+      const temp = Math.round(data.temperature_2m ?? '--');
+      const feels = Math.round(data.apparent_temperature ?? '--');
+      const humidity = Math.round(data.relative_humidity_2m ?? '--');
+      const wind = Math.round(data.wind_speed_10m ?? '--');
+
+      // Emoji
+      ctx.textAlign = 'center';
+      ctx.font = '130px serif'; ctx.fillText(info.emoji, W/2, 205);
+
+      // Temperature
+      ctx.save();
+      ctx.font = '200 148px system-ui'; ctx.fillStyle = 'rgba(255,255,255,0.97)';
+      ctx.shadowColor = 'rgba(100,200,255,0.22)'; ctx.shadowBlur = 28;
+      ctx.textAlign = 'center'; ctx.fillText(`${temp}°`, W/2, 400); ctx.restore();
+
+      // Condition label
+      ctx.font = '300 38px system-ui'; ctx.fillStyle = 'rgba(255,255,255,0.60)';
+      ctx.fillText(info.label, W/2, 462);
+
+      // Divider
+      const dg = ctx.createLinearGradient(W*0.1, 0, W*0.9, 0);
+      dg.addColorStop(0, 'rgba(255,255,255,0)'); dg.addColorStop(0.5, 'rgba(255,255,255,0.14)'); dg.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.save(); ctx.strokeStyle = dg; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(W*0.1, 505); ctx.lineTo(W*0.9, 505); ctx.stroke(); ctx.restore();
+
+      // Stats row
+      [{ label: 'FEELS LIKE', val: `${feels}°` }, { label: 'HUMIDITY', val: `${humidity}%` }, { label: 'WIND', val: `${wind} mph` }]
+        .forEach((s, i) => {
+          const x = W * (0.19 + i * 0.31);
+          ctx.font = '500 36px system-ui'; ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillText(s.val, x, 580);
+          ctx.font = '300 21px system-ui'; ctx.fillStyle = 'rgba(255,255,255,0.34)'; ctx.fillText(s.label, x, 618);
+        });
+
+      // Timestamp
+      ctx.font = '200 19px system-ui'; ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.fillText(`Updated ${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`, W/2, H - 26);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  WEATHER FETCH (Open-Meteo, no API key)
+    // ════════════════════════════════════════════════════════════════
+    function prefetchWeather() {
+      navigator.geolocation.getCurrentPosition(pos => {
+        userLat = pos.coords.latitude; userLon = pos.coords.longitude;
+        fetchWeather(userLat, userLon);
+      }, () => fetchWeather(userLat, userLon));
+    }
+
+    async function fetchWeather(lat, lon) {
+      if (weatherData && Date.now() - weatherFetchedAt < WEATHER_TTL) return;
+      try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m&temperature_unit=celsius&wind_speed_unit=mph&timezone=auto`;
+        const r = await fetch(url);
+        const j = await r.json();
+        weatherData = j.current; weatherFetchedAt = Date.now();
+      } catch(e) { console.warn('Weather fetch failed', e); }
+    }
+
+        function onWindowResize() {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
@@ -946,7 +1212,8 @@
       }
 
       panels.forEach(panel => {
-        if (panel.userData.clockCtx) updateClock(panel);
+        if (panel.userData.isClockPanel) drawClockFace(panel.userData.clockCtx, panel.userData.clockCanvas);
+        if (panel.userData.isClockPanel) panel.userData.clockTexture.needsUpdate = true;
         updateHoverEffect(panel);
       });
 
@@ -954,40 +1221,43 @@
       renderer.render(scene, camera);
     }
 
-    function updateClock(panel) {
-      if (!panel.userData.clockCtx) return;
-      const now = new Date();
-      const timeString = now.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:true });
-      const dateString = now.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
-      const ctx = panel.userData.clockCtx;
-      const tex = panel.userData.clockTexture;
-      ctx.clearRect(0, 0, 512, 128);
-      ctx.fillStyle = '#ffffff'; ctx.font = 'bold 56px system-ui';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(timeString, 256, 55);
-      ctx.font = '24px system-ui'; ctx.fillStyle = 'rgba(255,255,255,0.7)';
-      ctx.fillText(dateString, 256, 100);
-      tex.needsUpdate = true;
-    }
+    let dwellTarget = null;
+    let dwellStart = 0;
+    const DWELL_MS = 1500; // gaze for 1.5s to open
 
     function detectHover() {
       camera.getWorldPosition(tmpOrigin);
       camera.getWorldDirection(tmpDirection);
       raycaster.set(tmpOrigin, tmpDirection);
       const hits = raycaster.intersectObjects(panels, true);
+
+      let target = null;
       if (hits.length > 0) {
-        let target = hits[0].object;
-        while (target && !target.userData.isIcon && !target.userData.isMapPanel) { target = target.parent; }
-        if (target && (target.userData.isIcon || target.userData.isMapPanel)) {
-          if (hoveredObject !== target) {
-            if (hoveredObject) hoveredObject.userData.hoverTime = 0;
-            hoveredObject = target;
-          }
-        } else {
-          if (hoveredObject) { hoveredObject.userData.hoverTime = 0; hoveredObject = null; }
+        let t = hits[0].object;
+        while (t && !t.userData.isIcon && !t.userData.isPanel) t = t.parent;
+        if (t && (t.userData.isIcon || t.userData.isPanel)) target = t;
+      }
+
+      if (target !== hoveredObject) {
+        if (hoveredObject) hoveredObject.userData.hoverTime = 0;
+        hoveredObject = target;
+        // Reset dwell when gaze moves to a new object
+        dwellTarget = target;
+        dwellStart = target ? Date.now() : 0;
+      }
+
+      // Dwell: auto-open icon panel after DWELL_MS of continuous gaze
+      if (dwellTarget && dwellTarget.userData.isIcon && !dwellTarget.userData.openPanel) {
+        const elapsed = Date.now() - dwellStart;
+        // Expose dwell progress on userData for the ring indicator
+        dwellTarget.userData.dwellProgress = Math.min(elapsed / DWELL_MS, 1);
+        if (elapsed >= DWELL_MS) {
+          openPanelForIcon(dwellTarget);
+          dwellTarget = null;
+          dwellStart = 0;
         }
-      } else {
-        if (hoveredObject) { hoveredObject.userData.hoverTime = 0; hoveredObject = null; }
+      } else if (dwellTarget) {
+        dwellTarget.userData.dwellProgress = 0;
       }
     }
 
@@ -999,11 +1269,56 @@
       const hoverAmount = object.userData.hoverTime;
 
       if (object.userData.isIcon) {
-        const pulse = Math.sin(Date.now() * 0.006) * 0.25 + 0.75;
-        object.scale.setScalar(1 + hoverAmount * (0.06 + pulse * 0.03));
+        const pulse = Math.sin(Date.now() * 0.005) * 0.5 + 0.5;
+        const fastPulse = Math.sin(Date.now() * 0.009) * 0.5 + 0.5;
+        // Scale up on hover
+        object.scale.setScalar(1 + hoverAmount * 0.14 + pulse * hoverAmount * 0.04);
+        // Float up/down idle animation + rise on hover
+        if (object.userData._baseY !== undefined) {
+          object.position.y = object.userData._baseY + hoverAmount * 0.022 + Math.sin(Date.now() * 0.0018) * 0.008;
+        }
+        // Inner halo
         if (object.userData.hoverHalo) {
-          object.userData.hoverHalo.material.opacity = hoverAmount * (0.22 + pulse * 0.16);
-          object.userData.hoverHalo.scale.setScalar(1 + hoverAmount * 0.18);
+          object.userData.hoverHalo.material.opacity = hoverAmount * (0.55 + pulse * 0.25);
+          object.userData.hoverHalo.scale.setScalar(1 + hoverAmount * 0.2 + pulse * hoverAmount * 0.08);
+        }
+        // Outer pulse ring
+        if (object.userData.hoverHalo2) {
+          object.userData.hoverHalo2.material.opacity = hoverAmount * (0.28 + fastPulse * 0.18);
+          object.userData.hoverHalo2.scale.setScalar(1 + hoverAmount * 0.3 + fastPulse * hoverAmount * 0.1);
+        }
+        // Ring brightens
+        if (object.userData.ring) {
+          object.userData.ring.material.opacity = 0.18 + hoverAmount * 0.55;
+        }
+        // Disc brightens
+        if (object.userData.disc) {
+          object.userData.disc.material.opacity = 0.78 + hoverAmount * 0.18;
+        }
+        // Dwell progress arc — draw on the arc canvas texture
+        const dwell = object.userData.dwellProgress || 0;
+        if (object.userData.arcMesh && object.userData.arcCanvas) {
+          const ac = object.userData.arcCanvas;
+          const ax = object.userData.arcCtx;
+          ax.clearRect(0, 0, ac.width, ac.height);
+          // Base highlight
+          const baseGrad = ax.createLinearGradient(0, 0, 0, ac.height);
+          baseGrad.addColorStop(0, 'rgba(255,255,255,0.28)');
+          baseGrad.addColorStop(0.45, 'rgba(255,255,255,0.05)');
+          baseGrad.addColorStop(1, 'rgba(255,255,255,0)');
+          ax.fillStyle = baseGrad;
+          ax.beginPath(); ax.arc(128, 128, 120, 0, Math.PI * 2); ax.fill();
+          // Dwell arc
+          if (dwell > 0) {
+            ax.save();
+            ax.beginPath();
+            ax.arc(128, 128, 112, -Math.PI / 2, -Math.PI / 2 + dwell * Math.PI * 2);
+            ax.strokeStyle = 'rgba(100,210,255,0.95)';
+            ax.lineWidth = 7; ax.lineCap = 'round';
+            ax.shadowColor = '#55ccff'; ax.shadowBlur = 12;
+            ax.stroke(); ax.restore();
+          }
+          object.userData.arcTexture.needsUpdate = true;
         }
       }
       if (object.userData.hoverRing) {
@@ -1033,3 +1348,4 @@
   </script>
 </body>
 </html>
+  }
