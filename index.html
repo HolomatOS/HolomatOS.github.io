@@ -162,15 +162,15 @@
   <canvas id="pointerCanvas"></canvas>
 
   <!-- Pointer toggle button — only appears after hand tracking connects -->
-  <button id="pointerToggleBtn">
+  <button id="pointerToggleBtn" aria-label="Toggle pointer">
     <span class="dot"></span>Pointer
   </button>
 
   <div id="connectPanel">
     <h2>Choose Mode</h2>
     <p>Use hand tracking from Phone 2<br>or just tap & gaze</p>
-    <button class="modeBtn" id="handTrackingBtn">ENABLE HAND TRACKING</button>
-    <button class="modeBtn" id="skipHandBtn">SKIP - TAP ONLY</button>
+    <button class="modeBtn" id="handTrackingBtn" type="button" aria-label="Enable hand tracking">ENABLE HAND TRACKING</button>
+    <button class="modeBtn" id="skipHandBtn" type="button" aria-label="Skip hand tracking and use tap only">SKIP - TAP ONLY</button>
     <div id="connectionStatus"></div>
   </div>
 
@@ -387,7 +387,8 @@
         handBtn.textContent = 'RETRY HAND TRACKING';
       }
 
-      handBtn.addEventListener('click', () => {
+      handBtn.addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation(); console.log('handTrackingBtn clicked');
         handTrackingEnabled = true;
         statusEl.textContent = 'Initializing...';
         statusEl.style.color = '#ff0';
@@ -459,13 +460,23 @@
       });
 
       // TAP ONLY button — no pointer toggle shown
-      document.getElementById('skipHandBtn').addEventListener('click', () => {
+      document.getElementById('skipHandBtn').addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation(); console.log('skipHandBtn clicked');
+        // If an XR session is active, don't hide the panel — avoid causing session end on some browsers
+        try {
+          const xrSession = renderer && renderer.xr && renderer.xr.getSession && renderer.xr.getSession();
+          console.log('XR session at skip click:', !!xrSession);
+          if (xrSession) {
+            const statusEl = document.getElementById('connectionStatus');
+            statusEl.textContent = 'Already in AR — tap the scene to interact (skip ignored)';
+            statusEl.style.color = '#ffd';
+            // Keep panel visible to avoid interfering with AR session
+            return;
+          }
+        } catch (err) { console.warn('XR session check failed', err); }
+
         handTrackingEnabled = false;
         document.getElementById('connectPanel').classList.add('hidden');
-        
-        
-        
-        
         // Pointer toggle NOT shown in tap-only mode
       });
     }
