@@ -447,6 +447,7 @@
       const statusEl = document.getElementById('connectionStatus');
 
       function showConnectError(message) {
+        document.getElementById('connectPanel').style.display = 'flex';
         statusEl.textContent = message;
         statusEl.style.color = '#ff6b6b';
         handBtn.disabled = false;
@@ -471,9 +472,9 @@
 
         if (peer && !peer.destroyed) { peer.destroy(); }
 
-        peer = new Peer();
+        try { peer = new Peer(); } catch(e) { showConnectError('Failed to init peer'); return; }
         peer.on('open', () => {
-          connection = peer.connect(targetId);
+          try { connection = peer.connect(targetId); } catch(e) { showConnectError('Failed to connect'); return; }
           if (handConnectTimeout) clearTimeout(handConnectTimeout);
           handConnectTimeout = setTimeout(() => {
             if (!connection || !connection.open) {
@@ -483,11 +484,11 @@
           connection.on('open', () => {
             document.getElementById('connectPanel').style.display = 'none';
             showPointerToggle();
-            // Auto-start AR when Phone 2 connects
+            // Phone 2 connected — show AR button prominently, user taps to enter AR
             const arBtn = document.getElementById('ARButton');
             if (arBtn) {
-              arBtn.style.display = 'none'; // hide so it can't be clicked again
-              arBtn.click();
+              arBtn.style.display = '';
+              arBtn.textContent = 'ENTER AR ✓';
             }
 
             connection.on('data', (data) => {
