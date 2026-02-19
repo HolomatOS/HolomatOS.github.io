@@ -771,8 +771,8 @@
       // Filled glass disc — 90% opaque white like AR button
       const discGeo = new THREE.CircleGeometry(0.075, 64);
       const discMat = new THREE.MeshPhysicalMaterial({
-        color: 0x6b6b6b, transparent: true, opacity: 0.55,
-        transmission: 0.40, roughness: 0.05, metalness: 0,
+        color: 0x9a9a9a, transparent: true, opacity: 0.82,
+        transmission: 0.15, roughness: 0.05, metalness: 0,
         clearcoat: 1.0, clearcoatRoughness: 0.04,
         side: THREE.DoubleSide
       });
@@ -976,9 +976,9 @@
 
       // Exact AR button style: white 0.2 opacity base, blur = transmission
       const shell = new THREE.Mesh(geom, new THREE.MeshPhysicalMaterial({
-        color: 0x6b6b6b, transparent: true, opacity: 0.55,
-        transmission: 0.40, roughness: 0.05, metalness: 0,
-        clearcoat: 1.0, clearcoatRoughness: 0.05,
+        color: 0x9a9a9a, transparent: true, opacity: 0.82,
+        transmission: 0.15, roughness: 0.45, metalness: 0,
+        clearcoat: 1.0, clearcoatRoughness: 0.35,
         reflectivity: 0.5, ior: 1.45, thickness: 0.5,
         side: THREE.DoubleSide
       }));
@@ -1074,7 +1074,7 @@
       const { tex, cvs, ctx } = makeCanvasTex(960, 640, drawClockFace);
       const content = new THREE.Mesh(
         new THREE.ShapeGeometry(makeRoundedRectShape(PW - 0.13, PH - 0.11, 0.06), 20),
-        new THREE.MeshBasicMaterial({ map: tex, transparent: false })
+        new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.01 })
       );
       content.position.z = 0.0035; group.add(content);
       Object.assign(group.userData, { isClockPanel: true, clockCanvas: cvs, clockCtx: ctx, clockTexture: tex });
@@ -1084,76 +1084,17 @@
     function drawClockFace(ctx, cvs) {
       const W = cvs.width, H = cvs.height;
       ctx.clearRect(0, 0, W, H);
-      fillRR(ctx, 0, 0, W, H, 48, '#010509');
-      const bgG = ctx.createLinearGradient(0, 0, 0, H);
-      bgG.addColorStop(0, '#02080f'); bgG.addColorStop(1, '#060e1a');
-      ctx.fillStyle = bgG; ctx.fillRect(0, 0, W, H);
 
       const now = new Date();
-      const h12 = String(now.getHours() % 12 || 12).padStart(2, '0');
-      const mm = String(now.getMinutes()).padStart(2, '0');
-      const ss = String(now.getSeconds()).padStart(2, '0');
-      const ampm = now.getHours() >= 12 ? 'PM' : 'AM';
-      const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-      const cx = W / 2, cy = H * 0.47;
-      const ringR = 148;
+      const h = String(now.getHours()).padStart(2, '0');
+      const m = String(now.getMinutes()).padStart(2, '0');
+      const s = String(now.getSeconds()).padStart(2, '0');
 
-      // Track ring
-      ctx.save();
-      ctx.beginPath(); ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 2; ctx.stroke();
-      ctx.restore();
-
-      // Seconds progress arc
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(cx, cy, ringR, -Math.PI / 2, -Math.PI / 2 + (now.getSeconds() / 60) * Math.PI * 2);
-      const arcG = ctx.createLinearGradient(cx - ringR, cy, cx + ringR, cy);
-      arcG.addColorStop(0, 'rgba(50,130,255,0.5)');
-      arcG.addColorStop(0.5, 'rgba(80,180,255,0.95)');
-      arcG.addColorStop(1, 'rgba(120,220,255,0.6)');
-      ctx.strokeStyle = arcG; ctx.lineWidth = 3.5; ctx.lineCap = 'round';
-      ctx.shadowColor = 'rgba(80,180,255,0.7)'; ctx.shadowBlur = 12; ctx.stroke();
-      ctx.restore();
-
-      // HH:MM
-      ctx.save();
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = '200 152px system-ui';
-      ctx.fillStyle = 'rgba(255,255,255,0.97)';
-      ctx.shadowColor = 'rgba(80,180,255,0.25)'; ctx.shadowBlur = 24;
-      ctx.fillText(`${h12}:${mm}`, cx - 10, cy);
-      ctx.restore();
-
-      // AM/PM badge
-      ctx.save();
-      ctx.font = '300 30px system-ui';
-      ctx.fillStyle = 'rgba(255,255,255,0.42)';
-      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-      ctx.fillText(ampm, cx + 190, cy - 44);
-      ctx.restore();
-
-      // Seconds
-      ctx.save();
-      ctx.font = '200 26px system-ui';
-      ctx.fillStyle = 'rgba(80,200,255,0.82)';
-      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-      ctx.fillText(`:${ss}`, cx + 190, cy - 4);
-      ctx.restore();
-
-      // Divider
-      const divG = ctx.createLinearGradient(W*0.2, 0, W*0.8, 0);
-      divG.addColorStop(0, 'rgba(255,255,255,0)');
-      divG.addColorStop(0.5, 'rgba(255,255,255,0.1)');
-      divG.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.save(); ctx.strokeStyle = divG; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(W*0.2, H-92); ctx.lineTo(W*0.8, H-92); ctx.stroke(); ctx.restore();
-
-      // Date
-      ctx.save();
-      ctx.textAlign = 'center'; ctx.font = '300 27px system-ui';
-      ctx.fillStyle = 'rgba(255,255,255,0.36)';
-      ctx.fillText(dateStr.toUpperCase(), cx, H - 56); ctx.restore();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '100 180px system-ui';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(`${h}:${m}:${s}`, W / 2, H / 2);
     }
 
     // ════════════════════════════════════════════════════════════════
