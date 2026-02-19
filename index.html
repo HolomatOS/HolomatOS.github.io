@@ -482,6 +482,12 @@
           connection.on('open', () => {
             document.getElementById('connectPanel').classList.add('hidden');
             showPointerToggle();
+            // Auto-start AR when Phone 2 connects
+            const arBtn = document.getElementById('ARButton');
+            if (arBtn) {
+              arBtn.style.display = 'none'; // hide so it can't be clicked again
+              arBtn.click();
+            }
 
             connection.on('data', (data) => {
               if (data.type === 'hand') {
@@ -742,8 +748,16 @@
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.xr.enabled = true;
       renderer.xr.setFramebufferScaleFactor(XR_FRAMEBUFFER_SCALE);
-      renderer.xr.addEventListener('sessionstart', startClarityCameraProbe);
-      renderer.xr.addEventListener('sessionend', stopClarityCameraProbe);
+      renderer.xr.addEventListener('sessionstart', () => {
+        startClarityCameraProbe();
+        const b = document.getElementById('ARButton');
+        if (b) b.style.display = 'none';
+      });
+      renderer.xr.addEventListener('sessionend', () => {
+        stopClarityCameraProbe();
+        const b = document.getElementById('ARButton');
+        if (b) b.style.display = '';
+      });
       document.body.appendChild(renderer.domElement);
 
       const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
