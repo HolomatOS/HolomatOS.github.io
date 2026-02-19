@@ -162,16 +162,15 @@
   <canvas id="pointerCanvas"></canvas>
 
   <!-- Pointer toggle button — only appears after hand tracking connects -->
-  <button id="pointerToggleBtn" aria-label="Toggle pointer">
+  <button id="pointerToggleBtn">
     <span class="dot"></span>Pointer
   </button>
 
   <div id="connectPanel">
-    <h2>Connect to Phone 2</h2>
-    <p>Enter Phone 2's Peer ID below</p>
-    <input id="peerIdInput" type="text" placeholder="hand-camera-xxx..." style="width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #ccc; font-size: 14px; box-sizing: border-box;">
-    <button class="modeBtn" id="handTrackingBtn" type="button" aria-label="Connect to hand tracking">CONNECT</button>
-    <button class="modeBtn" id="skipHandBtn" type="button" aria-label="Skip hand tracking and use tap only">SKIP - TAP ONLY</button>
+    <h2>Choose Mode</h2>
+    <p>Use hand tracking from Phone 2<br>or just tap & gaze</p>
+    <button class="modeBtn" id="handTrackingBtn">ENABLE HAND TRACKING</button>
+    <button class="modeBtn" id="skipHandBtn">SKIP - TAP ONLY</button>
     <div id="connectionStatus"></div>
   </div>
 
@@ -220,13 +219,122 @@
     window.addEventListener('resize', resizePointerCanvas);
 
     // Pointer toggle button click
-    // Pointer toggle button removed — pinch now simulates taps
+    pointerToggleBtn.addEventListener('click', () => {
+      pointerEnabled = !pointerEnabled;
+      if (pointerEnabled) {
+        pointerToggleBtn.classList.add('active');
+        pointerCanvas.style.display = 'block';
+      } else {
+        pointerToggleBtn.classList.remove('active');
+        pointerCanvas.style.display = 'none';
+        pointerCtx.clearRect(0, 0, pointerCanvas.width, pointerCanvas.height);
+      }
+    });
 
     function showPointerToggle() {
-      // Pointer toggle removed — pinch now simulates taps
+      // flex display, inline-flex style
+      pointerToggleBtn.style.display = 'inline-flex';
     }
 
-    // Pointer rendering removed — pinch simulates taps instead
+    // ── Draw the Vision Pro style pointer (wrist → index ray) ──────
+    function drawPointer(landmarks) {
+      pointerCtx.clearRect(0, 0, pointerCanvas.width, pointerCanvas.height);
+      if (!pointerEnabled || !landmarks) return;
+
+      // Use first hand
+      const lm = Array.isArray(landmarks[0]) ? landmarks[0] : landmarks;
+      if (!lm || lm.length < 21) return;
+
+      const W = pointerCanvas.width;
+      const H = pointerCanvas.height;
+
+      // Wrist = landmark 0, index tip = landmark 8
+      const wrist = lm[0];
+      const indexTip = lm[8];
+      const middleTip = lm[12]; // use middle too to average direction
+
+      const wx = wrist.x * W + HAND_OFFSET_X;
+      const wy = wrist.y * H + HAND_OFFSET_Y;
+      const ix = indexTip.x * W + HAND_OFFSET_X;
+      const iy = indexTip.y * H + HAND_OFFSET_Y;
+
+      // Direction from wrist toward index finger tip, extended far beyond it
+      const dx = ix - wx;
+      const dy = iy - wy;
+      const len = Math.sqrt(dx*dx + dy*dy) || 1;
+      const nx = dx / len;
+      const ny = dy / len;
+
+      // Ray starts at wrist, extends past fingertip to edge of screen
+      const RAY_EXTEND = Math.max(W, H) * 1.5;
+      const rayEndX = wx + nx * RAY_EXTEND;
+      const rayEndY = wy + ny * RAY_EXTEND;
+
+      // ── Draw the stick/ray ──────────────────────────────────────
+      // Outer glow
+      pointerCtx.save();
+      pointerCtx.beginPath();
+      pointerCtx.moveTo(wx, wy);
+      pointerCtx.lineTo(rayEndX, rayEndY);
+      const grad = pointerCtx.createLinearGradient(wx, wy, ix, iy);
+      grad.addColorStop(0, 'rgba(255,255,255,0.0)');
+      grad.addColorStop(0.18, 'rgba(200,235,255,0.55)');
+      grad.addColorStop(0.65, 'rgba(180,225,255,0.35)');
+      grad.addColorStop(1, 'rgba(140,210,255,0.0)');
+      pointerCtx.strokeStyle = grad;
+      pointerCtx.lineWidth = 6;
+      pointerCtx.lineCap = 'round';
+      pointerCtx.filter = 'blur(3px)';
+      pointerCtx.stroke();
+      pointerCtx.restore();
+
+      // Core ray (sharp white line)
+      pointerCtx.save();
+      pointerCtx.beginPath();
+      pointerCtx.moveTo(wx, wy);
+      pointerCtx.lineTo(rayEndX, rayEndY);
+      const coreGrad = pointerCtx.createLinearGradient(wx, wy, ix, iy);
+      coreGrad.addColorStop(0, 'rgba(255,255,255,0.0)');
+      coreGrad.addColorStop(0.15, 'rgba(255,255,255,0.9)');
+      coreGrad.addColorStop(0.6, 'rgba(200,235,255,0.5)');
+      coreGrad.addColorStop(1, 'rgba(180,225,255,0.0)');
+      pointerCtx.strokeStyle = coreGrad;
+      pointerCtx.lineWidth = 1.8;
+      pointerCtx.lineCap = 'round';
+      pointerCtx.filter = 'none';
+      pointerCtx.stroke();
+      pointerCtx.restore();
+
+      // ── Cursor dot at the ray's aim point ──────────────────────
+      // Aim point: extend ~2.2x from wrist through index finger
+      const aimDist = len * 2.2;
+      const aimX = wx + nx * aimDist;
+      const aimY = wy + ny * aimDist;
+
+      // Outer ring
+      pointerCtx.save();
+      pointerCtx.beginPath();
+      pointerCtx.arc(aimX, aimY, 14, 0, Math.PI * 2);
+      pointerCtx.strokeStyle = 'rgba(200,235,255,0.5)';
+      pointerCtx.lineWidth = 1.5;
+      pointerCtx.filter = 'blur(1px)';
+      pointerCtx.stroke();
+      pointerCtx.restore();
+
+      // Inner bright dot
+      pointerCtx.save();
+      pointerCtx.beginPath();
+      pointerCtx.arc(aimX, aimY, 5, 0, Math.PI * 2);
+      const dotGrad = pointerCtx.createRadialGradient(aimX, aimY, 0, aimX, aimY, 5);
+      dotGrad.addColorStop(0, 'rgba(255,255,255,1)');
+      dotGrad.addColorStop(1, 'rgba(140,215,255,0.6)');
+      pointerCtx.fillStyle = dotGrad;
+      pointerCtx.shadowColor = '#8cd8ff';
+      pointerCtx.shadowBlur = 10;
+      pointerCtx.fill();
+      pointerCtx.restore();
+    }
+    // ──────────────────────────────────────────────────────────────
 
     // Two-hand resize tracking
     let lastTwoHandDistance = null;
@@ -268,99 +376,96 @@
     animate();
 
     function setupConnection() {
+      const myPeerId = 'moto-receiver-' + Math.random().toString(36).substr(2, 9);
       const handBtn = document.getElementById('handTrackingBtn');
       const statusEl = document.getElementById('connectionStatus');
-      const peerIdInput = document.getElementById('peerIdInput');
 
       function showConnectError(message) {
         statusEl.textContent = message;
         statusEl.style.color = '#ff6b6b';
         handBtn.disabled = false;
-        handBtn.textContent = 'RETRY';
-        peerIdInput.disabled = false;
+        handBtn.textContent = 'RETRY HAND TRACKING';
       }
 
-      handBtn.addEventListener('click', (e) => {
-        e.preventDefault(); e.stopPropagation();
-        const phone2Id = peerIdInput.value.trim();
-        
-        if (!phone2Id) {
-          statusEl.textContent = 'Please enter Phone 2\'s Peer ID';
-          statusEl.style.color = '#f00';
-          return;
-        }
-
+      handBtn.addEventListener('click', () => {
         handTrackingEnabled = true;
-        statusEl.textContent = 'Connecting to Phone 2...';
+        statusEl.textContent = 'Initializing...';
         statusEl.style.color = '#ff0';
         handBtn.disabled = true;
-        handBtn.textContent = 'Connecting...';
-        peerIdInput.disabled = true;
+        handBtn.textContent = 'Initializing...';
 
         if (peer && !peer.destroyed) { peer.destroy(); }
 
-        peer = new Peer();
+        peer = new Peer(myPeerId);
         peer.on('open', (id) => {
-          console.log('Receiver Peer ID:', id);
-          connection = peer.connect(phone2Id, { reliable: true });
-          
-          connection.on('open', () => {
-            statusEl.textContent = 'Connected to Phone 2 ✓';
-            statusEl.style.color = '#0f0';
-            document.getElementById('connectPanel').classList.add('hidden');
-            showPointerToggle();
-            if (handConnectTimeout) clearTimeout(handConnectTimeout);
-          });
+          statusEl.innerHTML =
+            `YOUR ID:<br><span style="color:#0ff;font-size:18px;">${id}</span><br><small>Enter on Phone 2</small>`;
+          handBtn.textContent = 'Waiting for Phone 2...';
 
-          connection.on('data', (data) => {
+          if (handConnectTimeout) clearTimeout(handConnectTimeout);
+          handConnectTimeout = setTimeout(() => {
+            if (!connection || !connection.open) {
+              showConnectError('No connection from Phone 2. Check peer ID and retry.');
+            }
+          }, 20000);
+        });
+
+        peer.on('connection', (conn) => {
+          connection = conn;
+          if (handConnectTimeout) clearTimeout(handConnectTimeout);
+          document.getElementById('connectPanel').classList.add('hidden');
+          
+          
+
+          // ── Show the pointer toggle button now that hand tracking is active ──
+          showPointerToggle();
+
+
+          conn.on('data', (data) => {
             if (data.type === 'hand') {
               handLandmarks = data.landmarks;
               updateHandDisplay(data.handCount || 0, data.twoHandDistance);
+
+              // Draw pointer every frame we get hand data
+              if (pointerEnabled) {
+                drawPointer(handLandmarks);
+              }
             }
           });
 
-          connection.on('close', () => {
+          conn.on('close', () => {
+            
+            
+            
+            
             handLandmarks = null;
             lastPinch = false;
-            statusEl.textContent = 'Connection lost';
-            statusEl.style.color = '#f00';
+            // Hide pointer
+            pointerCtx.clearRect(0, 0, pointerCanvas.width, pointerCanvas.height);
+            pointerToggleBtn.style.display = 'none';
+            pointerCanvas.style.display = 'none';
+            pointerEnabled = false;
           });
 
-          connection.on('error', (err) => {
-            showConnectError('Connection error: ' + (err.message || 'unknown'));
+          conn.on('error', () => {
+            
+            
           });
         });
 
         peer.on('error', (err) => {
           showConnectError(`Peer error: ${err.type || 'unknown'}`);
         });
-
-        if (handConnectTimeout) clearTimeout(handConnectTimeout);
-        handConnectTimeout = setTimeout(() => {
-          if (!connection || !connection.open) {
-            showConnectError('Connection timeout. Check ID and retry.');
-          }
-        }, 15000);
       });
 
       // TAP ONLY button — no pointer toggle shown
-      document.getElementById('skipHandBtn').addEventListener('click', (e) => {
-        e.preventDefault(); e.stopPropagation(); console.log('skipHandBtn clicked');
-        // If an XR session is active, don't hide the panel — avoid causing session end on some browsers
-        try {
-          const xrSession = renderer && renderer.xr && renderer.xr.getSession && renderer.xr.getSession();
-          console.log('XR session at skip click:', !!xrSession);
-          if (xrSession) {
-            const statusEl = document.getElementById('connectionStatus');
-            statusEl.textContent = 'Already in AR — tap the scene to interact (skip ignored)';
-            statusEl.style.color = '#ffd';
-            // Keep panel visible to avoid interfering with AR session
-            return;
-          }
-        } catch (err) { console.warn('XR session check failed', err); }
-
+      document.getElementById('skipHandBtn').addEventListener('click', () => {
         handTrackingEnabled = false;
         document.getElementById('connectPanel').classList.add('hidden');
+        
+        
+        
+        
         // Pointer toggle NOT shown in tap-only mode
       });
     }
@@ -464,8 +569,7 @@
       if (clarityStream) { clarityStream.getTracks().forEach(track => track.stop()); }
       clarityStream = null; clarityTrack = null;
       zoomValue = null; zoomMin = null; zoomMax = null;
-      const videoEl = document.getElementById('clarityProbeVideo');
-      videoEl.pause(); videoEl.srcObject = null;
+
       
     }
 
@@ -483,21 +587,35 @@
       else tmpForward.normalize();
       camera.getWorldPosition(tmpCamPos);
 
+      // Right vector perpendicular to forward, in XZ plane
+      tmpRight.crossVectors(tmpForward, new THREE.Vector3(0, 1, 0)).normalize();
+
       const base = tmpCamPos.clone().addScaledVector(tmpForward, ICON_FORWARD_DISTANCE);
       base.y = groundYEstimate + ICON_HEIGHT_ABOVE_GROUND;
 
-      // icon1.png = clock (center only, no background)
+      // icon1.png = clock (left of center)
       const icon1 = makeIcon('icon1.png', 'clock');
-      icon1.position.copy(base);
+      icon1.position.copy(base).addScaledVector(tmpRight, -0.22);
       icon1.lookAt(tmpCamPos);
+      icon1.userData._baseY = icon1.position.y;
       scene.add(icon1); panels.push(icon1);
+
+      // icon2.png = weather (right of center)
+      const icon2 = makeIcon('icon2.png', 'weather');
+      icon2.position.copy(base).addScaledVector(tmpRight, 0.22);
+      icon2.lookAt(tmpCamPos);
+      icon2.userData._baseY = icon2.position.y;
+      scene.add(icon2); panels.push(icon2);
     }
 
     function updateHandDisplay(handCount, twoHandDistance) {
       handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
+      
 
       if (!handLandmarks || handCount === 0) {
+        
         lastPinch = false; isResizing = false; lastTwoHandDistance = null;
+        if (pointerEnabled) pointerCtx.clearRect(0, 0, pointerCanvas.width, pointerCanvas.height);
         return;
       }
 
@@ -530,19 +648,51 @@
       const indexX = (index.x * handCanvas.width) + HAND_OFFSET_X;
       const indexY = (index.y * handCanvas.height) + HAND_OFFSET_Y;
       const dx = thumbX - indexX; const dy = thumbY - indexY;
-      const distance = Math.sqrt(dx*dx + dy*dy);
+      const distance = Math.sqrt(dx * dx + dy * dy);
       const isPinching = distance < 50;
 
+      // ── PINCH START — Vision Pro style: gaze = aim, pinch = activate ──
       if (isPinching && !lastPinch) {
-        // Simulate a tap at the center of the screen
-        const tapEvent = new PointerEvent('click', {
-          bubbles: true,
-          cancelable: true,
-          view: window,
-          clientX: window.innerWidth / 2,
-          clientY: window.innerHeight / 2
-        });
-        renderer.domElement.dispatchEvent(tapEvent);
+        // Whatever the gaze is hovering on right now gets activated
+        const gazedAt = hoveredObject;
+
+        if (gazedAt) {
+          // Close button on a panel
+          if (gazedAt.userData.isCloseBtn) {
+            closePanel(gazedAt.userData.panelRef);
+          }
+          // Icon — open its panel
+          else if (gazedAt.userData.isIcon && !gazedAt.userData.openPanel) {
+            openPanelForIcon(gazedAt);
+          }
+          // Panel — grab it (hold pinch + move gaze to drag)
+          else if (gazedAt.userData.isPanel) {
+            activePanel = gazedAt;
+            activePanel.userData.selected = true;
+            initialPanelScale = activePanel.scale.x;
+          }
+        }
+      }
+
+      // ── HOLD pinch — drag active panel to where gaze is pointing ──
+      if (isPinching && activePanel) {
+        // Move panel to follow gaze direction at fixed distance
+        camera.getWorldPosition(tmpOrigin);
+        camera.getWorldDirection(tmpDirection);
+        const dist = activePanel.position.distanceTo(tmpOrigin);
+        const clampedDist = Math.max(0.4, Math.min(2.5, dist));
+        const target = tmpOrigin.clone().addScaledVector(tmpDirection, clampedDist);
+        // Smooth follow
+        activePanel.position.lerp(target, 0.12);
+        activePanel.quaternion.slerp(camera.quaternion, 0.08);
+      }
+
+      // ── PINCH RELEASE — drop panel, cancel dwell ──
+      if (!isPinching && lastPinch) {
+        if (activePanel) {
+          activePanel.userData.selected = false;
+          activePanel = null;
+        }
       }
 
       lastPinch = isPinching;
@@ -623,12 +773,12 @@
       return hits.length > 0 ? hits[0].object.parent || hits[0].object : null;
     }
 
-    // ── Icon factory: simple icon with no background ──────────────────────
+    // ── Icon factory: accepts filename + type ('clock' | 'weather') ──────
     function makeIcon(filename, type) {
       const group = new THREE.Group();
-      group.userData = { isIcon: true, isPanel: false, iconType: type };
+      group.userData = { isIcon: true, isPanel: false, iconType: type, hoverTime: 0 };
 
-      // Icon image only — no background, no styling
+      // Pure image — no background, no disc, no ring
       new THREE.TextureLoader().load(filename, tex => {
         tex.colorSpace = THREE.SRGBColorSpace;
         tex.minFilter = THREE.LinearMipmapLinearFilter;
@@ -636,16 +786,24 @@
         tex.generateMipmaps = true;
         tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
         const aspect = (tex.image.width || 1) / (tex.image.height || 1);
-        const h = 0.15, w = h * aspect;
+        // 20cm tall in world space so it's clearly visible at 1m
+        const h = 0.20, w = h * aspect;
         const m = new THREE.Mesh(
           new THREE.PlaneGeometry(w, h),
-          new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide })
+          new THREE.MeshBasicMaterial({
+            map: tex, transparent: true,
+            depthWrite: false, side: THREE.DoubleSide
+          })
         );
         group.add(m); group.userData.iconMesh = m;
       }, undefined, () => {
+        // Fallback: small coloured dot if image fails to load
         const fb = new THREE.Mesh(
-          new THREE.CircleGeometry(0.075, 32),
-          new THREE.MeshBasicMaterial({ color: 0x3366ff, transparent: true, opacity: 0.5 })
+          new THREE.CircleGeometry(0.08, 32),
+          new THREE.MeshBasicMaterial({
+            color: type === 'clock' ? 0x3366ff : 0x22aacc,
+            transparent: true, opacity: 0.85
+          })
         );
         group.add(fb);
       });
@@ -1031,14 +1189,12 @@
       panels.forEach(panel => {
         if (panel.userData.isClockPanel) drawClockFace(panel.userData.clockCtx, panel.userData.clockCanvas);
         if (panel.userData.isClockPanel) panel.userData.clockTexture.needsUpdate = true;
+        updateHoverEffect(panel);
       });
 
+      detectHover();
       renderer.render(scene, camera);
     }
-
-    let dwellTarget = null;
-    let dwellStart = 0;
-    const DWELL_MS = 1500; // gaze for 1.5s to open
 
     function detectHover() {
       camera.getWorldPosition(tmpOrigin);
@@ -1056,23 +1212,6 @@
       if (target !== hoveredObject) {
         if (hoveredObject) hoveredObject.userData.hoverTime = 0;
         hoveredObject = target;
-        // Reset dwell when gaze moves to a new object
-        dwellTarget = target;
-        dwellStart = target ? Date.now() : 0;
-      }
-
-      // Dwell: auto-open icon panel after DWELL_MS of continuous gaze
-      if (dwellTarget && dwellTarget.userData.isIcon && !dwellTarget.userData.openPanel) {
-        const elapsed = Date.now() - dwellStart;
-        // Expose dwell progress on userData for the ring indicator
-        dwellTarget.userData.dwellProgress = Math.min(elapsed / DWELL_MS, 1);
-        if (elapsed >= DWELL_MS) {
-          openPanelForIcon(dwellTarget);
-          dwellTarget = null;
-          dwellStart = 0;
-        }
-      } else if (dwellTarget) {
-        dwellTarget.userData.dwellProgress = 0;
       }
     }
 
@@ -1085,55 +1224,17 @@
 
       if (object.userData.isIcon) {
         const pulse = Math.sin(Date.now() * 0.005) * 0.5 + 0.5;
-        const fastPulse = Math.sin(Date.now() * 0.009) * 0.5 + 0.5;
-        // Scale up on hover
-        object.scale.setScalar(1 + hoverAmount * 0.14 + pulse * hoverAmount * 0.04);
-        // Float up/down idle animation + rise on hover
+        // Scale up smoothly on hover
+        object.scale.setScalar(1 + hoverAmount * 0.18 + pulse * hoverAmount * 0.06);
+        // Idle float + rise toward camera on hover
         if (object.userData._baseY !== undefined) {
-          object.position.y = object.userData._baseY + hoverAmount * 0.022 + Math.sin(Date.now() * 0.0018) * 0.008;
+          object.position.y = object.userData._baseY
+            + hoverAmount * 0.025
+            + Math.sin(Date.now() * 0.0018) * 0.008;
         }
-        // Inner halo
-        if (object.userData.hoverHalo) {
-          object.userData.hoverHalo.material.opacity = hoverAmount * (0.55 + pulse * 0.25);
-          object.userData.hoverHalo.scale.setScalar(1 + hoverAmount * 0.2 + pulse * hoverAmount * 0.08);
-        }
-        // Outer pulse ring
-        if (object.userData.hoverHalo2) {
-          object.userData.hoverHalo2.material.opacity = hoverAmount * (0.28 + fastPulse * 0.18);
-          object.userData.hoverHalo2.scale.setScalar(1 + hoverAmount * 0.3 + fastPulse * hoverAmount * 0.1);
-        }
-        // Ring brightens
-        if (object.userData.ring) {
-          object.userData.ring.material.opacity = 0.18 + hoverAmount * 0.55;
-        }
-        // Disc brightens
-        if (object.userData.disc) {
-          object.userData.disc.material.opacity = 0.78 + hoverAmount * 0.18;
-        }
-        // Dwell progress arc — draw on the arc canvas texture
-        const dwell = object.userData.dwellProgress || 0;
-        if (object.userData.arcMesh && object.userData.arcCanvas) {
-          const ac = object.userData.arcCanvas;
-          const ax = object.userData.arcCtx;
-          ax.clearRect(0, 0, ac.width, ac.height);
-          // Base highlight
-          const baseGrad = ax.createLinearGradient(0, 0, 0, ac.height);
-          baseGrad.addColorStop(0, 'rgba(255,255,255,0.28)');
-          baseGrad.addColorStop(0.45, 'rgba(255,255,255,0.05)');
-          baseGrad.addColorStop(1, 'rgba(255,255,255,0)');
-          ax.fillStyle = baseGrad;
-          ax.beginPath(); ax.arc(128, 128, 120, 0, Math.PI * 2); ax.fill();
-          // Dwell arc
-          if (dwell > 0) {
-            ax.save();
-            ax.beginPath();
-            ax.arc(128, 128, 112, -Math.PI / 2, -Math.PI / 2 + dwell * Math.PI * 2);
-            ax.strokeStyle = 'rgba(100,210,255,0.95)';
-            ax.lineWidth = 7; ax.lineCap = 'round';
-            ax.shadowColor = '#55ccff'; ax.shadowBlur = 12;
-            ax.stroke(); ax.restore();
-          }
-          object.userData.arcTexture.needsUpdate = true;
+        // Icon image brightens slightly on hover
+        if (object.userData.iconMesh) {
+          object.userData.iconMesh.material.opacity = 0.85 + hoverAmount * 0.15;
         }
       }
       if (object.userData.hoverRing) {
@@ -1163,4 +1264,3 @@
   </script>
 </body>
 </html>
-  }
