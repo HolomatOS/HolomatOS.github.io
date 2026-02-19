@@ -6,6 +6,11 @@
   <title>Moto G - AR Receiver</title>
   <style>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+    body {
+      background-image: url('bg.webp');
+      background-size: cover;
+      background-position: center;
+    }
     #info {
       position: absolute; left: 0; right: 0; top: 0;
       color: #9cf; font: 14px/1.4 system-ui, sans-serif;
@@ -15,16 +20,36 @@
       position: absolute; inset: 0; pointer-events: none; z-index: 2;
     }
     .reticle {
-      position: absolute; left: 50%; top: 50%; width: 60px; height: 60px;
-      border: 2px solid rgba(140,220,255,0.8); border-radius: 50%;
+      position: absolute; left: 50%; top: 50%;
+      width: 56px; height: 56px;
       transform: translate(-50%,-50%);
-      box-shadow: 0 0 12px rgba(140,220,255,0.6);
+      border-radius: 50%;
+      border: 3px solid hsla(0,0%,100%,0.35);
+      background: hsla(0,0%,100%,0.12);
+      backdrop-filter: blur(4px);
+      box-shadow:
+        inset 0 0 10px 2px hsla(0,0%,100%,0.55),
+        0 0 18px 2px hsla(0,0%,100%,0.15);
     }
-    .tick { position: absolute; width: 2px; height: 18px; background: rgba(140,220,255,0.8); }
-    .tick.t1 { left: 50%; top: calc(50% - 50px); transform: translateX(-50%); }
+    .reticle::after {
+      content: '';
+      position: absolute; left: 50%; top: 50%;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: hsla(0,0%,100%,0.9);
+      transform: translate(-50%,-50%);
+      box-shadow: 0 0 6px 2px hsla(0,0%,100%,0.7);
+    }
+    .tick {
+      position: absolute;
+      width: 1.5px; height: 14px;
+      background: hsla(0,0%,100%,0.5);
+      box-shadow: 0 0 4px 1px hsla(0,0%,100%,0.4);
+    }
+    .tick.t1 { left: 50%; top: calc(50% - 46px); transform: translateX(-50%); }
     .tick.t2 { left: 50%; top: calc(50% + 32px); transform: translateX(-50%); }
-    .tick.t3 { top: 50%; left: calc(50% - 50px); transform: translateY(-50%); }
-    .tick.t4 { top: 50%; left: calc(50% + 48px); transform: translateY(-50%); }
+    .tick.t3 { top: 50%; left: calc(50% - 46px); transform: translateY(-50%) rotate(90deg); }
+    .tick.t4 { top: 50%; left: calc(50% + 32px); transform: translateY(-50%) rotate(90deg); }
     #handCanvas {
       position: absolute; inset: 0; pointer-events: none; z-index: 1;
     }
@@ -81,30 +106,43 @@
       position: absolute;
       top: 50%; left: 50%;
       transform: translate(-50%, -50%);
-      background: rgba(0,0,0,0.95);
-      padding: 30px;
-      border-radius: 16px;
       z-index: 100;
       text-align: center;
       min-width: 300px;
+      padding: 1.4em;
+      border-radius: 1em;
+      border: 3px solid hsla(0,0%,100%,0.3);
+      background: hsla(0,0%,100%,0.15);
+      backdrop-filter: blur(18px);
+      box-shadow: inset 0 0 8px 1px hsla(0,0%,100%,0.5), 0 8px 32px rgba(0,0,0,0.4);
+      display: flex;
+      flex-direction: column;
+      gap: 0.6em;
     }
-    #connectPanel h2 { color: #fff; margin: 0 0 10px; }
-    #connectPanel p { color: #aaa; margin: 0 0 20px; font-size: 14px; }
+    #connectPanel h2 { color: #fff; margin: 0 0 4px; font: 700 20px system-ui; }
+    #connectPanel p { color: rgba(255,255,255,0.7); margin: 0; font-size: 13px; }
     .modeBtn {
       display: block;
       width: 100%;
-      padding: 15px;
-      font-size: 18px;
-      font-weight: bold;
-      border: none;
-      border-radius: 10px;
+      padding: 0.6em 1em;
+      font: 700 15px system-ui;
+      border-radius: 0.6em;
       cursor: pointer;
-      margin-bottom: 12px;
       color: white;
+      border: 1px solid hsla(0,0%,100%,0.45);
+      background: hsla(0,0%,100%,0.18);
+      backdrop-filter: blur(6px);
+      box-shadow: inset 0 0 6px 1px hsla(0,0%,100%,0.35);
+      transition: background 0.15s, box-shadow 0.15s;
+      letter-spacing: 0.03em;
     }
-    #handTrackingBtn { background: #4CAF50; }
-    #skipHandBtn { background: #2196F3; }
-    #connectionStatus { margin-top: 10px; color: #ff0; font-size: 13px; font-family: monospace; }
+    .modeBtn:hover {
+      background: hsla(0,0%,100%,0.28);
+      box-shadow: inset 0 0 10px 2px hsla(0,0%,100%,0.5);
+    }
+    #handTrackingBtn { border-color: hsla(140,70%,70%,0.6); }
+    #skipHandBtn { border-color: hsla(210,90%,70%,0.6); }
+    #connectionStatus { color: #ff0; font-size: 12px; font-family: monospace; margin: 0; }
     #status {
       position: absolute;
       bottom: 10px; left: 10px;
@@ -117,6 +155,29 @@
       z-index: 10;
     }
     .hidden { display: none; }
+
+    /* ── AR Button (injected by Three.js ARButton) ── */
+    #ARButton, a[href*="webxr"], button[onclick*="xr"], .ar-button {
+      border: 3px solid hsla(0,0%,100%,0.35) !important;
+      background: hsla(0,0%,42%,0.55) !important;
+      backdrop-filter: blur(20px) !important;
+      box-shadow: inset 0 0 10px 2px hsla(0,0%,100%,0.7), 0 0 28px 6px hsla(0,0%,100%,0.22), 0 6px 32px rgba(0,0,0,0.4) !important;
+      color: #fff !important;
+      border-radius: 0.65em !important;
+      font: 700 15px system-ui, sans-serif !important;
+      letter-spacing: 0.05em !important;
+      padding: 14px 28px !important;
+      cursor: pointer !important;
+      transition: background 0.18s, box-shadow 0.18s !important;
+      position: fixed !important;
+      bottom: 24px !important;
+      left: 50% !important;
+      transform: translateX(-50%) !important;
+    }
+    #ARButton:hover {
+      background: hsla(0,0%,42%,0.55) !important;
+      box-shadow: inset 0 0 16px 3px hsla(0,0%,100%,0.85), 0 0 40px 10px hsla(0,0%,100%,0.32), 0 6px 32px rgba(0,0,0,0.4) !important;
+    }
     #clarityPanel {
       position: absolute;
       top: 10px;
@@ -168,8 +229,14 @@
 
   <div id="connectPanel">
     <h2>Choose Mode</h2>
-    <p>Use hand tracking from Phone 2<br>or just tap & gaze</p>
-    <button class="modeBtn" id="handTrackingBtn">ENABLE HAND TRACKING</button>
+    <p>Enter the code shown on Phone 2<br>or skip to tap only</p>
+    <div id="codeInputWrap" style="display:flex;gap:0.4em;">
+      <input id="peerCodeInput" type="text" placeholder="Phone 2 code"
+        style="flex:1;padding:0.55em 0.8em;border-radius:0.5em;border:1px solid hsla(0,0%,100%,0.35);
+               background:hsla(0,0%,100%,0.12);color:#fff;font:700 15px system-ui;
+               backdrop-filter:blur(6px);outline:none;letter-spacing:0.08em;text-transform:uppercase;" />
+      <button class="modeBtn" id="handTrackingBtn" style="width:auto;padding:0.55em 1em;flex-shrink:0;">CONNECT</button>
+    </div>
     <button class="modeBtn" id="skipHandBtn">SKIP - TAP ONLY</button>
     <div id="connectionStatus"></div>
   </div>
@@ -376,7 +443,6 @@
     animate();
 
     function setupConnection() {
-      const myPeerId = 'moto-receiver-' + Math.random().toString(36).substr(2, 9);
       const handBtn = document.getElementById('handTrackingBtn');
       const statusEl = document.getElementById('connectionStatus');
 
@@ -384,72 +450,57 @@
         statusEl.textContent = message;
         statusEl.style.color = '#ff6b6b';
         handBtn.disabled = false;
-        handBtn.textContent = 'RETRY HAND TRACKING';
+        handBtn.textContent = 'CONNECT';
       }
 
       handBtn.addEventListener('click', () => {
+        const codeInput = document.getElementById('peerCodeInput');
+        const targetId = codeInput.value.trim().toLowerCase();
+        if (!targetId) {
+          statusEl.textContent = 'Enter the code from Phone 2';
+          statusEl.style.color = '#ff6b6b';
+          return;
+        }
+
         handTrackingEnabled = true;
-        statusEl.textContent = 'Initializing...';
+        statusEl.textContent = 'Connecting...';
         statusEl.style.color = '#ff0';
         handBtn.disabled = true;
-        handBtn.textContent = 'Initializing...';
+        handBtn.textContent = 'Connecting...';
 
         if (peer && !peer.destroyed) { peer.destroy(); }
 
-        peer = new Peer(myPeerId);
-        peer.on('open', (id) => {
-          statusEl.innerHTML =
-            `YOUR ID:<br><span style="color:#0ff;font-size:18px;">${id}</span><br><small>Enter on Phone 2</small>`;
-          handBtn.textContent = 'Waiting for Phone 2...';
-
+        peer = new Peer();
+        peer.on('open', () => {
+          connection = peer.connect(targetId);
           if (handConnectTimeout) clearTimeout(handConnectTimeout);
           handConnectTimeout = setTimeout(() => {
             if (!connection || !connection.open) {
-              showConnectError('No connection from Phone 2. Check peer ID and retry.');
+              showConnectError('Could not connect. Check the code and retry.');
             }
-          }, 20000);
-        });
+          }, 30000);
+          connection.on('open', () => {
+            document.getElementById('connectPanel').classList.add('hidden');
+            showPointerToggle();
 
-        peer.on('connection', (conn) => {
-          connection = conn;
-          if (handConnectTimeout) clearTimeout(handConnectTimeout);
-          document.getElementById('connectPanel').classList.add('hidden');
-          
-          
-
-          // ── Show the pointer toggle button now that hand tracking is active ──
-          showPointerToggle();
-
-
-          conn.on('data', (data) => {
-            if (data.type === 'hand') {
-              handLandmarks = data.landmarks;
-              updateHandDisplay(data.handCount || 0, data.twoHandDistance);
-
-              // Draw pointer every frame we get hand data
-              if (pointerEnabled) {
-                drawPointer(handLandmarks);
+            connection.on('data', (data) => {
+              if (data.type === 'hand') {
+                handLandmarks = data.landmarks;
+                updateHandDisplay(data.handCount || 0, data.twoHandDistance);
+                if (pointerEnabled) drawPointer(handLandmarks);
               }
-            }
-          });
+            });
 
-          conn.on('close', () => {
-            
-            
-            
-            
-            handLandmarks = null;
-            lastPinch = false;
-            // Hide pointer
-            pointerCtx.clearRect(0, 0, pointerCanvas.width, pointerCanvas.height);
-            pointerToggleBtn.style.display = 'none';
-            pointerCanvas.style.display = 'none';
-            pointerEnabled = false;
-          });
+            connection.on('close', () => {
+              handLandmarks = null;
+              lastPinch = false;
+              pointerCtx.clearRect(0, 0, pointerCanvas.width, pointerCanvas.height);
+              pointerToggleBtn.style.display = 'none';
+              pointerCanvas.style.display = 'none';
+              pointerEnabled = false;
+            });
 
-          conn.on('error', () => {
-            
-            
+            connection.on('error', () => {});
           });
         });
 
@@ -462,17 +513,8 @@
       document.getElementById('skipHandBtn').addEventListener('click', () => {
         handTrackingEnabled = false;
         document.getElementById('connectPanel').classList.add('hidden');
-        
-        
-        
-        
-        // Pointer toggle NOT shown in tap-only mode
       });
     }
-
-      
-      
-      
 
     async function startClarityCameraProbe() {
       if (clarityTrack) return;
@@ -593,19 +635,12 @@
       const base = tmpCamPos.clone().addScaledVector(tmpForward, ICON_FORWARD_DISTANCE);
       base.y = groundYEstimate + ICON_HEIGHT_ABOVE_GROUND;
 
-      // icon1.png = clock (left of center)
+      // icon1.png = clock (centered)
       const icon1 = makeIcon('icon1.png', 'clock');
-      icon1.position.copy(base).addScaledVector(tmpRight, -0.22);
+      icon1.position.copy(base);
       icon1.lookAt(tmpCamPos);
       icon1.userData._baseY = icon1.position.y;
       scene.add(icon1); panels.push(icon1);
-
-      // icon2.png = weather (right of center)
-      const icon2 = makeIcon('icon2.png', 'weather');
-      icon2.position.copy(base).addScaledVector(tmpRight, 0.22);
-      icon2.lookAt(tmpCamPos);
-      icon2.userData._baseY = icon2.position.y;
-      scene.add(icon2); panels.push(icon2);
     }
 
     function updateHandDisplay(handCount, twoHandDistance) {
@@ -714,10 +749,58 @@
       const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
       scene.add(light);
 
-      const geometry = new THREE.RingGeometry(0.06, 0.075, 32).rotateX(-Math.PI / 2);
-      const material = new THREE.MeshBasicMaterial({ color: 0x8cdcff });
-      reticle = new THREE.Mesh(geometry, material);
-      reticle.matrixAutoUpdate = false;
+      // Reticle: AR-button-style glass disc on the floor
+      const reticleGroup = new THREE.Group();
+      reticleGroup.matrixAutoUpdate = false;
+
+      // Filled glass disc — 90% opaque white like AR button
+      const discGeo = new THREE.CircleGeometry(0.075, 64);
+      const discMat = new THREE.MeshPhysicalMaterial({
+        color: 0x6b6b6b, transparent: true, opacity: 0.55,
+        transmission: 0.40, roughness: 0.05, metalness: 0,
+        clearcoat: 1.0, clearcoatRoughness: 0.04,
+        side: THREE.DoubleSide
+      });
+      reticleGroup.add(new THREE.Mesh(discGeo, discMat));
+
+      // Border ring — 3px white at 0.55 like AR button border
+      const borderRing = new THREE.Mesh(
+        new THREE.RingGeometry(0.073, 0.082, 64),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, side: THREE.DoubleSide })
+      );
+      reticleGroup.add(borderRing);
+
+      // Inset glow canvas
+      const rGlowCvs = document.createElement('canvas');
+      rGlowCvs.width = rGlowCvs.height = 256;
+      const rGlowCtx = rGlowCvs.getContext('2d');
+      const rGrad = rGlowCtx.createRadialGradient(128,128,60,128,128,128);
+      rGrad.addColorStop(0, 'rgba(255,255,255,0)');
+      rGrad.addColorStop(0.7, 'rgba(255,255,255,0.08)');
+      rGrad.addColorStop(1, 'rgba(255,255,255,0.72)');
+      rGlowCtx.fillStyle = rGrad; rGlowCtx.fillRect(0,0,256,256);
+      reticleGroup.add(new THREE.Mesh(
+        new THREE.CircleGeometry(0.075, 64),
+        new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(rGlowCvs), transparent: true, opacity: 1, depthWrite: false, side: THREE.DoubleSide })
+      ));
+
+      // Outer glow halo behind disc
+      const rOuterCvs = document.createElement('canvas');
+      rOuterCvs.width = rOuterCvs.height = 256;
+      const rOCtx = rOuterCvs.getContext('2d');
+      const rOGrad = rOCtx.createRadialGradient(128,128,80,128,128,128);
+      rOGrad.addColorStop(0, 'rgba(255,255,255,0)');
+      rOGrad.addColorStop(0.55, 'rgba(255,255,255,0.06)');
+      rOGrad.addColorStop(1, 'rgba(255,255,255,0.28)');
+      rOCtx.fillStyle = rOGrad; rOCtx.fillRect(0,0,256,256);
+      const outerHalo = new THREE.Mesh(
+        new THREE.CircleGeometry(0.115, 64),
+        new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(rOuterCvs), transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide })
+      );
+      outerHalo.position.z = -0.001;
+      reticleGroup.add(outerHalo);
+
+      reticle = reticleGroup;
       reticle.visible = false;
       scene.add(reticle);
 
@@ -727,12 +810,41 @@
 
       renderer.domElement.addEventListener("click", onCanvasClick);
 
-      document.body.appendChild(ARButton.createButton(renderer, {
+      const arBtn = ARButton.createButton(renderer, {
         requiredFeatures: ["hit-test"],
         optionalFeatures: ["dom-overlay"],
         domOverlay: { root: document.body }
-      }));
+      });
+      // Override Three.js inline styles with glassy look
+      Object.assign(arBtn.style, {
+        border: '3px solid hsla(0,0%,100%,0.35)',
+        background: 'hsla(0,0%,42%,0.55)',
+        backdropFilter: 'blur(6px)',
+        boxShadow: 'inset 0 0 10px 2px hsla(0,0%,100%,0.7), 0 0 28px 6px hsla(0,0%,100%,0.22), 0 6px 32px rgba(0,0,0,0.4)',
+        color: '#fff',
+        borderRadius: '0.65em',
+        font: '700 15px system-ui, sans-serif',
+        letterSpacing: '0.05em',
+        padding: '14px 28px',
+        cursor: 'pointer',
+        position: 'fixed',
+        bottom: '24px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: '50',
+        textTransform: 'uppercase'
+      });
+      arBtn.id = 'ARButton';
 
+      document.body.appendChild(arBtn);
+      arBtn.addEventListener('mouseenter', () => {
+        arBtn.style.background = 'hsla(0,0%,42%,0.55)';
+        arBtn.style.boxShadow = 'inset 0 0 16px 3px hsla(0,0%,100%,0.85), 0 0 40px 10px hsla(0,0%,100%,0.32), 0 6px 32px rgba(0,0,0,0.4)';
+      });
+      arBtn.addEventListener('mouseleave', () => {
+        arBtn.style.background = 'hsla(0,0%,42%,0.55)';
+        arBtn.style.boxShadow = 'inset 0 0 10px 2px hsla(0,0%,100%,0.7), 0 0 28px 6px hsla(0,0%,100%,0.22), 0 6px 32px rgba(0,0,0,0.4)';
+      });
       window.addEventListener("resize", onWindowResize);
     }
 
@@ -847,57 +959,60 @@
       const geom = new THREE.ShapeGeometry(shape, 28);
       const group = new THREE.Group();
 
+      // Exact AR button style: white 0.2 opacity base, blur = transmission
       const shell = new THREE.Mesh(geom, new THREE.MeshPhysicalMaterial({
-        color: tint, transparent: true, opacity: PANEL_SHELL_OPACITY + 0.06,
-        transmission: 0.28, roughness: 0.10, metalness: 0,
+        color: 0x6b6b6b, transparent: true, opacity: 0.55,
+        transmission: 0.40, roughness: 0.05, metalness: 0,
         clearcoat: 1.0, clearcoatRoughness: 0.05,
-        reflectivity: 0.65, ior: 1.52, thickness: 0.9,
+        reflectivity: 0.5, ior: 1.45, thickness: 0.5,
         side: THREE.DoubleSide
       }));
       group.add(shell);
 
-      // Specular top sheen
-      const shineCvs = document.createElement('canvas');
-      shineCvs.width = shineCvs.height = 512;
-      const shineCtx = shineCvs.getContext('2d');
-      const shineGrad = shineCtx.createLinearGradient(0, 0, 0, 512);
-      shineGrad.addColorStop(0, 'rgba(255,255,255,0.24)');
-      shineGrad.addColorStop(0.20, 'rgba(255,255,255,0.07)');
-      shineGrad.addColorStop(0.50, 'rgba(255,255,255,0.02)');
-      shineGrad.addColorStop(1, 'rgba(0,0,0,0)');
-      shineCtx.fillStyle = shineGrad; shineCtx.fillRect(0, 0, 512, 512);
-      const shineMesh = new THREE.Mesh(new THREE.ShapeGeometry(shape, 28),
-        new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(shineCvs), transparent: true, opacity: 1 }));
-      shineMesh.position.z = 0.001; group.add(shineMesh);
-
-      // Bottom blue accent glow
+      // Inset glow — bright edges like CSS inset box-shadow
       const glowCvs = document.createElement('canvas');
       glowCvs.width = glowCvs.height = 512;
       const glowCtx = glowCvs.getContext('2d');
-      const glowGrad = glowCtx.createLinearGradient(0, 460, 0, 512);
-      glowGrad.addColorStop(0, 'rgba(80,160,255,0)');
-      glowGrad.addColorStop(1, 'rgba(80,160,255,0.12)');
-      glowCtx.fillStyle = glowGrad; glowCtx.fillRect(0, 0, 512, 512);
+      const insetGrad = glowCtx.createRadialGradient(256,256,140, 256,256,256);
+      insetGrad.addColorStop(0, 'rgba(255,255,255,0)');
+      insetGrad.addColorStop(0.70, 'rgba(255,255,255,0.06)');
+      insetGrad.addColorStop(1, 'rgba(255,255,255,0.72)');
+      glowCtx.fillStyle = insetGrad; glowCtx.fillRect(0,0,512,512);
       const glowMesh = new THREE.Mesh(new THREE.ShapeGeometry(shape, 28),
         new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(glowCvs), transparent: true, opacity: 1 }));
-      glowMesh.position.z = 0.0015; group.add(glowMesh);
+      glowMesh.position.z = 0.001; group.add(glowMesh);
 
-      // Border
+      // Outer glow plane — slightly larger, white halo behind the panel
+      const outerGlowCvs = document.createElement('canvas');
+      outerGlowCvs.width = outerGlowCvs.height = 512;
+      const ogCtx = outerGlowCvs.getContext('2d');
+      const ogGrad = ogCtx.createRadialGradient(256,256,180, 256,256,256);
+      ogGrad.addColorStop(0, 'rgba(255,255,255,0)');
+      ogGrad.addColorStop(0.6, 'rgba(255,255,255,0.06)');
+      ogGrad.addColorStop(1, 'rgba(255,255,255,0.28)');
+      ogCtx.fillStyle = ogGrad; ogCtx.fillRect(0,0,512,512);
+      const outerGlowMesh = new THREE.Mesh(
+        new THREE.ShapeGeometry(makeRoundedRectShape(w * 1.06, h * 1.06, r * 1.1), 28),
+        new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(outerGlowCvs), transparent: true, opacity: 0.9, depthWrite: false })
+      );
+      outerGlowMesh.position.z = -0.005; group.add(outerGlowMesh);
+
+      // Border — matches: 3px solid hsla(0,0%,100%,0.35)
       const border = new THREE.LineSegments(
         new THREE.EdgesGeometry(geom),
-        new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.16 })
+        new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 })
       );
       group.add(border);
 
       // Drop shadow
       const shadowMesh = new THREE.Mesh(new THREE.ShapeGeometry(shape, 28),
-        new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false }));
+        new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.18, depthWrite: false }));
       shadowMesh.position.set(0.013, -0.02, -0.002); group.add(shadowMesh);
 
-      // Hover edge glow
+      // Hover edge glow — brightens border on gaze
       const hoverGlow = new THREE.LineSegments(
         new THREE.EdgesGeometry(geom),
-        new THREE.LineBasicMaterial({ color: 0x88ccff, transparent: true, opacity: 0 })
+        new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 })
       );
       hoverGlow.position.z = 0.006; group.add(hoverGlow);
 
@@ -943,10 +1058,10 @@
       const { group, shape } = makeGlassShell(PW, PH, CR, 0x071422);
       const { tex, cvs, ctx } = makeCanvasTex(960, 640, drawClockFace);
       const content = new THREE.Mesh(
-        new THREE.ShapeGeometry(makeRoundedRectShape(PW - 0.055, PH - 0.045, 0.065), 20),
+        new THREE.ShapeGeometry(makeRoundedRectShape(PW - 0.13, PH - 0.11, 0.06), 20),
         new THREE.MeshBasicMaterial({ map: tex, transparent: false })
       );
-      content.position.z = 0.003; group.add(content);
+      content.position.z = 0.0035; group.add(content);
       Object.assign(group.userData, { isClockPanel: true, clockCanvas: cvs, clockCtx: ctx, clockTexture: tex });
       return group;
     }
@@ -954,9 +1069,9 @@
     function drawClockFace(ctx, cvs) {
       const W = cvs.width, H = cvs.height;
       ctx.clearRect(0, 0, W, H);
-      fillRR(ctx, 0, 0, W, H, 48, '#050e1c');
+      fillRR(ctx, 0, 0, W, H, 48, '#010509');
       const bgG = ctx.createLinearGradient(0, 0, 0, H);
-      bgG.addColorStop(0, '#07121f'); bgG.addColorStop(1, '#0c1e35');
+      bgG.addColorStop(0, '#02080f'); bgG.addColorStop(1, '#060e1a');
       ctx.fillStyle = bgG; ctx.fillRect(0, 0, W, H);
 
       const now = new Date();
@@ -1074,7 +1189,7 @@
       ctx.clearRect(0, 0, W, H);
 
       if (!data) {
-        fillRR(ctx, 0, 0, W, H, 48, '#08131e');
+        fillRR(ctx, 0, 0, W, H, 48, '#030810');
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.font = '300 38px system-ui'; ctx.fillStyle = 'rgba(255,255,255,0.38)';
         ctx.fillText('Fetching weather…', W/2, H/2); return;
