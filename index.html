@@ -244,6 +244,26 @@
 
 
 
+  <!-- Surface mode toggle -->
+  <button id="surfaceToggleBtn" style="
+    display:none;
+    position:fixed;
+    bottom:60px;
+    right:16px;
+    z-index:20;
+    background:rgba(30,42,54,0.88);
+    border:1.5px solid rgba(140,200,255,0.38);
+    color:#c8e8ff;
+    font:600 13px system-ui,sans-serif;
+    padding:9px 14px;
+    border-radius:999px;
+    cursor:pointer;
+    backdrop-filter:blur(12px);
+    box-shadow:0 2px 18px rgba(0,0,0,0.45);
+    letter-spacing:0.02em;">
+    📐 Floor
+  </button>
+
   <!-- PeerJS for WebRTC -->
   <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script>
@@ -258,7 +278,22 @@
     let camera, scene, renderer;
     let reticle, controller;
     let hitTestSource = null;
+    let wallHitTestSource = null;
     let hitTestSourceRequested = false;
+    let isWallMode = false;
+    let wallSnapIndicator = null;
+    const wallAnchors = [];
+    let lastPinchTime = 0;
+    const DOUBLE_PINCH_MS = 500;
+
+    // ── Air drawing state ───────────────────────────────────────────
+    let drawMode = false;
+    let isDrawing = false;
+    let currentStroke = [];          // current line points
+    const drawnStrokes = [];         // all THREE.Line objects in scene
+    let lastDrawPoint = null;
+    let drawModeIconPos = null;      // where icon2 is, to return on exit
+    const DRAW_MIN_DIST = 0.005;     // min distance between points
     const panels = [];
     const raycaster = new THREE.Raycaster();
     let hoveredObject = null;
@@ -303,9 +338,17 @@
     });
 
     function showPointerToggle() {
-      // flex display, inline-flex style
       pointerToggleBtn.style.display = 'inline-flex';
     }
+
+    // Surface mode toggle
+    const surfaceToggleBtn = document.getElementById('surfaceToggleBtn');
+    surfaceToggleBtn.addEventListener('click', () => {
+      isWallMode = !isWallMode;
+      surfaceToggleBtn.textContent = isWallMode ? '🧱 Wall' : '📐 Floor';
+      surfaceToggleBtn.style.borderColor = isWallMode ? 'rgba(255,180,100,0.6)' : 'rgba(140,200,255,0.38)';
+      surfaceToggleBtn.style.color = isWallMode ? '#ffd0a0' : '#c8e8ff';
+    });
 
     // ── Draw the Vision Pro style pointer (wrist → index ray) ──────
     function drawPointer(landmarks) {
@@ -630,6 +673,67 @@
 
 
 
+    // ── Create a visual wall anchor at gaze point ──────────────────
+    function createWallAnchor() {
+      camera.getWorldPosition(tmpOrigin);
+      camera.getWorldDirection(tmpDirection);
+
+      // Cast ray 1.5m forward — place anchor there on the wall
+      const anchorPos = tmpOrigin.clone().addScaledVector(tmpDirection, 1.5);
+
+      const group = new THREE.Group();
+      group.position.copy(anchorPos);
+      group.lookAt(tmpOrigin); // face the user
+
+      // Outer ring
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(0.06, 0.075, 32),
+        new THREE.MeshBasicMaterial({ color: 0xffd090, transparent: true, opacity: 0.85, side: THREE.DoubleSide })
+      );
+      group.add(ring);
+
+      // Center dot
+      const dot = new THREE.Mesh(
+        new THREE.CircleGeometry(0.018, 32),
+        new THREE.MeshBasicMaterial({ color: 0xffeebb, transparent: true, opacity: 0.95, side: THREE.DoubleSide })
+      );
+      dot.position.z = 0.001;
+      group.add(dot);
+
+      // Cross lines
+      const crossMat = new THREE.LineBasicMaterial({ color: 0xffd090, transparent: true, opacity: 0.6 });
+      const hGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-0.05,0,0), new THREE.Vector3(0.05,0,0)]);
+      const vGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,-0.05,0), new THREE.Vector3(0,0.05,0)]);
+      group.add(new THREE.Line(hGeo, crossMat));
+      group.add(new THREE.Line(vGeo, crossMat));
+
+      group.userData.isAnchor = true;
+      group.userData.snapRadius = 0.35; // how close panel needs to be to snap
+      scene.add(group);
+      wallAnchors.push(group);
+
+      // Pulse animation data
+      group.userData.spawnTime = Date.now();
+
+      return group;
+    }
+
+    // ── Check if panel is near any anchor, snap if so ───────────────
+    function checkAnchorSnap(panel) {
+      for (const anchor of wallAnchors) {
+        const dist = panel.position.distanceTo(anchor.position);
+        if (dist < anchor.userData.snapRadius) {
+          // Snap panel to anchor position and face user
+          panel.position.copy(anchor.position);
+          panel.lookAt(camera.position);
+          panel.userData.snappedToAnchor = anchor;
+          return true;
+        }
+      }
+      panel.userData.snappedToAnchor = null;
+      return false;
+    }
+
     function spawnIconInAir() {
       if (hasInitialIconSpawned) return;
       if (groundYEstimate === null) return;
@@ -647,12 +751,20 @@
       const base = tmpCamPos.clone().addScaledVector(tmpForward, ICON_FORWARD_DISTANCE);
       base.y = groundYEstimate + ICON_HEIGHT_ABOVE_GROUND;
 
-      // icon1.png = clock (centered)
+      // icon1 = clock, offset left
       const icon1 = makeIcon('icon1.png', 'clock');
-      icon1.position.copy(base);
+      icon1.position.copy(base).addScaledVector(tmpRight, -0.18);
       icon1.lookAt(tmpCamPos);
       icon1.userData._baseY = icon1.position.y;
       scene.add(icon1); panels.push(icon1);
+
+      // icon2 = air draw, offset right
+      const icon2 = makeIcon('icon2.webp', 'draw');
+      icon2.position.copy(base).addScaledVector(tmpRight, 0.18);
+      icon2.lookAt(tmpCamPos);
+      icon2.userData._baseY = icon2.position.y;
+      drawModeIconPos = icon2.position.clone();
+      scene.add(icon2); panels.push(icon2);
     }
 
     function updateHandDisplay(handCount, twoHandDistance) {
@@ -666,6 +778,7 @@
         return;
       }
 
+      if (drawMode) { handleDrawMode(); return; }
       if (handCount === 2 && twoHandDistance) { handleTwoHandResize(twoHandDistance); return; }
       if (handCount === 1) { handleSingleHandPinch(); }
     }
@@ -700,23 +813,30 @@
 
       // ── PINCH START — Vision Pro style: gaze = aim, pinch = activate ──
       if (isPinching && !lastPinch) {
-        // Whatever the gaze is hovering on right now gets activated
-        const gazedAt = hoveredObject;
+        const now = Date.now();
+        const isDoublePinch = (now - lastPinchTime) < DOUBLE_PINCH_MS;
+        lastPinchTime = now;
 
-        if (gazedAt) {
-          // Close button on a panel
-          if (gazedAt.userData.isCloseBtn) {
-            closePanel(gazedAt.userData.panelRef);
-          }
-          // Icon — open its panel
-          else if (gazedAt.userData.isIcon && !gazedAt.userData.openPanel) {
-            openPanelForIcon(gazedAt);
-          }
-          // Panel — grab it (hold pinch + move gaze to drag)
-          else if (gazedAt.userData.isPanel) {
-            activePanel = gazedAt;
-            activePanel.userData.selected = true;
-            initialPanelScale = activePanel.scale.x;
+        // Double pinch = create wall anchor at gaze point
+        if (isDoublePinch && !hoveredObject) {
+          createWallAnchor();
+        } else {
+          const gazedAt = hoveredObject;
+          if (gazedAt) {
+            if (gazedAt.userData.isCloseBtn) {
+              closePanel(gazedAt.userData.panelRef);
+            } else if (gazedAt.userData.isIcon && !gazedAt.userData.openPanel) {
+              openPanelForIcon(gazedAt);
+            } else if (gazedAt.userData.isPanel) {
+              activePanel = gazedAt;
+              activePanel.userData.selected = true;
+              activePanel.userData.snappedToAnchor = null;
+              initialPanelScale = activePanel.scale.x;
+              // Fade to 30% while dragging
+              if (activePanel.userData.glassShell) {
+                activePanel.userData.glassShell.material.opacity = 0.30;
+              }
+            }
           }
         }
       }
@@ -734,9 +854,14 @@
         activePanel.quaternion.slerp(camera.quaternion, 0.08);
       }
 
-      // ── PINCH RELEASE — drop panel, cancel dwell ──
+      // ── PINCH RELEASE — snap to anchor if nearby, else drop ──
       if (!isPinching && lastPinch) {
         if (activePanel) {
+          checkAnchorSnap(activePanel);
+          // Restore opacity
+          if (activePanel.userData.glassShell) {
+            activePanel.userData.glassShell.material.opacity = activePanel.userData.shellOpacity || 0.82;
+          }
           activePanel.userData.selected = false;
           activePanel = null;
         }
@@ -769,58 +894,12 @@
       const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
       scene.add(light);
 
-      // Reticle: AR-button-style glass disc on the floor
-      const reticleGroup = new THREE.Group();
-      reticleGroup.matrixAutoUpdate = false;
-
-      // Filled glass disc — 90% opaque white like AR button
-      const discGeo = new THREE.CircleGeometry(0.075, 64);
-      const discMat = new THREE.MeshPhysicalMaterial({
-        color: 0x9a9a9a, transparent: true, opacity: 0.82,
-        transmission: 0.15, roughness: 0.05, metalness: 0,
-        clearcoat: 1.0, clearcoatRoughness: 0.04,
-        side: THREE.DoubleSide
-      });
-      reticleGroup.add(new THREE.Mesh(discGeo, discMat));
-
-      // Border ring — 3px white at 0.55 like AR button border
-      const borderRing = new THREE.Mesh(
-        new THREE.RingGeometry(0.073, 0.082, 64),
-        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, side: THREE.DoubleSide })
+      // Original reticle — simple white ring on the floor
+      reticle = new THREE.Mesh(
+        new THREE.RingGeometry(0.10, 0.13, 32).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color: 0x6b6b6b, transparent: true, opacity: 0.55, side: THREE.DoubleSide })
       );
-      reticleGroup.add(borderRing);
-
-      // Inset glow canvas
-      const rGlowCvs = document.createElement('canvas');
-      rGlowCvs.width = rGlowCvs.height = 256;
-      const rGlowCtx = rGlowCvs.getContext('2d');
-      const rGrad = rGlowCtx.createRadialGradient(128,128,60,128,128,128);
-      rGrad.addColorStop(0, 'rgba(255,255,255,0)');
-      rGrad.addColorStop(0.7, 'rgba(255,255,255,0.08)');
-      rGrad.addColorStop(1, 'rgba(255,255,255,0.72)');
-      rGlowCtx.fillStyle = rGrad; rGlowCtx.fillRect(0,0,256,256);
-      reticleGroup.add(new THREE.Mesh(
-        new THREE.CircleGeometry(0.075, 64),
-        new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(rGlowCvs), transparent: true, opacity: 1, depthWrite: false, side: THREE.DoubleSide })
-      ));
-
-      // Outer glow halo behind disc
-      const rOuterCvs = document.createElement('canvas');
-      rOuterCvs.width = rOuterCvs.height = 256;
-      const rOCtx = rOuterCvs.getContext('2d');
-      const rOGrad = rOCtx.createRadialGradient(128,128,80,128,128,128);
-      rOGrad.addColorStop(0, 'rgba(255,255,255,0)');
-      rOGrad.addColorStop(0.55, 'rgba(255,255,255,0.06)');
-      rOGrad.addColorStop(1, 'rgba(255,255,255,0.28)');
-      rOCtx.fillStyle = rOGrad; rOCtx.fillRect(0,0,256,256);
-      const outerHalo = new THREE.Mesh(
-        new THREE.CircleGeometry(0.115, 64),
-        new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(rOuterCvs), transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide })
-      );
-      outerHalo.position.z = -0.001;
-      reticleGroup.add(outerHalo);
-
-      reticle = reticleGroup;
+      reticle.matrixAutoUpdate = false;
       reticle.visible = false;
       scene.add(reticle);
 
@@ -978,6 +1057,13 @@
     function openPanelForIcon(icon) {
       if (icon.userData.openPanel) return;
       const type = icon.userData.iconType;
+
+      // Draw mode icon
+      if (type === 'draw') {
+        enterDrawMode(icon);
+        return;
+      }
+
       const panel = type === 'clock' ? makeClockPanel() : makeWeatherPanel();
 
       // Spawn panel 0.82m to the right of the icon (in icon's local space)
@@ -990,6 +1076,135 @@
       icon.visible = false;
       icon.userData.openPanel = panel;
       panel.userData.iconRef = icon;
+    }
+
+    // ── Air Drawing ─────────────────────────────────────────────────
+    function enterDrawMode(icon) {
+      drawMode = true;
+      icon.visible = false;
+      icon.userData.openPanel = true; // prevent re-open
+      // Show hint
+      showDrawHint(true);
+    }
+
+    function exitDrawMode() {
+      drawMode = false;
+      isDrawing = false;
+      lastDrawPoint = null;
+      showDrawHint(false);
+      // Unhide icon2
+      panels.forEach(p => {
+        if (p.userData.iconType === 'draw') {
+          p.visible = true;
+          p.userData.openPanel = false;
+        }
+      });
+    }
+
+    function showDrawHint(show) {
+      let hint = document.getElementById('drawHint');
+      if (!hint) {
+        hint = document.createElement('div');
+        hint.id = 'drawHint';
+        Object.assign(hint.style, {
+          position: 'fixed', bottom: '100px', left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'hsla(0,0%,100%,0.2)',
+          border: '1px solid hsla(0,0%,100%,0.35)',
+          backdropFilter: 'blur(12px)',
+          color: '#fff', padding: '10px 20px',
+          borderRadius: '999px', fontSize: '13px',
+          fontFamily: 'system-ui', zIndex: '30',
+          boxShadow: 'inset 0 0 8px 1px hsla(0,0%,100%,0.4)',
+          pointerEvents: 'none'
+        });
+        document.body.appendChild(hint);
+      }
+      hint.textContent = '✏️ Pinch to draw · Open palm to exit';
+      hint.style.display = show ? 'block' : 'none';
+    }
+
+    function isOpenPalm(landmarks) {
+      // All 4 fingers extended = open palm
+      // Check each fingertip is far from wrist
+      const wrist = landmarks[0];
+      const tips = [landmarks[8], landmarks[12], landmarks[16], landmarks[20]];
+      const bases = [landmarks[5], landmarks[9], landmarks[13], landmarks[17]];
+      let extended = 0;
+      for (let i = 0; i < 4; i++) {
+        const tipDist = Math.hypot(tips[i].x - wrist.x, tips[i].y - wrist.y);
+        const baseDist = Math.hypot(bases[i].x - wrist.x, bases[i].y - wrist.y);
+        if (tipDist > baseDist * 1.4) extended++;
+      }
+      return extended >= 3;
+    }
+
+    function handleDrawMode() {
+      if (!handLandmarks) return;
+      const lm = Array.isArray(handLandmarks[0]) ? handLandmarks[0] : handLandmarks;
+      if (!lm || lm.length < 21) return;
+
+      // Open palm = exit
+      if (isOpenPalm(lm)) {
+        exitDrawMode();
+        return;
+      }
+
+      // Pinch = draw
+      const thumb = lm[4], index = lm[8];
+      const dx = (thumb.x - index.x) * handCanvas.width;
+      const dy = (thumb.y - index.y) * handCanvas.height;
+      const pinching = Math.sqrt(dx*dx + dy*dy) < 50;
+
+      if (pinching) {
+        // Get 3D position of index fingertip in world space
+        // Project from screen to world at ~0.7m depth
+        const ix = (index.x * 2 - 1);
+        const iy = -(index.y * 2 - 1);
+        const vec = new THREE.Vector3(ix, iy, 0.5).unproject(camera);
+        camera.getWorldPosition(tmpOrigin);
+        const dir = vec.sub(tmpOrigin).normalize();
+        const drawPoint = tmpOrigin.clone().addScaledVector(dir, 0.7);
+
+        if (!isDrawing) {
+          isDrawing = true;
+          currentStroke = [drawPoint.clone()];
+          lastDrawPoint = drawPoint.clone();
+        } else {
+          const dist = drawPoint.distanceTo(lastDrawPoint);
+          if (dist > DRAW_MIN_DIST) {
+            currentStroke.push(drawPoint.clone());
+            lastDrawPoint = drawPoint.clone();
+            // Rebuild line
+            rebuildCurrentStrokeLine();
+          }
+        }
+      } else {
+        if (isDrawing && currentStroke.length > 1) {
+          // Finalize stroke
+          commitStroke();
+        }
+        isDrawing = false;
+        lastDrawPoint = null;
+        currentStroke = [];
+      }
+    }
+
+    let currentStrokeLine = null;
+    function rebuildCurrentStrokeLine() {
+      if (currentStrokeLine) scene.remove(currentStrokeLine);
+      if (currentStroke.length < 2) return;
+      const geo = new THREE.BufferGeometry().setFromPoints(currentStroke);
+      const mat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 });
+      currentStrokeLine = new THREE.Line(geo, mat);
+      scene.add(currentStrokeLine);
+    }
+
+    function commitStroke() {
+      if (currentStrokeLine) {
+        drawnStrokes.push(currentStrokeLine);
+        currentStrokeLine = null;
+      }
     }
 
     // ── Shared: rounded rect THREE.Shape ─────────────────────────────
@@ -1005,14 +1220,14 @@
     }
 
     // ── Shared: Vision Pro glass shell ────────────────────────────────
-    function makeGlassShell(w, h, r, tint) {
+    function makeGlassShell(w, h, r, tint, shellOpacity = 0.82) {
       const shape = makeRoundedRectShape(w, h, r);
       const geom = new THREE.ShapeGeometry(shape, 28);
       const group = new THREE.Group();
 
       // Exact AR button style: white 0.2 opacity base, blur = transmission
       const shell = new THREE.Mesh(geom, new THREE.MeshPhysicalMaterial({
-        color: 0x9a9a9a, transparent: true, opacity: 0.82,
+        color: 0x9a9a9a, transparent: true, opacity: shellOpacity,
         transmission: 0.15, roughness: 0.45, metalness: 0,
         clearcoat: 1.0, clearcoatRoughness: 0.35,
         reflectivity: 0.5, ior: 1.45, thickness: 0.5,
@@ -1068,6 +1283,7 @@
       hoverGlow.position.z = 0.006; group.add(hoverGlow);
 
       group.userData.isPanel = true; group.userData.hoverTime = 0;
+      group.userData.shellOpacity = shellOpacity;
       group.userData.glassShell = shell;
       group.userData.innerBorder = border;
       group.userData.shadowMesh = shadowMesh;
@@ -1106,7 +1322,7 @@
     // ════════════════════════════════════════════════════════════════
     function makeClockPanel() {
       const PW = 0.90, PH = 0.62, CR = 0.09;
-      const { group, shape } = makeGlassShell(PW, PH, CR, 0x071422);
+      const { group, shape } = makeGlassShell(PW, PH, CR, 0x071422, 0.92);
       const { tex, cvs, ctx } = makeCanvasTex(960, 640, drawClockFace);
       const content = new THREE.Mesh(
         new THREE.ShapeGeometry(makeRoundedRectShape(PW - 0.13, PH - 0.11, 0.06), 20),
@@ -1122,15 +1338,44 @@
       ctx.clearRect(0, 0, W, H);
 
       const now = new Date();
-      const h = String(now.getHours()).padStart(2, '0');
+      const h = now.getHours() % 12 || 12;
       const m = String(now.getMinutes()).padStart(2, '0');
-      const s = String(now.getSeconds()).padStart(2, '0');
+      const ampm = now.getHours() >= 12 ? 'PM' : 'AM';
 
+      // Dark semi-transparent background
+      ctx.fillStyle = 'rgba(10,10,10,0.72)';
+      roundRect(ctx, 0, 0, W, H, 80);
+      ctx.fill();
+
+      // Gold time
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = '100 180px system-ui';
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(`${h}:${m}:${s}`, W / 2, H / 2);
+      ctx.font = '200 200px system-ui';
+      ctx.fillStyle = 'rgba(212,168,75,0.55)';
+      ctx.shadowColor = 'rgba(212,168,75,0.35)';
+      ctx.shadowBlur = 30;
+      ctx.fillText(`${h}:${m}`, W / 2 - 40, H / 2);
+
+      // AM/PM small
+      ctx.font = '300 48px system-ui';
+      ctx.fillStyle = 'rgba(212,168,75,0.35)';
+      ctx.shadowBlur = 0;
+      ctx.textAlign = 'left';
+      ctx.fillText(ampm, W / 2 + 200, H / 2 - 50);
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x+r, y);
+      ctx.lineTo(x+w-r, y);
+      ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+      ctx.lineTo(x+w, y+h-r);
+      ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+      ctx.lineTo(x+r, y+h);
+      ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+      ctx.lineTo(x, y+r);
+      ctx.quadraticCurveTo(x, y, x+r, y);
+      ctx.closePath();
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -1268,21 +1513,43 @@
 
         if (!hitTestSourceRequested) {
           session.requestReferenceSpace("viewer").then((space) => {
-            session.requestHitTestSource({ space }).then((source) => { hitTestSource = source; });
+            // Floor hit test
+            session.requestHitTestSource({ space }).then((source) => { hitTestSource = source; }).catch(()=>{});
+            // Wall hit test — vertical planes
+            session.requestHitTestSource({ space, entityTypes: ['plane'] }).then((source) => { wallHitTestSource = source; }).catch(()=>{});
           });
-          session.addEventListener("end", () => { hitTestSourceRequested = false; hitTestSource = null; });
+          session.addEventListener("end", () => {
+            hitTestSourceRequested = false;
+            hitTestSource = null;
+            wallHitTestSource = null;
+          });
           hitTestSourceRequested = true;
+          // Show surface toggle button in AR
+          document.getElementById('surfaceToggleBtn').style.display = 'block';
         }
 
         if (hitTestSource) {
-          const hitTestResults = frame.getHitTestResults(hitTestSource);
+          // Pick correct source based on mode
+          const activeSource = (isWallMode && wallHitTestSource) ? wallHitTestSource : hitTestSource;
+          const hitTestResults = frame.getHitTestResults(activeSource);
+
           if (hitTestResults.length) {
             const hit = hitTestResults[0];
             const pose = hit.getPose(referenceSpace);
-            reticle.visible = true;
-            reticle.matrix.fromArray(pose.transform.matrix);
-            tmpReticlePos.setFromMatrixPosition(reticle.matrix);
-            groundYEstimate = tmpReticlePos.y;
+
+            // Check normal to filter: wall = mostly vertical normal, floor = mostly horizontal
+            const mat = new THREE.Matrix4().fromArray(pose.transform.matrix);
+            const normal = new THREE.Vector3(0, 1, 0).applyMatrix4(mat).normalize();
+            const isVertical = Math.abs(normal.y) < 0.5; // normal pointing sideways = wall
+
+            if (isWallMode ? isVertical : !isVertical) {
+              reticle.visible = true;
+              reticle.matrix.fromArray(pose.transform.matrix);
+              tmpReticlePos.setFromMatrixPosition(reticle.matrix);
+              if (!isWallMode) groundYEstimate = tmpReticlePos.y;
+            } else {
+              reticle.visible = false;
+            }
           } else { reticle.visible = false; }
           spawnIconInAir();
         }
@@ -1290,13 +1557,27 @@
 
       if (activePanel && reticle.visible) {
         activePanel.position.setFromMatrixPosition(reticle.matrix);
-        activePanel.quaternion.setFromRotationMatrix(reticle.matrix);
+        if (isWallMode) {
+          // Face the camera when snapped to wall
+          activePanel.lookAt(camera.position);
+        } else {
+          activePanel.quaternion.setFromRotationMatrix(reticle.matrix);
+        }
       }
 
       panels.forEach(panel => {
         if (panel.userData.isClockPanel) drawClockFace(panel.userData.clockCtx, panel.userData.clockCanvas);
         if (panel.userData.isClockPanel) panel.userData.clockTexture.needsUpdate = true;
         updateHoverEffect(panel);
+      });
+
+      // Animate wall anchors — pulse scale
+      wallAnchors.forEach(anchor => {
+        const age = (Date.now() - anchor.userData.spawnTime) / 1000;
+        const pulse = 1 + Math.sin(age * 4) * 0.08;
+        anchor.scale.setScalar(pulse);
+        // Face user always
+        anchor.lookAt(camera.position);
       });
 
       detectHover();
