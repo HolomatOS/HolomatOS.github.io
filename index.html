@@ -970,34 +970,29 @@
           createWallAnchor();
         } else {
           const gazedAt = hoveredObject;
-          if (gazedAt) {
+          // If holding panel and pinch on empty = DROP
+          if (activePanel && !gazedAt) {
+            checkAnchorSnap(activePanel);
+            if (activePanel.userData.glassShell) activePanel.userData.glassShell.material.opacity = activePanel.userData.shellOpacity || 0.82;
+            activePanel.userData.selected = false;
+            activePanel.scale.setScalar(1);
+            activePanel = null;
+          } else if (gazedAt) {
             if (gazedAt.userData.isCloseBtn) {
               closePanel(gazedAt.userData.panelRef);
             } else if (gazedAt.userData.isIcon && !gazedAt.userData.openPanel) {
               openPanelForIcon(gazedAt);
             } else if (gazedAt.userData.isPanel) {
-              if (activePanel === gazedAt) {
-                // Second pinch = DROP panel here
-                checkAnchorSnap(activePanel);
-                if (activePanel.userData.glassShell) {
-                  activePanel.userData.glassShell.material.opacity = activePanel.userData.shellOpacity || 0.82;
-                }
+              // Pinch on panel = pick up
+              if (activePanel) {
                 activePanel.userData.selected = false;
                 activePanel.scale.setScalar(1);
-                activePanel = null;
-              } else {
-                // First pinch = PICK UP
-                if (activePanel) {
-                  activePanel.userData.selected = false;
-                  activePanel.scale.setScalar(1);
-                }
-                activePanel = gazedAt;
-                activePanel.userData.selected = true;
-                activePanel.scale.setScalar(1.06);
-                if (activePanel.userData.glassShell) {
-                  activePanel.userData.glassShell.material.opacity = 0.30;
-                }
+                if (activePanel.userData.glassShell) activePanel.userData.glassShell.material.opacity = activePanel.userData.shellOpacity || 0.82;
               }
+              activePanel = gazedAt;
+              activePanel.userData.selected = true;
+              activePanel.scale.setScalar(1.06);
+              if (activePanel.userData.glassShell) activePanel.userData.glassShell.material.opacity = 0.30;
             }
           }
         }
