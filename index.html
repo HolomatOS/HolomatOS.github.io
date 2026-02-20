@@ -274,6 +274,7 @@
 
   <script type="module">
     import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
+    import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js";
 
     let camera, scene, renderer;
     let reticle, controller;
@@ -909,71 +910,37 @@
 
       renderer.domElement.addEventListener("click", onCanvasClick);
 
-      // Custom AR button with full error handling — no crash on failure
-      const arBtn = document.createElement('button');
+      // Use Three.js ARButton — proven to work with WebXR
+      const arBtn = ARButton.createButton(renderer, {
+        requiredFeatures: ['hit-test'],
+        optionalFeatures: ['dom-overlay'],
+        domOverlay: { root: document.body }
+      });
       arBtn.id = 'ARButton';
-      arBtn.textContent = 'ENTER AR';
-      Object.assign(arBtn.style, {
-        border: '3px solid hsla(0,0%,100%,0.35)',
-        background: 'hsla(0,0%,42%,0.55)',
-        backdropFilter: 'blur(6px)',
-        boxShadow: 'inset 0 0 10px 2px hsla(0,0%,100%,0.7), 0 0 28px 6px hsla(0,0%,100%,0.22), 0 6px 32px rgba(0,0,0,0.4)',
-        color: '#fff',
-        borderRadius: '0.65em',
-        font: '700 15px system-ui, sans-serif',
-        letterSpacing: '0.05em',
-        padding: '14px 28px',
-        cursor: 'pointer',
-        position: 'fixed',
-        bottom: '24px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: '50',
-        textTransform: 'uppercase'
-      });
-
-      arBtn.addEventListener('click', async () => {
-        if (!navigator.xr) { alert('WebXR not supported on this device/browser'); return; }
-        try {
-          arBtn.textContent = 'Starting...';
-          arBtn.disabled = true;
-
-          // Try with hit-test first, fall back without
-          let session;
-          try {
-            session = await navigator.xr.requestSession('immersive-ar', {
-              requiredFeatures: ['hit-test'],
-              optionalFeatures: ['dom-overlay'],
-              domOverlay: { root: document.body }
-            });
-          } catch(e) {
-            // Retry without hit-test
-            session = await navigator.xr.requestSession('immersive-ar', {
-              optionalFeatures: ['dom-overlay'],
-              domOverlay: { root: document.body }
-            });
-          }
-
-          await renderer.xr.setSession(session);
-          arBtn.style.display = 'none';
-
-          session.addEventListener('end', () => {
-            arBtn.style.display = '';
-            arBtn.textContent = 'ENTER AR';
-            arBtn.disabled = false;
-          });
-
-        } catch(err) {
-          console.error('AR session failed:', err);
-          arBtn.textContent = 'ENTER AR';
-          arBtn.disabled = false;
-          arBtn.style.boxShadow = 'inset 0 0 10px 2px hsla(0,60%,60%,0.7), 0 0 28px 6px hsla(0,0%,100%,0.22)';
-          setTimeout(() => {
-            arBtn.style.boxShadow = 'inset 0 0 10px 2px hsla(0,0%,100%,0.7), 0 0 28px 6px hsla(0,0%,100%,0.22)';
-          }, 2000);
-        }
-      });
-
+      // Apply our glassy styling after creation
+      const applyBtnStyle = () => {
+        Object.assign(arBtn.style, {
+          border: '3px solid hsla(0,0%,100%,0.35)',
+          background: 'hsla(0,0%,42%,0.55)',
+          backdropFilter: 'blur(6px)',
+          boxShadow: 'inset 0 0 10px 2px hsla(0,0%,100%,0.7), 0 0 28px 6px hsla(0,0%,100%,0.22), 0 6px 32px rgba(0,0,0,0.4)',
+          color: '#fff',
+          borderRadius: '0.65em',
+          font: '700 15px system-ui, sans-serif',
+          letterSpacing: '0.05em',
+          padding: '14px 28px',
+          cursor: 'pointer',
+          position: 'fixed',
+          bottom: '24px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: '50',
+          textTransform: 'uppercase'
+        });
+      };
+      applyBtnStyle();
+      // Re-apply style whenever Three.js resets it
+      new MutationObserver(applyBtnStyle).observe(arBtn, { attributes: true, attributeFilter: ['style'] });
       document.body.appendChild(arBtn);
       window.addEventListener("resize", onWindowResize);
     }
