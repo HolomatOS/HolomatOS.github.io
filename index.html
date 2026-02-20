@@ -295,6 +295,8 @@
     let lastDrawPoint = null;
     let drawModeIconPos = null;
     const DRAW_MIN_DIST = 0.005;
+    let typedText = '';
+    let hoveredKey = null;
     let deleteBtn = null;          // THREE.Group — the X button in scene
     let deleteBtnVisible = false;
     const DELETE_SNAP_DIST = 0.25; // how close panel needs to be to delete
@@ -848,6 +850,13 @@
       icon2.userData._baseY = icon2.position.y;
       drawModeIconPos = icon2.position.clone();
       scene.add(icon2); panels.push(icon2);
+
+      // icon3 = keyboard, further right
+      const icon3 = makeIcon('icon3.jfif', 'keyboard');
+      icon3.position.copy(base).addScaledVector(tmpRight, 0.38);
+      icon3.lookAt(tmpCamPos);
+      icon3.userData._baseY = icon3.position.y;
+      scene.add(icon3); panels.push(icon3);
     }
 
     function updateHandDisplay(handCount, twoHandDistance) {
@@ -878,9 +887,38 @@
       }
 
       if (bothPinching) {
-        if (!deleteBtnVisible) spawnDeleteBtn();
+        // If gazing at keyboard, grab it instead of showing delete btn
+        if (hoveredObject && hoveredObject.userData.isKeyboardPanel) {
+          activePanel = hoveredObject;
+          activePanel.userData.selected = true;
+          if (activePanel.userData.glassShell) {
+            activePanel.userData.glassShell.material.opacity = 0.30;
+          }
+        } else {
+          if (!deleteBtnVisible) spawnDeleteBtn();
+        }
       } else {
         if (deleteBtnVisible) removeDeleteBtn();
+        // Release keyboard if we were moving it
+        if (activePanel && activePanel.userData.isKeyboardPanel && isResizing === false) {
+          if (activePanel.userData.glassShell) {
+            activePanel.userData.glassShell.material.opacity = activePanel.userData.shellOpacity || 0.82;
+          }
+          activePanel.userData.selected = false;
+          activePanel = null;
+        }
+      }
+
+      // If activePanel is keyboard, move it with gaze instead of resize
+      if (activePanel && activePanel.userData.isKeyboardPanel) {
+        camera.getWorldPosition(tmpOrigin);
+        camera.getWorldDirection(tmpDirection);
+        const dist = Math.max(0.6, Math.min(2.0, activePanel.position.distanceTo(tmpOrigin)));
+        const target = tmpOrigin.clone().addScaledVector(tmpDirection, dist);
+        activePanel.position.lerp(target, 0.1);
+        activePanel.lookAt(tmpOrigin);
+        activePanel.rotateX(THREE.MathUtils.degToRad(35));
+        return;
       }
 
       if (!isResizing && activePanel) {
@@ -909,13 +947,19 @@
       const distance = Math.sqrt(dx * dx + dy * dy);
       const isPinching = distance < 50;
 
-      // ── PINCH START — Vision Pro style: gaze = aim, pinch = activate ──
+      // ── PINCH START ──
       if (isPinching && !lastPinch) {
+        // Key press
+        if (hoveredKey) {
+          pressKey(hoveredKey.userData.key, hoveredKey.userData.panelRef);
+          lastPinch = isPinching;
+          return;
+        }
+
         const now = Date.now();
         const isDoublePinch = (now - lastPinchTime) < DOUBLE_PINCH_MS;
         lastPinchTime = now;
 
-        // Double pinch = create wall anchor at gaze point
         if (isDoublePinch && !hoveredObject) {
           createWallAnchor();
         } else {
@@ -1125,6 +1169,22 @@
         return;
       }
 
+      if (type === 'keyboard') {
+        const panel = makeKeyboardPanel();
+        camera.getWorldPosition(tmpOrigin);
+        camera.getWorldDirection(tmpDirection);
+        panel.position.copy(tmpOrigin).addScaledVector(tmpDirection, 1.0);
+        panel.position.y = tmpOrigin.y - 0.15;
+        panel.lookAt(tmpOrigin);
+        // Tilt 35° toward user (like real keyboard)
+        panel.rotateX(THREE.MathUtils.degToRad(35));
+        panel.userData.baseZ = panel.position.z;
+        scene.add(panel); panels.push(panel);
+        icon.visible = false;
+        icon.userData.openPanel = panel;
+        panel.userData.iconRef = icon;
+        return;
+      }
       const panel = type === 'clock' ? makeClockPanel() : makeWeatherPanel();
 
       // Spawn panel 0.82m to the right of the icon (in icon's local space)
@@ -1603,6 +1663,214 @@
       if (fill) { ctx.fillStyle = fill; ctx.fill(); }
     }
 
+
+    // ════════════════════════════════════════════════════════════════
+    //  KEYBOARD PANEL
+    // ════════════════════════════════════════════════════════════════
+    function makeKeyboardPanel() {
+      const KW = 1.18, KH = 0.56;
+      const group = new THREE.Group();
+      group.userData.isPanel = true;
+      group.userData.isKeyboardPanel = true;
+      group.userData.hoverTime = 0;
+      group.userData.keys = [];
+      typedText = '';
+
+      // Single large canvas for entire keyboard
+      const CVS_W = 1400, CVS_H = 660;
+      const cvs = document.createElement('canvas');
+      cvs.width = CVS_W; cvs.height = CVS_H;
+      const ctx = cvs.getContext('2d');
+      const tex = new THREE.CanvasTexture(cvs);
+
+      const kbMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(KW, KH),
+        new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide })
+      );
+      group.add(kbMesh);
+      group.userData.kbCtx = ctx;
+      group.userData.kbCvs = cvs;
+      group.userData.kbTex = tex;
+      group.userData.kbW = CVS_W;
+      group.userData.kbH = CVS_H;
+
+      // Key layout definition
+      const rows = [
+        ['Q','W','E','R','T','Y','U','I','O','P'],
+        ['A','S','D','F','G','H','J','K','L'],
+        ['⇧','Z','X','C','V','B','N','M','⌫'],
+        ['123','space','return']
+      ];
+
+      // Key sizes in canvas pixels
+      const KEY_H = 98;
+      const KEY_GAP = 10;
+      const PAD_X = 32;
+      const TOP_BAR = 110; // text preview bar height
+      const PAD_TOP = 16;
+
+      function getKeyW(k) {
+        if (k === 'space') return 320;
+        if (k === '123' || k === 'return') return 130;
+        return 104;
+      }
+
+      // Build key hit areas (normalized 0-1)
+      const keyHits = []; // {key, x0,y0,x1,y1} in canvas px
+
+      function drawKeyboard(highlightKey = null) {
+        ctx.clearRect(0, 0, CVS_W, CVS_H);
+
+        // Overall background - frosted dark glass
+        ctx.fillStyle = 'rgba(30,28,32,0.82)';
+        roundRectPath(ctx, 0, 0, CVS_W, CVS_H, 36);
+        ctx.fill();
+
+        // Subtle border
+        ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+        ctx.lineWidth = 2;
+        roundRectPath(ctx, 1, 1, CVS_W-2, CVS_H-2, 36);
+        ctx.stroke();
+
+        // Text preview bar
+        ctx.fillStyle = 'rgba(255,255,255,0.07)';
+        roundRectPath(ctx, PAD_X, PAD_TOP, CVS_W - PAD_X*2, TOP_BAR - PAD_TOP - 6, 14);
+        ctx.fill();
+        ctx.font = '300 46px system-ui';
+        ctx.fillStyle = typedText ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.28)';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        let txt = typedText || 'Text preview';
+        const maxW = CVS_W - PAD_X*2 - 40;
+        while (ctx.measureText(txt + '|').width > maxW && txt.length > 0) txt = txt.slice(1);
+        ctx.fillText(txt + (typedText ? '|' : ''), PAD_X + 18, TOP_BAR/2 + 2);
+
+        // Draw rows
+        keyHits.length = 0;
+        rows.forEach((row, ri) => {
+          let totalW = row.reduce((s, k) => s + getKeyW(k) + KEY_GAP, 0) - KEY_GAP;
+          let kx = (CVS_W - totalW) / 2;
+          const ky = TOP_BAR + PAD_TOP + ri * (KEY_H + KEY_GAP);
+
+          row.forEach(key => {
+            const kw = getKeyW(key);
+            const isHovered = key === highlightKey;
+            const isSpecial = key === '⇧' || key === '123' || key === 'return' || key === '⌫';
+
+            // Key fill
+            if (isHovered) {
+              ctx.fillStyle = 'rgba(255,255,255,0.85)';
+            } else if (isSpecial) {
+              ctx.fillStyle = 'rgba(80,78,86,0.70)';
+            } else {
+              ctx.fillStyle = 'rgba(110,108,118,0.60)';
+            }
+            roundRectPath(ctx, kx, ky, kw, KEY_H, 14);
+            ctx.fill();
+
+            // Subtle top highlight for 3D feel
+            if (!isHovered) {
+              const grad = ctx.createLinearGradient(kx, ky, kx, ky + KEY_H * 0.4);
+              grad.addColorStop(0, 'rgba(255,255,255,0.10)');
+              grad.addColorStop(1, 'rgba(255,255,255,0.00)');
+              ctx.fillStyle = grad;
+              roundRectPath(ctx, kx, ky, kw, KEY_H, 14);
+              ctx.fill();
+            }
+
+            // Key label
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const fs = key.length > 4 ? 28 : key.length > 1 ? 32 : 44;
+            ctx.font = `${isSpecial ? '400' : '300'} ${fs}px system-ui`;
+            ctx.fillStyle = isHovered ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.92)';
+            ctx.fillText(key, kx + kw/2, ky + KEY_H/2 + 1);
+
+            keyHits.push({ key, x0: kx, y0: ky, x1: kx + kw, y1: ky + KEY_H });
+            kx += kw + KEY_GAP;
+          });
+        });
+
+        tex.needsUpdate = true;
+      }
+
+      function roundRectPath(c, x, y, w, h, r) {
+        c.beginPath();
+        c.moveTo(x+r, y);
+        c.lineTo(x+w-r, y);
+        c.quadraticCurveTo(x+w, y, x+w, y+r);
+        c.lineTo(x+w, y+h-r);
+        c.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+        c.lineTo(x+r, y+h);
+        c.quadraticCurveTo(x, y+h, x, y+h-r);
+        c.lineTo(x, y+r);
+        c.quadraticCurveTo(x, y, x+r, y);
+        c.closePath();
+      }
+
+      group.userData.drawKeyboard = drawKeyboard;
+      group.userData.keyHits = keyHits;
+      group.userData.getKeyW = getKeyW;
+      group.userData.CVS_W = CVS_W;
+      group.userData.CVS_H = CVS_H;
+      group.userData.KW = KW;
+      group.userData.KH = KH;
+      group.userData.drawDisplay = () => drawKeyboard(group.userData.hoveredKeyName);
+      drawKeyboard();
+
+      // Invisible key hit meshes for raycasting
+      keyHits.forEach(hit => {
+        const kw3 = (hit.x1 - hit.x0) / CVS_W * KW;
+        const kh3 = (hit.y1 - hit.y0) / CVS_H * KH;
+        const cx3 = ((hit.x0 + hit.x1)/2 / CVS_W - 0.5) * KW;
+        const cy3 = (0.5 - (hit.y0 + hit.y1)/2 / CVS_H) * KH;
+        const hitMesh = new THREE.Mesh(
+          new THREE.PlaneGeometry(kw3, kh3),
+          new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })
+        );
+        hitMesh.position.set(cx3, cy3, 0.005);
+        hitMesh.userData.isKey = true;
+        hitMesh.userData.key = hit.key;
+        hitMesh.userData.keyMat = { color: { set: () => {} } }; // no-op, canvas handles highlight
+        hitMesh.userData.defaultColor = 0;
+        hitMesh.userData.panelRef = group;
+        group.add(hitMesh);
+        group.userData.keys.push(hitMesh);
+      });
+
+      return group;
+    }
+
+    function pressKey(key, panel) {
+      if (key === '⌫') {
+        typedText = typedText.slice(0, -1);
+      } else if (key === 'space') {
+        typedText += ' ';
+      } else if (key === 'return') {
+        typedText += '\n';
+      } else if (key === '⇧' || key === '123') {
+        // toggle — future enhancement
+      } else {
+        typedText += key;
+      }
+      if (panel.userData.drawDisplay) panel.userData.drawDisplay();
+
+      // Flash - redraw without highlight briefly then restore
+      if (panel.userData.isKeyboardPanel && panel.userData.drawKeyboard) {
+        panel.userData.drawKeyboard(null);
+        setTimeout(() => {
+          if (panel.userData.drawKeyboard) panel.userData.drawKeyboard(panel.userData.hoveredKeyName || null);
+        }, 100);
+      } else {
+        const keys = panel.userData.keys || [];
+        const k = keys.find(k => k.userData.key === key);
+        if (k) {
+          k.userData.keyMat.color.set(0xffffff);
+          setTimeout(() => k.userData.keyMat.color.set(0x3a3a3a), 120);
+        }
+      }
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  CLOCK PANEL
     // ════════════════════════════════════════════════════════════════
@@ -1863,8 +2131,34 @@
       raycaster.set(tmpOrigin, tmpDirection);
       const hits = raycaster.intersectObjects(panels, true);
 
+      // Reset previously hovered key
+      if (hoveredKey) {
+        const prevPanel = hoveredKey.userData.panelRef;
+        if (prevPanel && prevPanel.userData.isKeyboardPanel) {
+          prevPanel.userData.hoveredKeyName = null;
+          if (prevPanel.userData.drawKeyboard) prevPanel.userData.drawKeyboard(null);
+        } else {
+          hoveredKey.userData.keyMat.color.set(hoveredKey.userData.defaultColor);
+        }
+        hoveredKey = null;
+      }
+
       let target = null;
       if (hits.length > 0) {
+        // Check if hit is a key first
+        for (const hit of hits) {
+          if (hit.object.userData.isKey) {
+            hoveredKey = hit.object;
+            const panel = hoveredKey.userData.panelRef;
+            if (panel && panel.userData.isKeyboardPanel) {
+              panel.userData.hoveredKeyName = hoveredKey.userData.key;
+              if (panel.userData.drawKeyboard) panel.userData.drawKeyboard(hoveredKey.userData.key);
+            } else {
+              hoveredKey.userData.keyMat.color.set(0x666666);
+            }
+            break;
+          }
+        }
         let t = hits[0].object;
         while (t && !t.userData.isIcon && !t.userData.isPanel) t = t.parent;
         if (t && (t.userData.isIcon || t.userData.isPanel)) target = t;
