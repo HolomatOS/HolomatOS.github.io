@@ -1864,20 +1864,17 @@
       group.userData.isClockPanel = true;
       group.userData.hoverTime = 0;
 
-      // Glass panel background - like reference
-      const panelMat = new THREE.MeshPhysicalMaterial({
-        color: 0xffffff, transparent: true, opacity: 0.13,
-        transmission: 0.9, roughness: 0.25, metalness: 0,
-        clearcoat: 0.5, clearcoatRoughness: 0.2,
-        ior: 1.5, thickness: 0.5, side: THREE.DoubleSide
-      });
+      // Black background panel
+      const panelMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.92, side: THREE.DoubleSide });
       const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.80, 0.32), panelMat);
       group.add(panel);
+      group.userData.glassShell = panel; // for opacity changes on drag
+      group.userData.shellOpacity = 0.92;
 
-      // Border
+      // Gold border
       const border = new THREE.LineSegments(
         new THREE.EdgesGeometry(new THREE.PlaneGeometry(0.80, 0.32)),
-        new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 })
+        new THREE.LineBasicMaterial({ color: 0xd4a84b, transparent: true, opacity: 0.6 })
       );
       group.add(border);
 
@@ -1906,15 +1903,16 @@
       const now = new Date();
       const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
       const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-      ctx.fillStyle = '#ffffff';
+      // Gold time
+      ctx.fillStyle = '#d4a84b';
       ctx.font = 'bold 56px system-ui';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(timeStr, W/2, 55);
+      // Dim gold date
       ctx.font = '24px system-ui';
-      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.fillStyle = 'rgba(212,168,75,0.65)';
       ctx.fillText(dateStr, W/2, 100);
-      if (cvs.texture) cvs.texture.needsUpdate = true;
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -2094,9 +2092,18 @@
         }
       }
 
-      if (activePanel && reticle.visible) {
-        activePanel.position.setFromMatrixPosition(reticle.matrix);
-        activePanel.quaternion.setFromRotationMatrix(reticle.matrix);
+      if (activePanel) {
+        if (reticle.visible) {
+          // Follow real surface (hit-test) when available
+          activePanel.position.setFromMatrixPosition(reticle.matrix);
+          activePanel.quaternion.setFromRotationMatrix(reticle.matrix);
+        } else {
+          // Fallback: follow gaze at 1m when no surface detected
+          camera.getWorldPosition(tmpOrigin);
+          camera.getWorldDirection(tmpDirection);
+          activePanel.position.copy(tmpOrigin).addScaledVector(tmpDirection, 1.0);
+          activePanel.quaternion.copy(camera.quaternion);
+        }
       }
 
       panels.forEach(panel => {
