@@ -912,8 +912,7 @@
 
       // Use Three.js ARButton — proven to work with WebXR
       const arBtn = ARButton.createButton(renderer, {
-        requiredFeatures: ['hit-test'],
-        optionalFeatures: ['dom-overlay'],
+        optionalFeatures: ['hit-test', 'dom-overlay'],
         domOverlay: { root: document.body }
       });
       arBtn.id = 'ARButton';
@@ -939,8 +938,6 @@
         });
       };
       applyBtnStyle();
-      // Re-apply style whenever Three.js resets it
-      new MutationObserver(applyBtnStyle).observe(arBtn, { attributes: true, attributeFilter: ['style'] });
       document.body.appendChild(arBtn);
       window.addEventListener("resize", onWindowResize);
     }
@@ -1091,19 +1088,25 @@
       hint.style.display = show ? 'block' : 'none';
     }
 
+    let palmFrames = 0; // require palm held for N frames to avoid accidental exit
     function isOpenPalm(landmarks) {
-      // All 4 fingers extended = open palm
-      // Check each fingertip is far from wrist
-      const wrist = landmarks[0];
-      const tips = [landmarks[8], landmarks[12], landmarks[16], landmarks[20]];
-      const bases = [landmarks[5], landmarks[9], landmarks[13], landmarks[17]];
+      // Finger tip y < knuckle y (in image space, smaller y = higher up = extended)
+      const tips  = [landmarks[8],  landmarks[12], landmarks[16], landmarks[20]];
+      const knuck = [landmarks[6],  landmarks[10], landmarks[14], landmarks[18]];
       let extended = 0;
       for (let i = 0; i < 4; i++) {
-        const tipDist = Math.hypot(tips[i].x - wrist.x, tips[i].y - wrist.y);
-        const baseDist = Math.hypot(bases[i].x - wrist.x, bases[i].y - wrist.y);
-        if (tipDist > baseDist * 1.4) extended++;
+        if (tips[i].y < knuck[i].y) extended++;
       }
-      return extended >= 3;
+      // Also check thumb spread
+      const thumbTip = landmarks[4];
+      const indexBase = landmarks[5];
+      const thumbSpread = Math.abs(thumbTip.x - indexBase.x) > 0.07;
+      if (extended >= 3 && thumbSpread) {
+        palmFrames++;
+      } else {
+        palmFrames = 0;
+      }
+      return palmFrames > 8; // must hold palm for 8 frames (~0.25s)
     }
 
     function handleDrawMode() {
@@ -1124,14 +1127,14 @@
       const pinching = Math.sqrt(dx*dx + dy*dy) < 50;
 
       if (pinching) {
-        // Get 3D position of index fingertip in world space
-        // Project from screen to world at ~0.7m depth
-        const ix = (index.x * 2 - 1);
-        const iy = -(index.y * 2 - 1);
-        const vec = new THREE.Vector3(ix, iy, 0.5).unproject(camera);
+        // Project index fingertip from normalized screen to 3D world at arm's length
+        const nx = index.x * 2 - 1;
+        const ny = -(index.y * 2 - 1);
+        const ndc = new THREE.Vector3(nx, ny, 0.5);
+        ndc.unproject(camera);
         camera.getWorldPosition(tmpOrigin);
-        const dir = vec.sub(tmpOrigin).normalize();
-        const drawPoint = tmpOrigin.clone().addScaledVector(dir, 0.7);
+        const dir = ndc.sub(tmpOrigin).normalize();
+        const drawPoint = tmpOrigin.clone().addScaledVector(dir, 0.65);
 
         if (!isDrawing) {
           isDrawing = true;
@@ -1161,9 +1164,12 @@
     function rebuildCurrentStrokeLine() {
       if (currentStrokeLine) scene.remove(currentStrokeLine);
       if (currentStroke.length < 2) return;
-      const geo = new THREE.BufferGeometry().setFromPoints(currentStroke);
-      const mat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 });
-      currentStrokeLine = new THREE.Line(geo, mat);
+      // Use tube geometry for thick visible strokes
+      const curve = new THREE.CatmullRomCurve3(currentStroke);
+      const segments = Math.max(currentStroke.length * 3, 20);
+      const geo = new THREE.TubeGeometry(curve, segments, 0.006, 8, false);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+      currentStrokeLine = new THREE.Mesh(geo, mat);
       scene.add(currentStrokeLine);
     }
 
@@ -1304,45 +1310,19 @@
       const W = cvs.width, H = cvs.height;
       ctx.clearRect(0, 0, W, H);
 
+      // Pure black background
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, W, H);
+
       const now = new Date();
-      const h = now.getHours() % 12 || 12;
+      const h = String(now.getHours()).padStart(2, '0');
       const m = String(now.getMinutes()).padStart(2, '0');
-      const ampm = now.getHours() >= 12 ? 'PM' : 'AM';
 
-      // Dark semi-transparent background
-      ctx.fillStyle = 'rgba(10,10,10,0.72)';
-      roundRect(ctx, 0, 0, W, H, 80);
-      ctx.fill();
-
-      // Gold time
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = '200 200px system-ui';
-      ctx.fillStyle = 'rgba(212,168,75,0.55)';
-      ctx.shadowColor = 'rgba(212,168,75,0.35)';
-      ctx.shadowBlur = 30;
-      ctx.fillText(`${h}:${m}`, W / 2 - 40, H / 2);
-
-      // AM/PM small
-      ctx.font = '300 48px system-ui';
-      ctx.fillStyle = 'rgba(212,168,75,0.35)';
-      ctx.shadowBlur = 0;
-      ctx.textAlign = 'left';
-      ctx.fillText(ampm, W / 2 + 200, H / 2 - 50);
-    }
-
-    function roundRect(ctx, x, y, w, h, r) {
-      ctx.beginPath();
-      ctx.moveTo(x+r, y);
-      ctx.lineTo(x+w-r, y);
-      ctx.quadraticCurveTo(x+w, y, x+w, y+r);
-      ctx.lineTo(x+w, y+h-r);
-      ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
-      ctx.lineTo(x+r, y+h);
-      ctx.quadraticCurveTo(x, y+h, x, y+h-r);
-      ctx.lineTo(x, y+r);
-      ctx.quadraticCurveTo(x, y, x+r, y);
-      ctx.closePath();
+      ctx.font = '100 220px system-ui';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(`${h}:${m}`, W / 2, H / 2);
     }
 
     // ════════════════════════════════════════════════════════════════
