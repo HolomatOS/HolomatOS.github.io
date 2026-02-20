@@ -915,7 +915,7 @@
         camera.getWorldDirection(tmpDirection);
         const dist = Math.max(0.6, Math.min(2.0, activePanel.position.distanceTo(tmpOrigin)));
         const target = tmpOrigin.clone().addScaledVector(tmpDirection, dist);
-        activePanel.position.lerp(target, 0.1);
+        activePanel.position.copy(target); // instant
         activePanel.lookAt(tmpOrigin);
         activePanel.rotateX(THREE.MathUtils.degToRad(35));
         return;
@@ -947,7 +947,7 @@
       const distance = Math.sqrt(dx * dx + dy * dy);
       const isPinching = distance < 50;
 
-      // ── PINCH START ──
+      // ── PINCH START — toggle panel lock on/off ──
       if (isPinching && !lastPinch) {
         // Key press
         if (hoveredKey) {
@@ -970,43 +970,50 @@
             } else if (gazedAt.userData.isIcon && !gazedAt.userData.openPanel) {
               openPanelForIcon(gazedAt);
             } else if (gazedAt.userData.isPanel) {
-              activePanel = gazedAt;
-              activePanel.userData.selected = true;
-              activePanel.userData.snappedToAnchor = null;
-              initialPanelScale = activePanel.scale.x;
-              // Fade to 30% while dragging
-              if (activePanel.userData.glassShell) {
-                activePanel.userData.glassShell.material.opacity = 0.30;
+              if (activePanel === gazedAt) {
+                // Second pinch on same panel = PLACE IT, unlock
+                activePanel.userData._locked = false;
+                activePanel.userData._grabDist = null;
+                checkAnchorSnap(activePanel);
+                if (activePanel.userData.glassShell) {
+                  activePanel.userData.glassShell.material.opacity = activePanel.userData.shellOpacity || 0.82;
+                }
+                activePanel.userData.selected = false;
+                activePanel = null;
+              } else {
+                // First pinch = LOCK panel to reticle center, freeze rotation
+                activePanel = gazedAt;
+                activePanel.userData.selected = true;
+                activePanel.userData._locked = true;
+                activePanel.userData.snappedToAnchor = null;
+                initialPanelScale = activePanel.scale.x;
+                camera.getWorldPosition(tmpOrigin);
+                activePanel.userData._grabDist = Math.max(0.5, Math.min(2.5, activePanel.position.distanceTo(tmpOrigin)));
+                // Save current rotation — never change it
+                activePanel.userData._frozenQuat = activePanel.quaternion.clone();
+                if (activePanel.userData.glassShell) {
+                  activePanel.userData.glassShell.material.opacity = 0.30;
+                }
               }
             }
           }
         }
       }
 
-      // ── HOLD pinch — drag active panel to where gaze is pointing ──
-      if (isPinching && activePanel) {
-        // Move panel to follow gaze direction at fixed distance
+      // ── WHILE LOCKED — snap instantly to reticle, frozen rotation ──
+      if (activePanel && activePanel.userData._locked) {
         camera.getWorldPosition(tmpOrigin);
         camera.getWorldDirection(tmpDirection);
-        const dist = activePanel.position.distanceTo(tmpOrigin);
-        const clampedDist = Math.max(0.4, Math.min(2.5, dist));
-        const target = tmpOrigin.clone().addScaledVector(tmpDirection, clampedDist);
-        // Smooth follow
-        activePanel.position.lerp(target, 0.12);
-        activePanel.quaternion.slerp(camera.quaternion, 0.08);
+        const target = tmpOrigin.clone().addScaledVector(tmpDirection, activePanel.userData._grabDist || 1.0);
+        activePanel.position.copy(target); // instant, no lerp
+        if (activePanel.userData._frozenQuat) {
+          activePanel.quaternion.copy(activePanel.userData._frozenQuat);
+        }
       }
 
-      // ── PINCH RELEASE — check delete, snap to anchor, restore opacity ──
+      // ── PINCH RELEASE — nothing, lock is toggle-based not hold-based ──
       if (!isPinching && lastPinch) {
-        if (activePanel) {
-          if (!checkDeleteSnap(activePanel)) {
-            checkAnchorSnap(activePanel);
-            if (activePanel && activePanel.userData.glassShell) {
-              activePanel.userData.glassShell.material.opacity = activePanel.userData.shellOpacity || 0.82;
-            }
-            if (activePanel) { activePanel.userData.selected = false; activePanel = null; }
-          }
-        }
+        // no-op: panel stays locked until second pinch
       }
 
       lastPinch = isPinching;
@@ -1173,11 +1180,11 @@
         const panel = makeKeyboardPanel();
         camera.getWorldPosition(tmpOrigin);
         camera.getWorldDirection(tmpDirection);
-        panel.position.copy(tmpOrigin).addScaledVector(tmpDirection, 1.0);
-        panel.position.y = tmpOrigin.y - 0.15;
+        panel.position.copy(tmpOrigin).addScaledVector(tmpDirection, 0.9);
+        panel.position.y = tmpOrigin.y - 0.22;
         panel.lookAt(tmpOrigin);
-        // Tilt 35° toward user (like real keyboard)
-        panel.rotateX(THREE.MathUtils.degToRad(35));
+        // Tilt 60° toward user
+        panel.rotateX(THREE.MathUtils.degToRad(60));
         panel.userData.baseZ = panel.position.z;
         scene.add(panel); panels.push(panel);
         icon.visible = false;
@@ -1400,12 +1407,13 @@
         });
         document.body.appendChild(hint);
       }
-      hint.textContent = '✏️ Pinch to draw · Open palm to exit';
+      hint.textContent = '✏️ Right pinch = draw · Right palm = exit · Left palm = colors';
       hint.style.display = show ? 'block' : 'none';
     }
 
-    let palmFrames = 0; // require palm held for N frames to avoid accidental exit
-    function isOpenPalm(landmarks) {
+    let rightPalmFrames = 0;
+    let leftPalmFrames2 = 0;
+    function isOpenPalm(landmarks, side) {
       // Finger tip y < knuckle y (in image space, smaller y = higher up = extended)
       const tips  = [landmarks[8],  landmarks[12], landmarks[16], landmarks[20]];
       const knuck = [landmarks[6],  landmarks[10], landmarks[14], landmarks[18]];
@@ -1417,12 +1425,14 @@
       const thumbTip = landmarks[4];
       const indexBase = landmarks[5];
       const thumbSpread = Math.abs(thumbTip.x - indexBase.x) > 0.07;
-      if (extended >= 3 && thumbSpread) {
-        palmFrames++;
+      const isOpen = extended >= 3 && thumbSpread;
+      if (side === 'left') {
+        leftPalmFrames2 = isOpen ? leftPalmFrames2 + 1 : 0;
+        return leftPalmFrames2 > 5;
       } else {
-        palmFrames = 0;
+        rightPalmFrames = isOpen ? rightPalmFrames + 1 : 0;
+        return rightPalmFrames > 8;
       }
-      return palmFrames > 8; // must hold palm for 8 frames (~0.25s)
     }
 
     function handleDrawMode() {
@@ -1448,9 +1458,8 @@
 
       // LEFT HAND open palm = show color palette next to it
       if (leftHand) {
-        if (isOpenPalm(leftHand)) {
-          leftPalmFrames++;
-          if (leftPalmFrames > 3) {
+        if (isOpenPalm(leftHand, 'left')) {
+          if (true) {  // threshold inside isOpenPalm
             const wx = leftHand[0].x * window.innerWidth;
             const wy = leftHand[0].y * window.innerHeight;
             showColorPalette(wx - 90, wy - 200);
@@ -1458,16 +1467,15 @@
             updateThicknessSlider();
           }
         } else {
-          leftPalmFrames = 0;
           hideColorPalette();
         }
       } else {
-        leftPalmFrames = 0;
+        leftPalmFrames2 = 0;
         hideColorPalette();
       }
 
       // RIGHT HAND — open palm = exit draw mode
-      if (rightHand && isOpenPalm(rightHand)) {
+      if (rightHand && isOpenPalm(rightHand, 'right')) {
         exitDrawMode();
         return;
       }
@@ -1668,7 +1676,7 @@
     //  KEYBOARD PANEL
     // ════════════════════════════════════════════════════════════════
     function makeKeyboardPanel() {
-      const KW = 1.18, KH = 0.56;
+      const KW = 0.95, KH = 0.46;
       const group = new THREE.Group();
       group.userData.isPanel = true;
       group.userData.isKeyboardPanel = true;
@@ -1882,6 +1890,7 @@
         new THREE.ShapeGeometry(makeRoundedRectShape(PW - 0.13, PH - 0.11, 0.06), 20),
         new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.01 })
       );
+      content.material.transparent = false;
       content.position.z = 0.0035; group.add(content);
       Object.assign(group.userData, { isClockPanel: true, clockCanvas: cvs, clockCtx: ctx, clockTexture: tex });
       return group;
