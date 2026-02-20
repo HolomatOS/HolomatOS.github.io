@@ -301,6 +301,12 @@
     let deleteBtnVisible = false;
     const DELETE_SNAP_DIST = 0.25; // how close panel needs to be to delete
     let drawColor = '#ffffff';
+    let drawLastPinch = false;
+    let drawPinchStartTime = 0;
+    let drawPinchCount = 0;
+    let drawPinchCountTimer = null;
+    let drawPinchMoved = false;
+    let drawLastPinchX, drawLastPinchY;
     let strokeRadius = 0.006;        // tube radius, range 0.002–0.018
     let isScrubbingThickness = false; // true when pinching slider
     let scrubStartX = -1;             // screen x where scrub began
@@ -971,26 +977,23 @@
               openPanelForIcon(gazedAt);
             } else if (gazedAt.userData.isPanel) {
               if (activePanel === gazedAt) {
-                // Second pinch on same panel = PLACE IT, unlock
-                activePanel.userData._locked = false;
-                activePanel.userData._grabDist = null;
+                // Second pinch = DROP panel here
                 checkAnchorSnap(activePanel);
                 if (activePanel.userData.glassShell) {
                   activePanel.userData.glassShell.material.opacity = activePanel.userData.shellOpacity || 0.82;
                 }
                 activePanel.userData.selected = false;
+                activePanel.scale.setScalar(1);
                 activePanel = null;
               } else {
-                // First pinch = LOCK panel to reticle center, freeze rotation
+                // First pinch = PICK UP
+                if (activePanel) {
+                  activePanel.userData.selected = false;
+                  activePanel.scale.setScalar(1);
+                }
                 activePanel = gazedAt;
                 activePanel.userData.selected = true;
-                activePanel.userData._locked = true;
-                activePanel.userData.snappedToAnchor = null;
-                initialPanelScale = activePanel.scale.x;
-                camera.getWorldPosition(tmpOrigin);
-                activePanel.userData._grabDist = Math.max(0.5, Math.min(2.5, activePanel.position.distanceTo(tmpOrigin)));
-                // Save current rotation — never change it
-                activePanel.userData._frozenQuat = activePanel.quaternion.clone();
+                activePanel.scale.setScalar(1.06);
                 if (activePanel.userData.glassShell) {
                   activePanel.userData.glassShell.material.opacity = 0.30;
                 }
@@ -1000,21 +1003,9 @@
         }
       }
 
-      // ── WHILE LOCKED — snap instantly to reticle, frozen rotation ──
-      if (activePanel && activePanel.userData._locked) {
-        camera.getWorldPosition(tmpOrigin);
-        camera.getWorldDirection(tmpDirection);
-        const target = tmpOrigin.clone().addScaledVector(tmpDirection, activePanel.userData._grabDist || 1.0);
-        activePanel.position.copy(target); // instant, no lerp
-        if (activePanel.userData._frozenQuat) {
-          activePanel.quaternion.copy(activePanel.userData._frozenQuat);
-        }
-      }
 
-      // ── PINCH RELEASE — nothing, lock is toggle-based not hold-based ──
-      if (!isPinching && lastPinch) {
-        // no-op: panel stays locked until second pinch
-      }
+
+      // Panel drops only on second pinch on panel (handled above)
 
       lastPinch = isPinching;
     }
@@ -1377,6 +1368,10 @@
       drawMode = false;
       isDrawing = false;
       lastDrawPoint = null;
+      drawLastPinch = false;
+      drawPinchStartTime = 0;
+      drawPinchCount = 0;
+      drawPinchMoved = false;
       hideColorPalette();
       showDrawHint(false);
       // Unhide icon2
@@ -1407,7 +1402,7 @@
         });
         document.body.appendChild(hint);
       }
-      hint.textContent = '✏️ Right pinch = draw · Right palm = exit · Left palm = colors';
+      hint.textContent = '✏️ Pinch = draw · Double pinch = colors · Hold pinch 1.5s = exit';
       hint.style.display = show ? 'block' : 'none';
     }
 
@@ -1437,100 +1432,83 @@
 
     function handleDrawMode() {
       if (!handLandmarks) return;
-
-      // handLandmarks may be array of hands or single hand
       const hands = Array.isArray(handLandmarks[0]) ? handLandmarks : [handLandmarks];
-      
-      let rightHand = null, leftHand = null;
+      const lm = hands[0];
+      if (!lm || lm.length < 21) return;
 
-      // MediaPipe sends hands as array — use x position to guess left/right
-      // hand with higher x (more to right of frame) = left hand (mirrored camera)
-      if (hands.length === 1) {
-        rightHand = hands[0]; // assume single hand = drawing hand
-      } else if (hands.length >= 2) {
-        // wrist x: smaller = more left in frame = right hand (mirror)
-        if (hands[0][0].x < hands[1][0].x) {
-          rightHand = hands[0]; leftHand = hands[1];
-        } else {
-          rightHand = hands[1]; leftHand = hands[0];
-        }
-      }
-
-      // LEFT HAND open palm = show color palette next to it
-      if (leftHand) {
-        if (isOpenPalm(leftHand, 'left')) {
-          if (true) {  // threshold inside isOpenPalm
-            const wx = leftHand[0].x * window.innerWidth;
-            const wy = leftHand[0].y * window.innerHeight;
-            showColorPalette(wx - 90, wy - 200);
-            highlightColorWithGaze();
-            updateThicknessSlider();
-          }
-        } else {
-          hideColorPalette();
-        }
-      } else {
-        leftPalmFrames2 = 0;
-        hideColorPalette();
-      }
-
-      // RIGHT HAND — open palm = exit draw mode
-      if (rightHand && isOpenPalm(rightHand, 'right')) {
-        exitDrawMode();
-        return;
-      }
-
-      // RIGHT HAND — pinch = draw
-      if (!rightHand) return;
-      const thumb = rightHand[4], index = rightHand[8];
+      const thumb = lm[4], index = lm[8];
       const dx = (thumb.x - index.x) * handCanvas.width;
       const dy = (thumb.y - index.y) * handCanvas.height;
       const pinching = Math.sqrt(dx*dx + dy*dy) < 50;
 
-      if (pinching) {
-        if (colorPaletteVisible) {
-          // Check if gaze is over the slider
-          const track = document.getElementById('thicknessTrack');
-          const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
-          const overSlider = track && (() => {
-            const r = track.getBoundingClientRect();
-            return cx >= r.left - 20 && cx <= r.right + 20 && cy >= r.top - 20 && cy <= r.bottom + 20;
-          })();
+      const now = Date.now();
 
-          if (overSlider) {
-            // Scrub thickness based on reticle X vs track
-            const track2 = document.getElementById('thicknessTrack');
-            const r = track2.getBoundingClientRect();
-            const pct = Math.max(0, Math.min(1, (cx - r.left) / r.width));
-            strokeRadius = 0.002 + pct * (0.018 - 0.002);
-            updateThicknessSlider();
-            return;
-          } else if (!isDrawing) {
-            pickColorWithGaze();
-            isDrawing = false;
-            lastDrawPoint = null;
-            currentStroke = [];
-            return;
+      if (pinching && !drawLastPinch) {
+        // Pinch start
+        drawPinchStartTime = now;
+        drawPinchMoved = false; // reset movement flag
+        drawPinchCount++;
+        if (drawPinchCountTimer) clearTimeout(drawPinchCountTimer);
+        drawPinchCountTimer = setTimeout(() => {
+          if (drawPinchCount === 2) {
+            // Double pinch = toggle palette
+            if (colorPaletteVisible) {
+              hideColorPalette();
+            } else {
+              showColorPalette(window.innerWidth / 2 - 90, window.innerHeight / 2 - 220);
+              highlightColorWithGaze();
+              updateThicknessSlider();
+            }
           }
-        }
-        const nx = index.x * 2 - 1;
-        const ny = -(index.y * 2 - 1);
-        const ndc = new THREE.Vector3(nx, ny, 0.5);
-        ndc.unproject(camera);
-        camera.getWorldPosition(tmpOrigin);
-        const dir = ndc.sub(tmpOrigin).normalize();
-        const drawPoint = tmpOrigin.clone().addScaledVector(dir, 0.65);
+          drawPinchCount = 0;
+        }, 400);
+      }
 
-        if (!isDrawing) {
-          isDrawing = true;
-          currentStroke = [drawPoint.clone()];
-          lastDrawPoint = drawPoint.clone();
-        } else {
-          const dist = drawPoint.distanceTo(lastDrawPoint);
-          if (dist > DRAW_MIN_DIST) {
-            currentStroke.push(drawPoint.clone());
+      if (pinching) {
+        // Track if finger moved while pinching
+        const nx2 = index.x * 2 - 1;
+        const ny2 = -(index.y * 2 - 1);
+        if (drawLastPinchX !== undefined) {
+          const moved = Math.hypot(nx2 - drawLastPinchX, ny2 - drawLastPinchY);
+          if (moved > 0.01) drawPinchMoved = true;
+        }
+        drawLastPinchX = nx2; drawLastPinchY = ny2;
+
+        // Hold pinch 1.5s WITHOUT moving = exit
+        if (drawPinchStartTime && !drawPinchMoved && (now - drawPinchStartTime) > 1500) {
+          exitDrawMode();
+          drawPinchStartTime = 0;
+          return;
+        }
+
+        // If palette visible, pick color on pinch start
+        if (colorPaletteVisible && !drawLastPinch) {
+          pickColorWithGaze();
+          drawLastPinch = pinching;
+          return;
+        }
+
+        // Draw only if palette not visible
+        if (!colorPaletteVisible) {
+          const nx = index.x * 2 - 1;
+          const ny = -(index.y * 2 - 1);
+          const ndc = new THREE.Vector3(nx, ny, 0.5);
+          ndc.unproject(camera);
+          camera.getWorldPosition(tmpOrigin);
+          const dir = ndc.sub(tmpOrigin).normalize();
+          const drawPoint = tmpOrigin.clone().addScaledVector(dir, 0.65);
+
+          if (!isDrawing) {
+            isDrawing = true;
+            currentStroke = [drawPoint.clone()];
             lastDrawPoint = drawPoint.clone();
-            rebuildCurrentStrokeLine();
+          } else {
+            const dist = drawPoint.distanceTo(lastDrawPoint);
+            if (dist > DRAW_MIN_DIST) {
+              currentStroke.push(drawPoint.clone());
+              lastDrawPoint = drawPoint.clone();
+              rebuildCurrentStrokeLine();
+            }
           }
         }
       } else {
@@ -1538,7 +1516,10 @@
         isDrawing = false;
         lastDrawPoint = null;
         currentStroke = [];
+        drawPinchStartTime = 0;
       }
+
+      drawLastPinch = pinching;
     }
 
     let currentStrokeLine = null;
@@ -1883,36 +1864,62 @@
     //  CLOCK PANEL
     // ════════════════════════════════════════════════════════════════
     function makeClockPanel() {
-      const PW = 0.90, PH = 0.62, CR = 0.09;
-      const { group, shape } = makeGlassShell(PW, PH, CR, 0x071422, 0.92);
-      const { tex, cvs, ctx } = makeCanvasTex(960, 640, drawClockFace);
-      const content = new THREE.Mesh(
-        new THREE.ShapeGeometry(makeRoundedRectShape(PW - 0.13, PH - 0.11, 0.06), 20),
-        new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.01 })
+      const group = new THREE.Group();
+      group.userData.isPanel = true;
+      group.userData.isClockPanel = true;
+      group.userData.hoverTime = 0;
+
+      // Glass panel background - like reference
+      const panelMat = new THREE.MeshPhysicalMaterial({
+        color: 0xffffff, transparent: true, opacity: 0.13,
+        transmission: 0.9, roughness: 0.25, metalness: 0,
+        clearcoat: 0.5, clearcoatRoughness: 0.2,
+        ior: 1.5, thickness: 0.5, side: THREE.DoubleSide
+      });
+      const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.80, 0.32), panelMat);
+      group.add(panel);
+
+      // Border
+      const border = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.PlaneGeometry(0.80, 0.32)),
+        new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 })
       );
-      content.material.transparent = false;
-      content.position.z = 0.0035; group.add(content);
-      Object.assign(group.userData, { isClockPanel: true, clockCanvas: cvs, clockCtx: ctx, clockTexture: tex });
+      group.add(border);
+
+      // Clock canvas
+      const clockCanvas = document.createElement('canvas');
+      clockCanvas.width = 512; clockCanvas.height = 128;
+      const clockCtx = clockCanvas.getContext('2d');
+      const clockTexture = new THREE.CanvasTexture(clockCanvas);
+      clockTexture.minFilter = THREE.LinearFilter;
+      clockTexture.magFilter = THREE.LinearFilter;
+      const clockMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.75, 0.25),
+        new THREE.MeshBasicMaterial({ map: clockTexture, transparent: true })
+      );
+      clockMesh.position.z = 0.003;
+      group.add(clockMesh);
+
+      Object.assign(group.userData, { clockCtx, clockCanvas, clockTexture });
+      drawClockFace(clockCtx, clockCanvas);
       return group;
     }
 
     function drawClockFace(ctx, cvs) {
       const W = cvs.width, H = cvs.height;
       ctx.clearRect(0, 0, W, H);
-
-      // Pure black background
-      ctx.fillStyle = '#000000';
-      ctx.fillRect(0, 0, W, H);
-
       const now = new Date();
-      const h = String(now.getHours()).padStart(2, '0');
-      const m = String(now.getMinutes()).padStart(2, '0');
-
+      const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+      const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 56px system-ui';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = '100 220px system-ui';
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(`${h}:${m}`, W / 2, H / 2);
+      ctx.fillText(timeStr, W/2, 55);
+      ctx.font = '24px system-ui';
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.fillText(dateStr, W/2, 100);
+      if (cvs.texture) cvs.texture.needsUpdate = true;
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -2094,17 +2101,11 @@
 
       if (activePanel && reticle.visible) {
         activePanel.position.setFromMatrixPosition(reticle.matrix);
-        if (isWallMode) {
-          // Face the camera when snapped to wall
-          activePanel.lookAt(camera.position);
-        } else {
-          activePanel.quaternion.setFromRotationMatrix(reticle.matrix);
-        }
+        activePanel.quaternion.setFromRotationMatrix(reticle.matrix);
       }
 
       panels.forEach(panel => {
-        if (panel.userData.isClockPanel) drawClockFace(panel.userData.clockCtx, panel.userData.clockCanvas);
-        if (panel.userData.isClockPanel) panel.userData.clockTexture.needsUpdate = true;
+        if (panel.userData.isClockPanel) { drawClockFace(panel.userData.clockCtx, panel.userData.clockCanvas); panel.userData.clockTexture.needsUpdate = true; }
         updateHoverEffect(panel);
       });
 
