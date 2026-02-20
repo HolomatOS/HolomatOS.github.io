@@ -290,11 +290,21 @@
     // ── Air drawing state ───────────────────────────────────────────
     let drawMode = false;
     let isDrawing = false;
-    let currentStroke = [];          // current line points
-    const drawnStrokes = [];         // all THREE.Line objects in scene
+    let currentStroke = [];
+    const drawnStrokes = [];
     let lastDrawPoint = null;
-    let drawModeIconPos = null;      // where icon2 is, to return on exit
-    const DRAW_MIN_DIST = 0.005;     // min distance between points
+    let drawModeIconPos = null;
+    const DRAW_MIN_DIST = 0.005;
+    let deleteBtn = null;          // THREE.Group — the X button in scene
+    let deleteBtnVisible = false;
+    const DELETE_SNAP_DIST = 0.25; // how close panel needs to be to delete
+    let drawColor = '#ffffff';
+    let strokeRadius = 0.006;        // tube radius, range 0.002–0.018
+    let isScrubbingThickness = false; // true when pinching slider
+    let scrubStartX = -1;             // screen x where scrub began
+    let colorPaletteVisible = false; // is left-palm palette showing
+    let colorPaletteEl = null;       // DOM element for palette
+    let leftPalmFrames = 0;          // debounce left palm detection
     const panels = [];
     const raycaster = new THREE.Raycaster();
     let hoveredObject = null;
@@ -735,6 +745,78 @@
       return false;
     }
 
+    function spawnDeleteBtn() {
+      if (deleteBtn) return;
+
+      // Place X button 0.8m in front of camera, at eye level
+      camera.getWorldPosition(tmpOrigin);
+      camera.getWorldDirection(tmpDirection);
+      const pos = tmpOrigin.clone().addScaledVector(tmpDirection, 0.8);
+      pos.y = tmpOrigin.y; // keep at eye level
+
+      const group = new THREE.Group();
+      group.position.copy(pos);
+      group.lookAt(tmpOrigin);
+
+      // Circle background
+      const circleMat = new THREE.MeshBasicMaterial({ color: 0x220000, transparent: true, opacity: 0.82, side: THREE.DoubleSide });
+      const circle = new THREE.Mesh(new THREE.CircleGeometry(0.10, 40), circleMat);
+      group.add(circle);
+
+      // Ring border
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(0.095, 0.108, 40),
+        new THREE.MeshBasicMaterial({ color: 0xff3333, transparent: true, opacity: 0.9, side: THREE.DoubleSide })
+      );
+      ring.position.z = 0.001;
+      group.add(ring);
+
+      // X — two rotated rectangles
+      const barMat = new THREE.MeshBasicMaterial({ color: 0xff4444, side: THREE.DoubleSide });
+      const bar1 = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.022), barMat);
+      bar1.rotation.z = Math.PI / 4;
+      bar1.position.z = 0.002;
+      group.add(bar1);
+      const bar2 = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.022), barMat);
+      bar2.rotation.z = -Math.PI / 4;
+      bar2.position.z = 0.002;
+      group.add(bar2);
+
+      group.userData.isDeleteBtn = true;
+      group.userData.spawnTime = Date.now();
+      deleteBtn = group;
+      deleteBtnVisible = true;
+      scene.add(deleteBtn);
+    }
+
+    function removeDeleteBtn() {
+      if (deleteBtn) { scene.remove(deleteBtn); deleteBtn = null; }
+      deleteBtnVisible = false;
+    }
+
+    function checkDeleteSnap(panel) {
+      if (!deleteBtn || !deleteBtnVisible) return false;
+      const dist = panel.position.distanceTo(deleteBtn.position);
+      if (dist < DELETE_SNAP_DIST) {
+        // Delete the panel and restore its icon
+        const icon = panel.userData.iconRef;
+        if (icon) {
+          icon.visible = true;
+          icon.userData.openPanel = null;
+        }
+        // Stop weather timer if any
+        if (panel.userData.weatherTimer) clearInterval(panel.userData.weatherTimer);
+        // Remove from scene and panels array
+        scene.remove(panel);
+        const idx = panels.indexOf(panel);
+        if (idx > -1) panels.splice(idx, 1);
+        if (activePanel === panel) activePanel = null;
+        removeDeleteBtn();
+        return true;
+      }
+      return false;
+    }
+
     function spawnIconInAir() {
       if (hasInitialIconSpawned) return;
       if (groundYEstimate === null) return;
@@ -785,7 +867,22 @@
     }
 
     function handleTwoHandResize(currentDistance) {
-      
+      // Check if both hands are pinching (very small distance between index tips)
+      const hands = Array.isArray(handLandmarks[0]) ? handLandmarks : [handLandmarks];
+      let bothPinching = false;
+      if (hands.length >= 2) {
+        const h1 = hands[0], h2 = hands[1];
+        const p1 = Math.hypot((h1[4].x-h1[8].x)*handCanvas.width, (h1[4].y-h1[8].y)*handCanvas.height);
+        const p2 = Math.hypot((h2[4].x-h2[8].x)*handCanvas.width, (h2[4].y-h2[8].y)*handCanvas.height);
+        bothPinching = p1 < 50 && p2 < 50;
+      }
+
+      if (bothPinching) {
+        if (!deleteBtnVisible) spawnDeleteBtn();
+      } else {
+        if (deleteBtnVisible) removeDeleteBtn();
+      }
+
       if (!isResizing && activePanel) {
         isResizing = true; lastTwoHandDistance = currentDistance;
         initialPanelScale = activePanel.scale.x; return;
@@ -855,16 +952,16 @@
         activePanel.quaternion.slerp(camera.quaternion, 0.08);
       }
 
-      // ── PINCH RELEASE — snap to anchor if nearby, else drop ──
+      // ── PINCH RELEASE — check delete, snap to anchor, restore opacity ──
       if (!isPinching && lastPinch) {
         if (activePanel) {
-          checkAnchorSnap(activePanel);
-          // Restore opacity
-          if (activePanel.userData.glassShell) {
-            activePanel.userData.glassShell.material.opacity = activePanel.userData.shellOpacity || 0.82;
+          if (!checkDeleteSnap(activePanel)) {
+            checkAnchorSnap(activePanel);
+            if (activePanel && activePanel.userData.glassShell) {
+              activePanel.userData.glassShell.material.opacity = activePanel.userData.shellOpacity || 0.82;
+            }
+            if (activePanel) { activePanel.userData.selected = false; activePanel = null; }
           }
-          activePanel.userData.selected = false;
-          activePanel = null;
         }
       }
 
@@ -1043,6 +1140,164 @@
     }
 
     // ── Air Drawing ─────────────────────────────────────────────────
+    // ── Color Palette (DOM overlay near left palm) ──────────────────
+    const PALETTE_COLORS = [
+      '#ffffff','#ff3333','#ff9900','#ffee00',
+      '#33ff66','#33ccff','#aa44ff','#ff44aa',
+      '#aaaaaa','#442200'
+    ];
+
+    function createColorPalette() {
+      if (colorPaletteEl) return;
+      colorPaletteEl = document.createElement('div');
+      colorPaletteEl.id = 'colorPalette';
+      Object.assign(colorPaletteEl.style, {
+        position: 'fixed',
+        display: 'none',
+        flexWrap: 'wrap',
+        gap: '10px',
+        padding: '14px',
+        borderRadius: '1em',
+        border: '2px solid hsla(0,0%,100%,0.3)',
+        background: 'hsla(0,0%,10%,0.75)',
+        backdropFilter: 'blur(12px)',
+        boxShadow: 'inset 0 0 8px 1px hsla(0,0%,100%,0.4)',
+        width: '180px',
+        zIndex: '100',
+        pointerEvents: 'none'
+      });
+      PALETTE_COLORS.forEach(col => {
+        const dot = document.createElement('div');
+        Object.assign(dot.style, {
+          width: '32px', height: '32px',
+          borderRadius: '50%',
+          background: col,
+          border: '2px solid rgba(255,255,255,0.25)',
+          transition: 'transform 0.15s, border-color 0.15s',
+          flexShrink: '0'
+        });
+        dot.dataset.color = col;
+        colorPaletteEl.appendChild(dot);
+      });
+      // Thickness slider row
+      const sliderWrap = document.createElement('div');
+      Object.assign(sliderWrap.style, {
+        width: '100%', marginTop: '8px', position: 'relative',
+        display: 'flex', flexDirection: 'column', gap: '4px'
+      });
+
+      const sliderLabel = document.createElement('div');
+      sliderLabel.id = 'thicknessLabel';
+      Object.assign(sliderLabel.style, {
+        color: 'rgba(255,255,255,0.6)', fontSize: '11px',
+        fontFamily: 'system-ui', textAlign: 'center'
+      });
+      sliderLabel.textContent = 'THICKNESS';
+
+      const sliderTrack = document.createElement('div');
+      sliderTrack.id = 'thicknessTrack';
+      Object.assign(sliderTrack.style, {
+        width: '100%', height: '8px', borderRadius: '4px',
+        background: 'rgba(255,255,255,0.15)',
+        position: 'relative', cursor: 'pointer'
+      });
+
+      const sliderFill = document.createElement('div');
+      sliderFill.id = 'thicknessFill';
+      Object.assign(sliderFill.style, {
+        height: '100%', borderRadius: '4px',
+        background: 'rgba(255,255,255,0.7)',
+        width: '30%', transition: 'width 0.1s'
+      });
+
+      const sliderThumb = document.createElement('div');
+      sliderThumb.id = 'thicknessThumb';
+      Object.assign(sliderThumb.style, {
+        position: 'absolute', top: '50%',
+        transform: 'translate(-50%,-50%)',
+        width: '18px', height: '18px',
+        borderRadius: '50%', background: '#fff',
+        border: '2px solid rgba(255,255,255,0.5)',
+        left: '30%', transition: 'left 0.1s'
+      });
+
+      sliderTrack.appendChild(sliderFill);
+      sliderTrack.appendChild(sliderThumb);
+      sliderWrap.appendChild(sliderLabel);
+      sliderWrap.appendChild(sliderTrack);
+      colorPaletteEl.appendChild(sliderWrap);
+      document.body.appendChild(colorPaletteEl);
+    }
+
+    function showColorPalette(screenX, screenY) {
+      if (!colorPaletteEl) createColorPalette();
+      colorPaletteEl.style.display = 'flex';
+      colorPaletteEl.style.left = Math.min(screenX, window.innerWidth - 210) + 'px';
+      colorPaletteEl.style.top  = Math.min(screenY, window.innerHeight - 180) + 'px';
+      colorPaletteVisible = true;
+      highlightSelectedColor();
+    }
+
+    function hideColorPalette() {
+      if (colorPaletteEl) colorPaletteEl.style.display = 'none';
+      colorPaletteVisible = false;
+    }
+
+    function updateThicknessSlider() {
+      const fill = document.getElementById('thicknessFill');
+      const thumb = document.getElementById('thicknessThumb');
+      if (!fill || !thumb) return;
+      const pct = ((strokeRadius - 0.002) / (0.018 - 0.002)) * 100;
+      fill.style.width = pct + '%';
+      thumb.style.left = pct + '%';
+    }
+
+    function highlightSelectedColor() {
+      if (!colorPaletteEl) return;
+      colorPaletteEl.querySelectorAll('div[data-color]').forEach(dot => {
+        const isSelected = dot.dataset.color === drawColor;
+        dot.style.border = isSelected ? '3px solid #fff' : '2px solid rgba(255,255,255,0.25)';
+        dot.style.transform = isSelected ? 'scale(1.25)' : 'scale(1)';
+      });
+    }
+
+    function highlightColorWithGaze() {
+      if (!colorPaletteEl || !colorPaletteVisible) return;
+      const cx = window.innerWidth / 2;
+      const cy = window.innerHeight / 2;
+      let closest = null, closestDist = 60;
+      colorPaletteEl.querySelectorAll('div[data-color]').forEach(dot => {
+        const r = dot.getBoundingClientRect();
+        const dist = Math.hypot(cx - (r.left + r.width/2), cy - (r.top + r.height/2));
+        if (dist < closestDist) { closestDist = dist; closest = dot; }
+        // Reset non-selected, non-hovered
+        if (dot.dataset.color !== drawColor) {
+          dot.style.transform = 'scale(1)';
+          dot.style.border = '2px solid rgba(255,255,255,0.25)';
+        }
+      });
+      if (closest && closest.dataset.color !== drawColor) {
+        closest.style.transform = 'scale(1.3)';
+        closest.style.border = '2px solid rgba(255,255,255,0.8)';
+      }
+    }
+
+    function pickColorWithGaze() {
+      if (!colorPaletteEl || !colorPaletteVisible) return;
+      const cx = window.innerWidth / 2;
+      const cy = window.innerHeight / 2;
+      let closest = null, closestDist = 60;
+      colorPaletteEl.querySelectorAll('div[data-color]').forEach(dot => {
+        const r = dot.getBoundingClientRect();
+        const dist = Math.hypot(cx - (r.left + r.width/2), cy - (r.top + r.height/2));
+        if (dist < closestDist) { closestDist = dist; closest = dot; }
+      });
+      if (closest) {
+        drawColor = closest.dataset.color;
+        highlightSelectedColor();
+      }
+    }
+
     function enterDrawMode(icon) {
       drawMode = true;
       icon.visible = false;
@@ -1055,6 +1310,7 @@
       drawMode = false;
       isDrawing = false;
       lastDrawPoint = null;
+      hideColorPalette();
       showDrawHint(false);
       // Unhide icon2
       panels.forEach(p => {
@@ -1111,23 +1367,84 @@
 
     function handleDrawMode() {
       if (!handLandmarks) return;
-      const lm = Array.isArray(handLandmarks[0]) ? handLandmarks[0] : handLandmarks;
-      if (!lm || lm.length < 21) return;
 
-      // Open palm = exit
-      if (isOpenPalm(lm)) {
+      // handLandmarks may be array of hands or single hand
+      const hands = Array.isArray(handLandmarks[0]) ? handLandmarks : [handLandmarks];
+      
+      let rightHand = null, leftHand = null;
+
+      // MediaPipe sends hands as array — use x position to guess left/right
+      // hand with higher x (more to right of frame) = left hand (mirrored camera)
+      if (hands.length === 1) {
+        rightHand = hands[0]; // assume single hand = drawing hand
+      } else if (hands.length >= 2) {
+        // wrist x: smaller = more left in frame = right hand (mirror)
+        if (hands[0][0].x < hands[1][0].x) {
+          rightHand = hands[0]; leftHand = hands[1];
+        } else {
+          rightHand = hands[1]; leftHand = hands[0];
+        }
+      }
+
+      // LEFT HAND open palm = show color palette next to it
+      if (leftHand) {
+        if (isOpenPalm(leftHand)) {
+          leftPalmFrames++;
+          if (leftPalmFrames > 3) {
+            const wx = leftHand[0].x * window.innerWidth;
+            const wy = leftHand[0].y * window.innerHeight;
+            showColorPalette(wx - 90, wy - 200);
+            highlightColorWithGaze();
+            updateThicknessSlider();
+          }
+        } else {
+          leftPalmFrames = 0;
+          hideColorPalette();
+        }
+      } else {
+        leftPalmFrames = 0;
+        hideColorPalette();
+      }
+
+      // RIGHT HAND — open palm = exit draw mode
+      if (rightHand && isOpenPalm(rightHand)) {
         exitDrawMode();
         return;
       }
 
-      // Pinch = draw
-      const thumb = lm[4], index = lm[8];
+      // RIGHT HAND — pinch = draw
+      if (!rightHand) return;
+      const thumb = rightHand[4], index = rightHand[8];
       const dx = (thumb.x - index.x) * handCanvas.width;
       const dy = (thumb.y - index.y) * handCanvas.height;
       const pinching = Math.sqrt(dx*dx + dy*dy) < 50;
 
       if (pinching) {
-        // Project index fingertip from normalized screen to 3D world at arm's length
+        if (colorPaletteVisible) {
+          // Check if gaze is over the slider
+          const track = document.getElementById('thicknessTrack');
+          const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+          const overSlider = track && (() => {
+            const r = track.getBoundingClientRect();
+            return cx >= r.left - 20 && cx <= r.right + 20 && cy >= r.top - 20 && cy <= r.bottom + 20;
+          })();
+
+          if (overSlider) {
+            // Scrub thickness based on reticle X vs track
+            const track2 = document.getElementById('thicknessTrack');
+            const r = track2.getBoundingClientRect();
+            const pct = Math.max(0, Math.min(1, (cx - r.left) / r.width));
+            strokeRadius = 0.002 + pct * (0.018 - 0.002);
+            updateThicknessSlider();
+            return;
+          } else if (!isDrawing) {
+            pickColorWithGaze();
+            isDrawing = false;
+            lastDrawPoint = null;
+            currentStroke = [];
+            return;
+          }
+        }
         const nx = index.x * 2 - 1;
         const ny = -(index.y * 2 - 1);
         const ndc = new THREE.Vector3(nx, ny, 0.5);
@@ -1145,15 +1462,11 @@
           if (dist > DRAW_MIN_DIST) {
             currentStroke.push(drawPoint.clone());
             lastDrawPoint = drawPoint.clone();
-            // Rebuild line
             rebuildCurrentStrokeLine();
           }
         }
       } else {
-        if (isDrawing && currentStroke.length > 1) {
-          // Finalize stroke
-          commitStroke();
-        }
+        if (isDrawing && currentStroke.length > 1) commitStroke();
         isDrawing = false;
         lastDrawPoint = null;
         currentStroke = [];
@@ -1167,8 +1480,8 @@
       // Use tube geometry for thick visible strokes
       const curve = new THREE.CatmullRomCurve3(currentStroke);
       const segments = Math.max(currentStroke.length * 3, 20);
-      const geo = new THREE.TubeGeometry(curve, segments, 0.006, 8, false);
-      const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+      const geo = new THREE.TubeGeometry(curve, segments, strokeRadius, 8, false);
+      const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(drawColor), side: THREE.DoubleSide });
       currentStrokeLine = new THREE.Mesh(geo, mat);
       scene.add(currentStrokeLine);
     }
@@ -1517,6 +1830,19 @@
         if (panel.userData.isClockPanel) panel.userData.clockTexture.needsUpdate = true;
         updateHoverEffect(panel);
       });
+
+      // Animate delete button
+      if (deleteBtn && deleteBtnVisible) {
+        deleteBtn.lookAt(camera.position);
+        const age = (Date.now() - deleteBtn.userData.spawnTime) / 1000;
+        const pulse = 1 + Math.sin(age * 5) * 0.07;
+        // Glow brighter if a panel is close
+        let closest = Infinity;
+        panels.forEach(p => { if (p.userData.isPanel) closest = Math.min(closest, p.position.distanceTo(deleteBtn.position)); });
+        const nearScale = closest < DELETE_SNAP_DIST * 1.5 ? 1.25 : 1.0;
+        deleteBtn.scale.setScalar(pulse * nearScale);
+        deleteBtn.children[1].material.opacity = closest < DELETE_SNAP_DIST * 1.5 ? 1.0 : 0.9;
+      }
 
       // Animate wall anchors — pulse scale
       wallAnchors.forEach(anchor => {
