@@ -844,14 +844,14 @@
 
       // icon1 = clock, offset left
       const icon1 = makeIcon('icon1.png', 'clock');
-      icon1.position.copy(base).addScaledVector(tmpRight, -0.18);
+      icon1.position.copy(base).addScaledVector(tmpRight, -0.28);
       icon1.lookAt(tmpCamPos);
       icon1.userData._baseY = icon1.position.y;
       scene.add(icon1); panels.push(icon1);
 
       // icon2 = air draw, offset right
       const icon2 = makeIcon('icon2.webp', 'draw');
-      icon2.position.copy(base).addScaledVector(tmpRight, 0.18);
+      icon2.position.copy(base).addScaledVector(tmpRight, 0);
       icon2.lookAt(tmpCamPos);
       icon2.userData._baseY = icon2.position.y;
       drawModeIconPos = icon2.position.clone();
@@ -859,7 +859,7 @@
 
       // icon3 = keyboard, further right
       const icon3 = makeIcon('icon3.jfif', 'keyboard');
-      icon3.position.copy(base).addScaledVector(tmpRight, 0.38);
+      icon3.position.copy(base).addScaledVector(tmpRight, 0.28);
       icon3.lookAt(tmpCamPos);
       icon3.userData._baseY = icon3.position.y;
       scene.add(icon3); panels.push(icon3);
@@ -1031,7 +1031,7 @@
 
       // Original reticle — simple white ring on the floor
       reticle = new THREE.Mesh(
-        new THREE.RingGeometry(0.10, 0.13, 32).rotateX(-Math.PI / 2),
+        new THREE.RingGeometry(0.06, 0.075, 32).rotateX(-Math.PI / 2),
         new THREE.MeshBasicMaterial({ color: 0x6b6b6b, transparent: true, opacity: 0.55, side: THREE.DoubleSide })
       );
       reticle.matrixAutoUpdate = false;
