@@ -895,13 +895,11 @@
       }
 
       if (bothPinching) {
-        // If gazing at keyboard, grab it instead of showing delete btn
+        // If gazing at keyboard, do nothing (keyboard is not movable)
         if (hoveredObject && hoveredObject.userData.isKeyboardPanel) {
-          activePanel = hoveredObject;
-          activePanel.userData.selected = true;
-          if (activePanel.userData.glassShell) {
-            activePanel.userData.glassShell.material.opacity = 0.30;
-          }
+          // blocked
+          lastPinch = false;
+          // do nothing - keyboard not movable
         } else {
           if (!deleteBtnVisible) spawnDeleteBtn();
         }
@@ -1079,17 +1077,45 @@
     }
 
     function onSelect() {
+      // If gazing at a key on keyboard, press it
+      if (hoveredKey) {
+        pressKey(hoveredKey.userData.key, hoveredKey.userData.panelRef);
+        return;
+      }
       const hitPanel = getPanelUnderGaze();
-      if (activePanel) { activePanel.userData.selected = false; activePanel = null; return; }
-      if (hitPanel) {
-        activePanel = hitPanel; activePanel.userData.selected = true;
-        activePanel.scale.setScalar(1.08); return;
+      // Drop if holding
+      if (activePanel) {
+        activePanel.userData.selected = false;
+        activePanel.scale.setScalar(1);
+        if (activePanel.userData.glassShell) activePanel.userData.glassShell.material.opacity = activePanel.userData.shellOpacity || 0.82;
+        activePanel = null;
+        return;
+      }
+      // Pick up only if movable
+      if (hitPanel && !hitPanel.userData.notMovable) {
+        activePanel = hitPanel;
+        activePanel.userData.selected = true;
+        activePanel.scale.setScalar(1.06);
+        if (activePanel.userData.glassShell) activePanel.userData.glassShell.material.opacity = 0.30;
       }
     }
 
     function onCanvasClick() {
+      // Key press on tap
+      if (hoveredKey) {
+        pressKey(hoveredKey.userData.key, hoveredKey.userData.panelRef);
+        return;
+      }
       const hitIcon = getIconUnderGaze();
       if (hitIcon) { openPanelForIcon(hitIcon); return; }
+      // Drop panel on tap on empty
+      if (activePanel) {
+        activePanel.userData.selected = false;
+        activePanel.scale.setScalar(1);
+        if (activePanel.userData.glassShell) activePanel.userData.glassShell.material.opacity = activePanel.userData.shellOpacity || 0.82;
+        activePanel = null;
+        return;
+      }
     }
 
     function getPanelUnderGaze() {
