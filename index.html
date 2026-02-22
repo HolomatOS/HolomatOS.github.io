@@ -984,7 +984,7 @@
               closePanel(gazedAt.userData.panelRef);
             } else if (gazedAt.userData.isIcon && !gazedAt.userData.openPanel) {
               openPanelForIcon(gazedAt);
-            } else if (gazedAt.userData.isPanel) {
+            } else if (gazedAt.userData.isPanel && !gazedAt.userData.notMovable) {
               // Pinch on panel = pick up
               if (activePanel) {
                 activePanel.userData.selected = false;
@@ -1169,6 +1169,7 @@
         typedText = '';
         const panel = makeKeyboardPanel();
         panel.userData.isStockKeyboard = true;
+        panel.userData.notMovable = true;
         camera.getWorldPosition(tmpOrigin);
         camera.getWorldDirection(tmpDirection);
         panel.position.copy(tmpOrigin).addScaledVector(tmpDirection, 0.85);
@@ -1189,13 +1190,12 @@
 
       if (type === 'keyboard') {
         const panel = makeKeyboardPanel();
+        panel.userData.notMovable = true;
         camera.getWorldPosition(tmpOrigin);
         camera.getWorldDirection(tmpDirection);
         panel.position.copy(tmpOrigin).addScaledVector(tmpDirection, 0.85);
         panel.position.y = tmpOrigin.y - 0.18;
-        panel.lookAt(tmpOrigin);
-        // Tilt 35° toward user
-        panel.rotateX(THREE.MathUtils.degToRad(35));
+        panel.lookAt(tmpOrigin); // 90° = straight vertical facing user
         panel.userData.baseZ = panel.position.z;
         scene.add(panel); panels.push(panel);
         icon.visible = false;
@@ -1208,7 +1208,11 @@
       // Spawn panel 0.82m to the right of the icon (in icon's local space)
       const right = new THREE.Vector3(1, 0, 0).applyQuaternion(icon.quaternion);
       panel.position.copy(icon.position).addScaledVector(right, 0.82);
-      panel.quaternion.copy(icon.quaternion);
+      if (type === 'clock') {
+        panel.rotation.set(0, 0, 0);
+      } else {
+        panel.quaternion.copy(icon.quaternion);
+      }
       panel.userData.baseZ = panel.position.z;
 
       scene.add(panel); panels.push(panel);
