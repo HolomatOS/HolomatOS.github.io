@@ -1,2546 +1,597 @@
-﻿<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Moto G - AR Receiver</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>AR Nav</title>
+
+  <!-- A-Frame + AR.js GPS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/aframe/1.4.2/aframe.min.js"></script>
+  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+  <script src="https://raw.githack.com/nicktindall/cyclon.p2p/master/lib/browser/UDPCommLayer.js"></script>
+  <!-- AR.js Location-Based -->
+  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+
   <style>
-    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+    @import url('https://fonts.googleapis.com/css2?family=Syne+Mono&family=Syne:wght@400;700;800&display=swap');
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --neon: #00ffe7;
+      --neon2: #ff2d78;
+      --dark: #080c14;
+      --glass: rgba(8, 12, 20, 0.75);
+    }
+
     body {
-      background-image: url('bg.webp');
-      background-size: cover;
-      background-position: center;
-    }
-    #info {
-      position: absolute; left: 0; right: 0; top: 0;
-      color: #9cf; font: 14px/1.4 system-ui, sans-serif;
-      background: rgba(0,0,0,0.7); padding: 8px 12px; z-index: 3;
-    }
-    #hud {
-      position: absolute; inset: 0; pointer-events: none; z-index: 2;
-    }
-    .reticle {
-      position: absolute; left: 50%; top: 50%;
-      width: 56px; height: 56px;
-      transform: translate(-50%,-50%);
-      border-radius: 50%;
-      border: 3px solid hsla(0,0%,100%,0.35);
-      background: hsla(0,0%,100%,0.12);
-      backdrop-filter: blur(4px);
-      box-shadow:
-        inset 0 0 10px 2px hsla(0,0%,100%,0.55),
-        0 0 18px 2px hsla(0,0%,100%,0.15);
-    }
-    .reticle::after {
-      content: '';
-      position: absolute; left: 50%; top: 50%;
-      width: 6px; height: 6px;
-      border-radius: 50%;
-      background: hsla(0,0%,100%,0.9);
-      transform: translate(-50%,-50%);
-      box-shadow: 0 0 6px 2px hsla(0,0%,100%,0.7);
-    }
-    .tick {
-      position: absolute;
-      width: 1.5px; height: 14px;
-      background: hsla(0,0%,100%,0.5);
-      box-shadow: 0 0 4px 1px hsla(0,0%,100%,0.4);
-    }
-    .tick.t1 { left: 50%; top: calc(50% - 46px); transform: translateX(-50%); }
-    .tick.t2 { left: 50%; top: calc(50% + 32px); transform: translateX(-50%); }
-    .tick.t3 { top: 50%; left: calc(50% - 46px); transform: translateY(-50%) rotate(90deg); }
-    .tick.t4 { top: 50%; left: calc(50% + 32px); transform: translateY(-50%) rotate(90deg); }
-    #handCanvas {
-      position: absolute; inset: 0; pointer-events: none; z-index: 1;
-    }
-
-    /* ── Pointer overlay canvas (draws the wrist-pointer stick) ── */
-    #pointerCanvas {
-      position: absolute; inset: 0; pointer-events: none; z-index: 5;
-      display: none; /* shown only in hand tracking mode */
-    }
-
-    /* ── Pointer toggle button (hand tracking mode only) ── */
-    #pointerToggleBtn {
-      display: none; /* shown after hand tracking connects */
-      position: absolute;
-      bottom: 60px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 20;
-      background: rgba(30,42,54,0.88);
-      border: 1.5px solid rgba(140,200,255,0.38);
-      color: #c8e8ff;
-      font: 600 13px system-ui, sans-serif;
-      padding: 9px 18px;
-      border-radius: 999px;
-      cursor: pointer;
-      backdrop-filter: blur(12px);
-      box-shadow: 0 2px 18px rgba(0,0,0,0.45);
-      transition: background 0.18s, border-color 0.18s, box-shadow 0.18s;
-      letter-spacing: 0.02em;
-      gap: 7px;
-      align-items: center;
-    }
-    #pointerToggleBtn.active {
-      background: rgba(30,90,140,0.92);
-      border-color: rgba(100,200,255,0.75);
-      box-shadow: 0 0 18px rgba(80,180,255,0.35), 0 2px 18px rgba(0,0,0,0.45);
+      background: var(--dark);
+      font-family: 'Syne', sans-serif;
       color: #fff;
-    }
-    #pointerToggleBtn .dot {
-      display: inline-block;
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: rgba(100,180,255,0.45);
-      margin-right: 7px;
-      vertical-align: middle;
-      transition: background 0.18s;
-    }
-    #pointerToggleBtn.active .dot {
-      background: #5edfff;
-      box-shadow: 0 0 6px #5edfff;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
     }
 
-    #connectPanel {
-      position: absolute;
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
+    /* ── SETUP SCREEN ───────────────────────────────────────────── */
+    #setup-screen {
+      position: fixed;
+      inset: 0;
       z-index: 100;
-      text-align: center;
-      min-width: 300px;
-      padding: 1.4em;
-      border-radius: 1em;
-      border: 3px solid hsla(0,0%,100%,0.3);
-      background: hsla(0,0%,100%,0.15);
-      backdrop-filter: blur(18px);
-      box-shadow: inset 0 0 8px 1px hsla(0,0%,100%,0.5), 0 8px 32px rgba(0,0,0,0.4);
       display: flex;
       flex-direction: column;
-      gap: 0.6em;
-    }
-    #connectPanel h2 { color: #fff; margin: 0 0 4px; font: 700 20px system-ui; }
-    #connectPanel p { color: rgba(255,255,255,0.7); margin: 0; font-size: 13px; }
-    .modeBtn {
-      display: block;
-      width: 100%;
-      padding: 0.6em 1em;
-      font: 700 15px system-ui;
-      border-radius: 0.6em;
-      cursor: pointer;
-      color: white;
-      border: 1px solid hsla(0,0%,100%,0.45);
-      background: hsla(0,0%,100%,0.18);
-      backdrop-filter: blur(6px);
-      box-shadow: inset 0 0 6px 1px hsla(0,0%,100%,0.35);
-      transition: background 0.15s, box-shadow 0.15s;
-      letter-spacing: 0.03em;
-    }
-    .modeBtn:hover {
-      background: hsla(0,0%,100%,0.28);
-      box-shadow: inset 0 0 10px 2px hsla(0,0%,100%,0.5);
-    }
-    #handTrackingBtn { border-color: hsla(140,70%,70%,0.6); }
-    #skipHandBtn { border-color: hsla(210,90%,70%,0.6); }
-    #connectionStatus { color: #ff0; font-size: 12px; font-family: monospace; margin: 0; }
-    #status {
-      position: absolute;
-      bottom: 10px; left: 10px;
-      background: rgba(0,0,0,0.7);
-      color: #0f0;
-      padding: 8px 12px;
-      border-radius: 8px;
-      font-size: 12px;
-      font-family: monospace;
-      z-index: 10;
-    }
-    .hidden { display: none; }
-
-    /* ── AR Button (injected by Three.js ARButton) ── */
-    #ARButton, a[href*="webxr"], button[onclick*="xr"], .ar-button {
-      border: 3px solid hsla(0,0%,100%,0.35) !important;
-      background: hsla(0,0%,42%,0.55) !important;
-      backdrop-filter: blur(20px) !important;
-      box-shadow: inset 0 0 10px 2px hsla(0,0%,100%,0.7), 0 0 28px 6px hsla(0,0%,100%,0.22), 0 6px 32px rgba(0,0,0,0.4) !important;
-      color: #fff !important;
-      border-radius: 0.65em !important;
-      font: 700 15px system-ui, sans-serif !important;
-      letter-spacing: 0.05em !important;
-      padding: 14px 28px !important;
-      cursor: pointer !important;
-      transition: background 0.18s, box-shadow 0.18s !important;
-      position: fixed !important;
-      bottom: 24px !important;
-      left: 50% !important;
-      transform: translateX(-50%) !important;
-    }
-    #ARButton:hover {
-      background: hsla(0,0%,42%,0.55) !important;
-      box-shadow: inset 0 0 16px 3px hsla(0,0%,100%,0.85), 0 0 40px 10px hsla(0,0%,100%,0.32), 0 6px 32px rgba(0,0,0,0.4) !important;
-    }
-    #clarityPanel {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      z-index: 12;
-      background: rgba(0, 0, 0, 0.65);
-      color: #e8f4ff;
-      border-radius: 12px;
-      padding: 10px;
-      font: 13px/1.3 system-ui, sans-serif;
-      display: flex;
-      gap: 8px;
       align-items: center;
-      flex-wrap: wrap;
+      justify-content: center;
+      padding: 2rem;
+      background: var(--dark);
+      gap: 1.5rem;
     }
-    .clarityBtn {
-      border: 1px solid rgba(255,255,255,0.25);
-      background: rgba(255,255,255,0.12);
-      color: #fff;
+
+    #setup-screen::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 60% 40% at 20% 80%, rgba(0,255,231,0.08) 0%, transparent 70%),
+        radial-gradient(ellipse 50% 50% at 80% 20%, rgba(255,45,120,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .logo {
+      font-size: 3rem;
+      font-weight: 800;
+      letter-spacing: -2px;
+      line-height: 1;
+      text-align: center;
+    }
+
+    .logo span { color: var(--neon); }
+
+    .tagline {
+      font-family: 'Syne Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.2em;
+      color: rgba(255,255,255,0.4);
+      text-transform: uppercase;
+    }
+
+    .divider {
+      width: 100%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--neon), transparent);
+      opacity: 0.3;
+    }
+
+    .section-label {
+      font-family: 'Syne Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.15em;
+      color: var(--neon);
+      text-transform: uppercase;
+      align-self: flex-start;
+    }
+
+    .pin-list {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .pin-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .pin-row input {
+      flex: 1;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(0,255,231,0.2);
       border-radius: 8px;
-      padding: 8px 10px;
-      font: 600 13px system-ui, sans-serif;
+      padding: 0.6rem 0.8rem;
+      color: #fff;
+      font-family: 'Syne Mono', monospace;
+      font-size: 0.75rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .pin-row input:focus { border-color: var(--neon); }
+    .pin-row input::placeholder { color: rgba(255,255,255,0.2); }
+
+    .remove-btn {
+      background: none;
+      border: 1px solid rgba(255,45,120,0.3);
+      color: var(--neon2);
+      border-radius: 6px;
+      width: 32px; height: 32px;
+      cursor: pointer;
+      font-size: 1rem;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.2s;
+    }
+
+    .remove-btn:hover { background: rgba(255,45,120,0.1); }
+
+    .add-btn {
+      align-self: flex-start;
+      background: none;
+      border: 1px dashed rgba(0,255,231,0.3);
+      color: var(--neon);
+      border-radius: 8px;
+      padding: 0.5rem 1rem;
+      font-family: 'Syne Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .add-btn:hover { background: rgba(0,255,231,0.07); }
+
+    .use-location-btn {
+      width: 100%;
+      background: rgba(0,255,231,0.07);
+      border: 1px solid rgba(0,255,231,0.3);
+      color: var(--neon);
+      border-radius: 10px;
+      padding: 0.65rem;
+      font-family: 'Syne Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .use-location-btn:hover { background: rgba(0,255,231,0.14); }
+
+    .launch-btn {
+      width: 100%;
+      background: linear-gradient(135deg, var(--neon) 0%, #00b8a0 100%);
+      border: none;
+      border-radius: 12px;
+      padding: 1rem;
+      color: var(--dark);
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1rem;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+
+    .launch-btn:active { transform: scale(0.98); }
+
+    /* ── AR SCENE ────────────────────────────────────────────────── */
+    #ar-wrapper {
+      display: none;
+      position: fixed;
+      inset: 0;
+    }
+
+    a-scene {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── HUD OVERLAY ─────────────────────────────────────────────── */
+    #hud {
+      display: none;
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 50;
+    }
+
+    #hud-top {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      padding: 1rem;
+      background: linear-gradient(to bottom, rgba(8,12,20,0.85), transparent);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    #hud-title {
+      font-weight: 800;
+      font-size: 1.1rem;
+      letter-spacing: -0.5px;
+    }
+
+    #hud-title span { color: var(--neon); }
+
+    #coords-pill {
+      font-family: 'Syne Mono', monospace;
+      font-size: 0.6rem;
+      background: var(--glass);
+      border: 1px solid rgba(0,255,231,0.2);
+      border-radius: 20px;
+      padding: 0.3rem 0.7rem;
+      color: rgba(255,255,255,0.5);
+      backdrop-filter: blur(8px);
+    }
+
+    #hud-bottom {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      padding: 1rem;
+      background: linear-gradient(to top, rgba(8,12,20,0.9), transparent);
+      pointer-events: all;
+    }
+
+    #pin-legend {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 0.75rem;
+    }
+
+    .legend-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .legend-dist {
+      font-family: 'Syne Mono', monospace;
+      font-size: 0.65rem;
+      color: rgba(255,255,255,0.4);
+      margin-left: auto;
+    }
+
+    .back-btn {
+      width: 100%;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      padding: 0.7rem;
+      color: rgba(255,255,255,0.6);
+      font-family: 'Syne', sans-serif;
+      font-size: 0.8rem;
       cursor: pointer;
     }
-    #focusBadge {
-      padding: 6px 10px;
-      border-radius: 999px;
-      background: rgba(255,255,255,0.14);
-      font-weight: 700;
+
+    /* ── STATUS ──────────────────────────────────────────────────── */
+    #status-bar {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: var(--glass);
+      border: 1px solid rgba(0,255,231,0.3);
+      border-radius: 12px;
+      padding: 1rem 1.5rem;
+      font-family: 'Syne Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--neon);
+      z-index: 200;
+      backdrop-filter: blur(12px);
+      display: none;
+      text-align: center;
     }
-    #clarityProbeVideo { display: none; }
+
+    /* scanning pulse on the crosshair */
+    #crosshair {
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 40px; height: 40px;
+      border: 2px solid var(--neon);
+      border-radius: 50%;
+      opacity: 0.4;
+      pointer-events: none;
+      z-index: 51;
+      animation: pulse 2s ease-in-out infinite;
+      display: none;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: translate(-50%,-50%) scale(1); opacity: 0.4; }
+      50% { transform: translate(-50%,-50%) scale(1.4); opacity: 0.15; }
+    }
   </style>
 </head>
 <body>
 
-  <div id="hud">
-    <div class="reticle"></div>
-    <div class="tick t1"></div><div class="tick t2"></div><div class="tick t3"></div><div class="tick t4"></div>
-  </div>
-  <canvas id="handCanvas"></canvas>
+<!-- ── SETUP SCREEN ────────────────────────────────────────────── -->
+<div id="setup-screen">
+  <div class="logo">AR<span>NAV</span></div>
+  <div class="tagline">GPS · WebXR · Location Anchors</div>
+  <div class="divider"></div>
 
-  <!-- Pointer overlay (wrist-to-index ray) -->
-  <canvas id="pointerCanvas"></canvas>
+  <div class="section-label">📍 Drop Pins</div>
 
-  <!-- Pointer toggle button — only appears after hand tracking connects -->
-  <button id="pointerToggleBtn">
-    <span class="dot"></span>Pointer
-  </button>
-
-  <div id="connectPanel">
-    <h2>Choose Mode</h2>
-    <p>Enter the code shown on Phone 2<br>or skip to tap only</p>
-    <div id="codeInputWrap" style="display:flex;gap:0.4em;">
-      <input id="peerCodeInput" type="text" placeholder="Phone 2 code"
-        style="flex:1;padding:0.55em 0.8em;border-radius:0.5em;border:1px solid hsla(0,0%,100%,0.35);
-               background:hsla(0,0%,100%,0.12);color:#fff;font:700 15px system-ui;
-               backdrop-filter:blur(6px);outline:none;letter-spacing:0.08em;" />
-      <button class="modeBtn" id="handTrackingBtn" style="width:auto;padding:0.55em 1em;flex-shrink:0;">CONNECT</button>
-    </div>
-    <button class="modeBtn" id="skipHandBtn">SKIP - TAP ONLY</button>
-    <div id="connectionStatus"></div>
+  <div class="pin-list" id="pin-list">
+    <!-- pins injected by JS -->
   </div>
 
+  <button class="add-btn" onclick="addPin()">+ Add Another Pin</button>
 
+  <div class="divider"></div>
 
-
-  <!-- Surface mode toggle -->
-  <button id="surfaceToggleBtn" style="
-    display:none;
-    position:fixed;
-    bottom:60px;
-    right:16px;
-    z-index:20;
-    background:rgba(30,42,54,0.88);
-    border:1.5px solid rgba(140,200,255,0.38);
-    color:#c8e8ff;
-    font:600 13px system-ui,sans-serif;
-    padding:9px 14px;
-    border-radius:999px;
-    cursor:pointer;
-    backdrop-filter:blur(12px);
-    box-shadow:0 2px 18px rgba(0,0,0,0.45);
-    letter-spacing:0.02em;">
-    📐 Floor
+  <button class="use-location-btn" onclick="addCurrentLocation()">
+    ◎ &nbsp;Add My Current Location as Pin
   </button>
 
-  <!-- PeerJS for WebRTC -->
-  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
-  <script>
-    // Catch any uncaught errors so they don't close the app
-    window.addEventListener('error', e => { console.error('Caught error:', e.message); e.preventDefault(); });
-    window.addEventListener('unhandledrejection', e => { console.error('Caught rejection:', e.reason); e.preventDefault(); });
-  </script>
+  <button class="launch-btn" onclick="launchAR()">
+    Launch AR &nbsp;→
+  </button>
+</div>
 
-  <script type="module">
-    import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
-    import { ARButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js";
+<!-- ── STATUS TOAST ────────────────────────────────────────────── -->
+<div id="status-bar">Acquiring GPS…</div>
 
-    let camera, scene, renderer;
-    let reticle, controller;
-    let hitTestSource = null;
-    let wallHitTestSource = null;
-    let hitTestSourceRequested = false;
-    let isWallMode = false;
-    let wallSnapIndicator = null;
-    const wallAnchors = [];
-    let lastPinchTime = 0;
-    const DOUBLE_PINCH_MS = 500;
+<!-- ── AR SCENE ────────────────────────────────────────────────── -->
+<div id="ar-wrapper">
+  <a-scene
+    id="ar-scene"
+    embedded
+    arjs="sourceType: webcam; debugUIEnabled: false; videoTexture: true;"
+    renderer="logarithmicDepthBuffer: true;"
+    vr-mode-ui="enabled: false"
+    loading-screen="enabled: false"
+  >
+    <a-camera gps-camera rotation-reader></a-camera>
+  </a-scene>
+</div>
 
-    // ── Air drawing state ───────────────────────────────────────────
-    let drawMode = false;
-    let isDrawing = false;
-    let currentStroke = [];
-    const drawnStrokes = [];
-    let lastDrawPoint = null;
-    let drawModeIconPos = null;
-    const DRAW_MIN_DIST = 0.005;
-    let typedText = '';
-    let hoveredKey = null;
-    const FINNHUB_KEY = 'd6d7m0hr01qgk7mkt9sgd6d7m0hr01qgk7mkt9t0';
-    let stockKeyboardIcon = null; // ref to icon3 for restore after search
-    let deleteBtn = null;          // THREE.Group — the X button in scene
-    let deleteBtnVisible = false;
-    const DELETE_SNAP_DIST = 0.25; // how close panel needs to be to delete
-    let drawColor = '#ffffff';
-    let drawLastPinch = false;
-    let drawPinchStartTime = 0;
-    let drawPinchCount = 0;
-    let drawPinchCountTimer = null;
-    let drawPinchMoved = false;
-    let drawLastPinchX, drawLastPinchY;
-    let strokeRadius = 0.006;        // tube radius, range 0.002–0.018
-    let isScrubbingThickness = false; // true when pinching slider
-    let scrubStartX = -1;             // screen x where scrub began
-    let colorPaletteVisible = false; // is left-palm palette showing
-    let colorPaletteEl = null;       // DOM element for palette
-    let leftPalmFrames = 0;          // debounce left palm detection
-    const panels = [];
-    const raycaster = new THREE.Raycaster();
-    let hoveredObject = null;
-    let activePanel = null;
+<!-- ── HUD ─────────────────────────────────────────────────────── -->
+<div id="hud">
+  <div id="hud-top">
+    <div id="hud-title">AR<span>NAV</span></div>
+    <div id="coords-pill" id="coords">---, ---</div>
+  </div>
 
-    // Hand data from Phone 2
-    let handLandmarks = null;
-    let lastPinch = false;
-    let peer, connection;
-    let handTrackingEnabled = false;
-    let clarityStream = null;
-    let clarityTrack = null;
-    let zoomValue = null;
-    let zoomMin = null;
-    let zoomMax = null;
-    let zoomStep = 0.2;
+  <div id="crosshair"></div>
 
-    // ── Pointer state ──────────────────────────────────────────────
-    let pointerEnabled = false;
-    const pointerCanvas = document.getElementById('pointerCanvas');
-    const pointerCtx = pointerCanvas.getContext('2d');
-    const pointerToggleBtn = document.getElementById('pointerToggleBtn');
+  <div id="hud-bottom">
+    <div id="pin-legend"></div>
+    <button class="back-btn" onclick="goBack()">← Back to Setup</button>
+  </div>
+</div>
 
-    function resizePointerCanvas() {
-      pointerCanvas.width = window.innerWidth;
-      pointerCanvas.height = window.innerHeight;
+<script>
+  // ── PIN COLORS ──────────────────────────────────────────────────
+  const COLORS = ['#00ffe7','#ff2d78','#ffe600','#a78bfa','#34d399','#fb923c'];
+  const PIN_HEIGHTS = [0, 3, 6, 9, 12, 15]; // stagger heights so pins don't overlap
+
+  let pins = [];
+  let userLat = null, userLng = null;
+  let watchId = null;
+
+  // ── SETUP UI ────────────────────────────────────────────────────
+  function addPin(lat = '', lng = '', label = '') {
+    const id = Date.now();
+    pins.push({ id, lat, lng, label });
+    renderPinList();
+  }
+
+  function removePin(id) {
+    pins = pins.filter(p => p.id !== id);
+    renderPinList();
+  }
+
+  function renderPinList() {
+    const list = document.getElementById('pin-list');
+    list.innerHTML = '';
+
+    if (pins.length === 0) {
+      addPin(); // always start with one row
+      return;
     }
-    resizePointerCanvas();
-    window.addEventListener('resize', resizePointerCanvas);
 
-    // Pointer toggle button click
-    pointerToggleBtn.addEventListener('click', () => {
-      pointerEnabled = !pointerEnabled;
-      if (pointerEnabled) {
-        pointerToggleBtn.classList.add('active');
-        pointerCanvas.style.display = 'block';
-      } else {
-        pointerToggleBtn.classList.remove('active');
-        pointerCanvas.style.display = 'none';
-        pointerCtx.clearRect(0, 0, pointerCanvas.width, pointerCanvas.height);
-      }
+    pins.forEach((pin, i) => {
+      const color = COLORS[i % COLORS.length];
+      const row = document.createElement('div');
+      row.className = 'pin-row';
+      row.innerHTML = `
+        <div style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;"></div>
+        <input type="text" placeholder="Label (e.g. Coffee Shop)"
+          value="${pin.label}"
+          onchange="updatePin(${pin.id}, 'label', this.value)"
+          style="flex:1.2"
+        />
+        <input type="number" placeholder="Lat" step="any"
+          value="${pin.lat}"
+          onchange="updatePin(${pin.id}, 'lat', this.value)"
+        />
+        <input type="number" placeholder="Lng" step="any"
+          value="${pin.lng}"
+          onchange="updatePin(${pin.id}, 'lng', this.value)"
+        />
+        <button class="remove-btn" onclick="removePin(${pin.id})">×</button>
+      `;
+      list.appendChild(row);
     });
+  }
 
-    function showPointerToggle() {
-      pointerToggleBtn.style.display = 'inline-flex';
+  function updatePin(id, field, value) {
+    const pin = pins.find(p => p.id === id);
+    if (pin) pin[field] = value;
+  }
+
+  // ── USE CURRENT LOCATION ─────────────────────────────────────────
+  function addCurrentLocation() {
+    showStatus('Getting your location…');
+    navigator.geolocation.getCurrentPosition(pos => {
+      hideStatus();
+      addPin(
+        pos.coords.latitude.toFixed(6),
+        pos.coords.longitude.toFixed(6),
+        'You Are Here'
+      );
+    }, err => {
+      hideStatus();
+      showStatus('Location denied. Enable GPS & retry.', 3000);
+    }, { enableHighAccuracy: true });
+  }
+
+  // ── LAUNCH AR ────────────────────────────────────────────────────
+  function launchAR() {
+    const valid = pins.filter(p => p.lat && p.lng);
+    if (valid.length === 0) {
+      showStatus('Add at least one pin with coordinates!', 2500);
+      return;
     }
 
-    // Surface mode toggle
-    const surfaceToggleBtn = document.getElementById('surfaceToggleBtn');
-    surfaceToggleBtn.addEventListener('click', () => {
-      isWallMode = !isWallMode;
-      surfaceToggleBtn.textContent = isWallMode ? '🧱 Wall' : '📐 Floor';
-      surfaceToggleBtn.style.borderColor = isWallMode ? 'rgba(255,180,100,0.6)' : 'rgba(140,200,255,0.38)';
-      surfaceToggleBtn.style.color = isWallMode ? '#ffd0a0' : '#c8e8ff';
+    showStatus('Acquiring GPS…');
+
+    navigator.geolocation.getCurrentPosition(pos => {
+      userLat = pos.coords.latitude;
+      userLng = pos.coords.longitude;
+
+      buildARScene(valid);
+      document.getElementById('setup-screen').style.display = 'none';
+      document.getElementById('ar-wrapper').style.display = 'block';
+      document.getElementById('hud').style.display = 'block';
+      document.getElementById('crosshair').style.display = 'block';
+
+      hideStatus();
+      startLocationWatch();
+    }, err => {
+      hideStatus();
+      showStatus('GPS access denied. Please allow location.', 3000);
+    }, { enableHighAccuracy: true, timeout: 10000 });
+  }
+
+  // ── BUILD SCENE ──────────────────────────────────────────────────
+  function buildARScene(validPins) {
+    const scene = document.getElementById('ar-scene');
+
+    // Remove old entities (except camera)
+    scene.querySelectorAll('[gps-entity-place]').forEach(e => e.remove());
+
+    const legend = document.getElementById('pin-legend');
+    legend.innerHTML = '';
+
+    validPins.forEach((pin, i) => {
+      const color = COLORS[i % COLORS.length];
+      const height = PIN_HEIGHTS[i % PIN_HEIGHTS.length];
+      const label = pin.label || `Pin ${i + 1}`;
+
+      // Pillar
+      const pillar = document.createElement('a-cylinder');
+      pillar.setAttribute('gps-entity-place', `latitude: ${pin.lat}; longitude: ${pin.lng}`);
+      pillar.setAttribute('color', color);
+      pillar.setAttribute('radius', '0.6');
+      pillar.setAttribute('height', `${3 + height}`);
+      pillar.setAttribute('position', `0 ${(3 + height) / 2} 0`);
+      pillar.setAttribute('opacity', '0.85');
+      scene.appendChild(pillar);
+
+      // Floating sphere on top
+      const sphere = document.createElement('a-sphere');
+      sphere.setAttribute('gps-entity-place', `latitude: ${pin.lat}; longitude: ${pin.lng}`);
+      sphere.setAttribute('color', color);
+      sphere.setAttribute('radius', '1.2');
+      sphere.setAttribute('position', `0 ${3 + height + 1.2} 0`);
+      sphere.setAttribute('opacity', '0.95');
+      sphere.setAttribute('animation', 'property: position; to: 0 ' + (3 + height + 2.4) + ' 0; dir: alternate; dur: 2000; easing: easeInOutSine; loop: true');
+      scene.appendChild(sphere);
+
+      // Text label
+      const text = document.createElement('a-text');
+      text.setAttribute('gps-entity-place', `latitude: ${pin.lat}; longitude: ${pin.lng}`);
+      text.setAttribute('value', label);
+      text.setAttribute('color', color);
+      text.setAttribute('align', 'center');
+      text.setAttribute('width', '20');
+      text.setAttribute('position', `0 ${3 + height + 4} 0`);
+      scene.appendChild(text);
+
+      // HUD legend
+      const dist = getDistanceMeters(userLat, userLng, parseFloat(pin.lat), parseFloat(pin.lng));
+      const distLabel = dist > 1000 ? `${(dist / 1000).toFixed(1)} km` : `${Math.round(dist)} m`;
+      const item = document.createElement('div');
+      item.className = 'legend-item';
+      item.innerHTML = `
+        <div class="legend-dot" style="background:${color}"></div>
+        <span>${label}</span>
+        <span class="legend-dist">${distLabel}</span>
+      `;
+      legend.appendChild(item);
     });
+  }
 
-    // ── Draw the Vision Pro style pointer (wrist → index ray) ──────
-    function drawPointer(landmarks) {
-      pointerCtx.clearRect(0, 0, pointerCanvas.width, pointerCanvas.height);
-      if (!pointerEnabled || !landmarks) return;
-
-      // Use first hand
-      const lm = Array.isArray(landmarks[0]) ? landmarks[0] : landmarks;
-      if (!lm || lm.length < 21) return;
-
-      const W = pointerCanvas.width;
-      const H = pointerCanvas.height;
-
-      // Wrist = landmark 0, index tip = landmark 8
-      const wrist = lm[0];
-      const indexTip = lm[8];
-      const middleTip = lm[12]; // use middle too to average direction
-
-      const wx = wrist.x * W + HAND_OFFSET_X;
-      const wy = wrist.y * H + HAND_OFFSET_Y;
-      const ix = indexTip.x * W + HAND_OFFSET_X;
-      const iy = indexTip.y * H + HAND_OFFSET_Y;
-
-      // Direction from wrist toward index finger tip, extended far beyond it
-      const dx = ix - wx;
-      const dy = iy - wy;
-      const len = Math.sqrt(dx*dx + dy*dy) || 1;
-      const nx = dx / len;
-      const ny = dy / len;
-
-      // Ray starts at wrist, extends past fingertip to edge of screen
-      const RAY_EXTEND = Math.max(W, H) * 1.5;
-      const rayEndX = wx + nx * RAY_EXTEND;
-      const rayEndY = wy + ny * RAY_EXTEND;
-
-      // ── Draw the stick/ray ──────────────────────────────────────
-      // Outer glow
-      pointerCtx.save();
-      pointerCtx.beginPath();
-      pointerCtx.moveTo(wx, wy);
-      pointerCtx.lineTo(rayEndX, rayEndY);
-      const grad = pointerCtx.createLinearGradient(wx, wy, ix, iy);
-      grad.addColorStop(0, 'rgba(255,255,255,0.0)');
-      grad.addColorStop(0.18, 'rgba(200,235,255,0.55)');
-      grad.addColorStop(0.65, 'rgba(180,225,255,0.35)');
-      grad.addColorStop(1, 'rgba(140,210,255,0.0)');
-      pointerCtx.strokeStyle = grad;
-      pointerCtx.lineWidth = 6;
-      pointerCtx.lineCap = 'round';
-      pointerCtx.filter = 'blur(3px)';
-      pointerCtx.stroke();
-      pointerCtx.restore();
-
-      // Core ray (sharp white line)
-      pointerCtx.save();
-      pointerCtx.beginPath();
-      pointerCtx.moveTo(wx, wy);
-      pointerCtx.lineTo(rayEndX, rayEndY);
-      const coreGrad = pointerCtx.createLinearGradient(wx, wy, ix, iy);
-      coreGrad.addColorStop(0, 'rgba(255,255,255,0.0)');
-      coreGrad.addColorStop(0.15, 'rgba(255,255,255,0.9)');
-      coreGrad.addColorStop(0.6, 'rgba(200,235,255,0.5)');
-      coreGrad.addColorStop(1, 'rgba(180,225,255,0.0)');
-      pointerCtx.strokeStyle = coreGrad;
-      pointerCtx.lineWidth = 1.8;
-      pointerCtx.lineCap = 'round';
-      pointerCtx.filter = 'none';
-      pointerCtx.stroke();
-      pointerCtx.restore();
-
-      // ── Cursor dot at the ray's aim point ──────────────────────
-      // Aim point: extend ~2.2x from wrist through index finger
-      const aimDist = len * 2.2;
-      const aimX = wx + nx * aimDist;
-      const aimY = wy + ny * aimDist;
-
-      // Outer ring
-      pointerCtx.save();
-      pointerCtx.beginPath();
-      pointerCtx.arc(aimX, aimY, 14, 0, Math.PI * 2);
-      pointerCtx.strokeStyle = 'rgba(200,235,255,0.5)';
-      pointerCtx.lineWidth = 1.5;
-      pointerCtx.filter = 'blur(1px)';
-      pointerCtx.stroke();
-      pointerCtx.restore();
-
-      // Inner bright dot
-      pointerCtx.save();
-      pointerCtx.beginPath();
-      pointerCtx.arc(aimX, aimY, 5, 0, Math.PI * 2);
-      const dotGrad = pointerCtx.createRadialGradient(aimX, aimY, 0, aimX, aimY, 5);
-      dotGrad.addColorStop(0, 'rgba(255,255,255,1)');
-      dotGrad.addColorStop(1, 'rgba(140,215,255,0.6)');
-      pointerCtx.fillStyle = dotGrad;
-      pointerCtx.shadowColor = '#8cd8ff';
-      pointerCtx.shadowBlur = 10;
-      pointerCtx.fill();
-      pointerCtx.restore();
-    }
-    // ──────────────────────────────────────────────────────────────
-
-    // Two-hand resize tracking
-    let lastTwoHandDistance = null;
-    let isResizing = false;
-    let initialPanelScale = 1.0;
-
-    const HAND_OFFSET_X = 0;
-    const HAND_OFFSET_Y = -270;
-    const HAND_SCALE = 1.0;
-    const ICON_FORWARD_DISTANCE = 1.0;
-    const ICON_HEIGHT_ABOVE_GROUND = 1.0;
-    const XR_FRAMEBUFFER_SCALE = 1.35;
-    const MAX_RENDER_PIXEL_RATIO = 2;
-    const PANEL_SHELL_OPACITY = 0.72;
-    let groundYEstimate = null;
-    let handConnectTimeout = null;
-    let hasInitialIconSpawned = false;
-
-    // Weather
-    let weatherData = null, weatherFetchedAt = 0;
-    const WEATHER_TTL = 5 * 60 * 1000;
-    let userLat = 40.7128, userLon = -74.006;
-
-    const tmpOrigin = new THREE.Vector3();
-    const tmpDirection = new THREE.Vector3();
-    const tmpCamPos = new THREE.Vector3();
-    const tmpForward = new THREE.Vector3();
-    const tmpRight = new THREE.Vector3();
-    const tmpReticlePos = new THREE.Vector3();
-
-    const handCanvas = document.getElementById('handCanvas');
-    const handCtx = handCanvas.getContext('2d');
-    handCanvas.width = window.innerWidth;
-    handCanvas.height = window.innerHeight;
-
-    init();
-    setupConnection();
-    prefetchWeather();
-    animate();
-
-    function setupConnection() {
-      const handBtn = document.getElementById('handTrackingBtn');
-      const statusEl = document.getElementById('connectionStatus');
-
-      function showConnectError(message) {
-        document.getElementById('connectPanel').style.display = 'flex';
-        statusEl.textContent = message;
-        statusEl.style.color = '#ff6b6b';
-        handBtn.disabled = false;
-        handBtn.textContent = 'CONNECT';
+  // ── LIVE LOCATION WATCH ──────────────────────────────────────────
+  function startLocationWatch() {
+    if (watchId) navigator.geolocation.clearWatch(watchId);
+    watchId = navigator.geolocation.watchPosition(pos => {
+      userLat = pos.coords.latitude;
+      userLng = pos.coords.longitude;
+      const coordPill = document.getElementById('coords-pill');
+      if (coordPill) {
+        coordPill.textContent = `${userLat.toFixed(4)}, ${userLng.toFixed(4)}`;
       }
-
-      handBtn.addEventListener('click', () => {
-        const codeInput = document.getElementById('peerCodeInput');
-        const targetId = codeInput.value.trim().toLowerCase();
-        if (!targetId) {
-          statusEl.textContent = 'Enter the code from Phone 2';
-          statusEl.style.color = '#ff6b6b';
-          return;
-        }
-
-        handTrackingEnabled = true;
-        document.getElementById('connectPanel').style.display = 'none';
-        statusEl.textContent = 'Connecting...';
-        statusEl.style.color = '#ff0';
-        handBtn.disabled = true;
-        handBtn.textContent = 'Connecting...';
-
-        if (peer && !peer.destroyed) { peer.destroy(); }
-
-        try { peer = new Peer(); } catch(e) { showConnectError('Failed to init peer'); return; }
-        peer.on('open', () => {
-          try { connection = peer.connect(targetId); } catch(e) { showConnectError('Failed to connect'); return; }
-          if (handConnectTimeout) clearTimeout(handConnectTimeout);
-          handConnectTimeout = setTimeout(() => {
-            if (!connection || !connection.open) {
-              showConnectError('Could not connect. Check the code and retry.');
-            }
-          }, 30000);
-          connection.on('open', () => {
-            document.getElementById('connectPanel').style.display = 'none';
-            showPointerToggle();
-            // Phone 2 connected — show AR button prominently, user taps to enter AR
-            const arBtn = document.getElementById('ARButton');
-            if (arBtn) {
-              arBtn.style.display = '';
-              arBtn.textContent = 'ENTER AR ✓';
-            }
-
-            connection.on('data', (data) => {
-              if (data.type === 'hand') {
-                handLandmarks = data.landmarks;
-                updateHandDisplay(data.handCount || 0, data.twoHandDistance);
-                if (pointerEnabled) drawPointer(handLandmarks);
-              }
-            });
-
-            connection.on('close', () => {
-              handLandmarks = null;
-              lastPinch = false;
-              pointerCtx.clearRect(0, 0, pointerCanvas.width, pointerCanvas.height);
-              pointerToggleBtn.style.display = 'none';
-              pointerCanvas.style.display = 'none';
-              pointerEnabled = false;
-            });
-
-            connection.on('error', () => {});
-          });
-        });
-
-        peer.on('error', (err) => {
-          showConnectError(`Peer error: ${err.type || 'unknown'}`);
-        });
-      });
-
-      // TAP ONLY button — no pointer toggle shown
-      document.getElementById('skipHandBtn').addEventListener('click', () => {
-        handTrackingEnabled = false;
-        document.getElementById('connectPanel').style.display = 'none';
-      });
-    }
-
-    async function startClarityCameraProbe() {
-      if (clarityTrack) return;
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 }
-          }
-        });
-        clarityStream = stream;
-        clarityTrack = stream.getVideoTracks()[0];
-        await applyAutoFocusConstraints();
-        readZoomCapabilities();
-      } catch (err) {
-        console.warn('Clarity camera probe failed:', err);
-      }
-    }
-
-    let autoFocusRetriggerTimer = null;
-
-    async function applyAutoFocusConstraints() {
-      if (!clarityTrack) return;
-      const capabilities = clarityTrack.getCapabilities ? clarityTrack.getCapabilities() : {};
-
-      // Apply continuous exposure + white balance where supported
-      const contConstraints = { advanced: [] };
-      if (Array.isArray(capabilities.exposureMode) && capabilities.exposureMode.includes('continuous')) {
-        contConstraints.advanced.push({ exposureMode: 'continuous' });
-      }
-      if (Array.isArray(capabilities.whiteBalanceMode) && capabilities.whiteBalanceMode.includes('continuous')) {
-        contConstraints.advanced.push({ whiteBalanceMode: 'continuous' });
-      }
-      if (contConstraints.advanced.length) {
-        try { await clarityTrack.applyConstraints(contConstraints); } catch (_) {}
-      }
-
-      const supportedFocusModes = Array.isArray(capabilities.focusMode) ? capabilities.focusMode : [];
-
-      if (supportedFocusModes.includes('continuous')) {
-        try {
-          await clarityTrack.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
-          // Re-ping every 4s to unstick AF on stubborn drivers
-          startAutoFocusRetrigger('continuous', 4000);
-        } catch (err) {
-          // continuous advertised but failed — pulse auto instead
-          startAutoFocusRetrigger('auto', 1800);
-        }
-      } else if (supportedFocusModes.includes('auto')) {
-        // Pulse focusMode:'auto' every 1.8s to simulate continuous AF
-        startAutoFocusRetrigger('auto', 1800);
-      }
-      // If neither mode available, camera stays at driver default
-    }
-
-    async function triggerAutoFocus(mode) {
-      if (!clarityTrack) return;
-      try { await clarityTrack.applyConstraints({ advanced: [{ focusMode: mode }] }); } catch (_) {}
-    }
-
-    function startAutoFocusRetrigger(mode, intervalMs) {
-      stopAutoFocusRetrigger();
-      triggerAutoFocus(mode); // fire immediately
-      autoFocusRetriggerTimer = setInterval(() => triggerAutoFocus(mode), intervalMs);
-    }
-
-    function stopAutoFocusRetrigger() {
-      if (autoFocusRetriggerTimer) { clearInterval(autoFocusRetriggerTimer); autoFocusRetriggerTimer = null; }
-    }
-
-    function readZoomCapabilities() {
-      if (!clarityTrack || !clarityTrack.getCapabilities) return;
-      const capabilities = clarityTrack.getCapabilities();
-      if (!capabilities.zoom) return;
-      zoomMin = capabilities.zoom.min;
-      zoomMax = capabilities.zoom.max;
-      zoomStep = capabilities.zoom.step || 0.2;
-      const settings = clarityTrack.getSettings ? clarityTrack.getSettings() : {};
-      zoomValue = settings.zoom || zoomMin;
-    }
-
-    async function changeZoom(delta) {
-      if (!clarityTrack || zoomValue === null || zoomMin === null || zoomMax === null) return;
-      zoomValue = Math.max(zoomMin, Math.min(zoomMax, zoomValue + delta));
-      try { await clarityTrack.applyConstraints({ advanced: [{ zoom: zoomValue }] }); }
-      catch (err) { console.warn('Zoom change failed:', err); }
-    }
-
-
-    function stopClarityCameraProbe() {
-      stopAutoFocusRetrigger();
-      if (clarityStream) { clarityStream.getTracks().forEach(track => track.stop()); }
-      clarityStream = null; clarityTrack = null;
-      zoomValue = null; zoomMin = null; zoomMax = null;
-
-      
-    }
-
-
-
-
-    // ── Create a visual wall anchor at gaze point ──────────────────
-    function createWallAnchor() {
-      camera.getWorldPosition(tmpOrigin);
-      camera.getWorldDirection(tmpDirection);
-
-      // Cast ray 1.5m forward — place anchor there on the wall
-      const anchorPos = tmpOrigin.clone().addScaledVector(tmpDirection, 1.5);
-
-      const group = new THREE.Group();
-      group.position.copy(anchorPos);
-      group.lookAt(tmpOrigin); // face the user
-
-      // Outer ring
-      const ring = new THREE.Mesh(
-        new THREE.RingGeometry(0.06, 0.075, 32),
-        new THREE.MeshBasicMaterial({ color: 0xffd090, transparent: true, opacity: 0.85, side: THREE.DoubleSide })
-      );
-      group.add(ring);
-
-      // Center dot
-      const dot = new THREE.Mesh(
-        new THREE.CircleGeometry(0.018, 32),
-        new THREE.MeshBasicMaterial({ color: 0xffeebb, transparent: true, opacity: 0.95, side: THREE.DoubleSide })
-      );
-      dot.position.z = 0.001;
-      group.add(dot);
-
-      // Cross lines
-      const crossMat = new THREE.LineBasicMaterial({ color: 0xffd090, transparent: true, opacity: 0.6 });
-      const hGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-0.05,0,0), new THREE.Vector3(0.05,0,0)]);
-      const vGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,-0.05,0), new THREE.Vector3(0,0.05,0)]);
-      group.add(new THREE.Line(hGeo, crossMat));
-      group.add(new THREE.Line(vGeo, crossMat));
-
-      group.userData.isAnchor = true;
-      group.userData.snapRadius = 0.35; // how close panel needs to be to snap
-      scene.add(group);
-      wallAnchors.push(group);
-
-      // Pulse animation data
-      group.userData.spawnTime = Date.now();
-
-      return group;
-    }
-
-    // ── Check if panel is near any anchor, snap if so ───────────────
-    function checkAnchorSnap(panel) {
-      for (const anchor of wallAnchors) {
-        const dist = panel.position.distanceTo(anchor.position);
-        if (dist < anchor.userData.snapRadius) {
-          // Snap panel to anchor position and face user
-          panel.position.copy(anchor.position);
-          panel.lookAt(camera.position);
-          panel.userData.snappedToAnchor = anchor;
-          return true;
-        }
-      }
-      panel.userData.snappedToAnchor = null;
-      return false;
-    }
-
-    function spawnDeleteBtn() {
-      if (deleteBtn) return;
-
-      // Place X button 0.8m in front of camera, at eye level
-      camera.getWorldPosition(tmpOrigin);
-      camera.getWorldDirection(tmpDirection);
-      const pos = tmpOrigin.clone().addScaledVector(tmpDirection, 0.8);
-      pos.y = tmpOrigin.y; // keep at eye level
-
-      const group = new THREE.Group();
-      group.position.copy(pos);
-      group.lookAt(tmpOrigin);
-
-      // Circle background
-      const circleMat = new THREE.MeshBasicMaterial({ color: 0x220000, transparent: true, opacity: 0.82, side: THREE.DoubleSide });
-      const circle = new THREE.Mesh(new THREE.CircleGeometry(0.10, 40), circleMat);
-      group.add(circle);
-
-      // Ring border
-      const ring = new THREE.Mesh(
-        new THREE.RingGeometry(0.095, 0.108, 40),
-        new THREE.MeshBasicMaterial({ color: 0xff3333, transparent: true, opacity: 0.9, side: THREE.DoubleSide })
-      );
-      ring.position.z = 0.001;
-      group.add(ring);
-
-      // X — two rotated rectangles
-      const barMat = new THREE.MeshBasicMaterial({ color: 0xff4444, side: THREE.DoubleSide });
-      const bar1 = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.022), barMat);
-      bar1.rotation.z = Math.PI / 4;
-      bar1.position.z = 0.002;
-      group.add(bar1);
-      const bar2 = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.022), barMat);
-      bar2.rotation.z = -Math.PI / 4;
-      bar2.position.z = 0.002;
-      group.add(bar2);
-
-      group.userData.isDeleteBtn = true;
-      group.userData.spawnTime = Date.now();
-      deleteBtn = group;
-      deleteBtnVisible = true;
-      scene.add(deleteBtn);
-    }
-
-    function removeDeleteBtn() {
-      if (deleteBtn) { scene.remove(deleteBtn); deleteBtn = null; }
-      deleteBtnVisible = false;
-    }
-
-    function checkDeleteSnap(panel) {
-      if (!deleteBtn || !deleteBtnVisible) return false;
-      const dist = panel.position.distanceTo(deleteBtn.position);
-      if (dist < DELETE_SNAP_DIST) {
-        // Delete the panel and restore its icon
-        const icon = panel.userData.iconRef;
-        if (icon) {
-          icon.visible = true;
-          icon.userData.openPanel = null;
-        }
-        // Stop weather timer if any
-        if (panel.userData.weatherTimer) clearInterval(panel.userData.weatherTimer);
-        // Remove from scene and panels array
-        scene.remove(panel);
-        const idx = panels.indexOf(panel);
-        if (idx > -1) panels.splice(idx, 1);
-        if (activePanel === panel) activePanel = null;
-        removeDeleteBtn();
-        return true;
-      }
-      return false;
-    }
-
-    function spawnIconInAir() {
-      if (hasInitialIconSpawned) return;
-      if (groundYEstimate === null) return;
-      hasInitialIconSpawned = true;
-
-      camera.getWorldDirection(tmpForward);
-      tmpForward.y = 0;
-      if (tmpForward.lengthSq() < 1e-6) tmpForward.set(0, 0, -1);
-      else tmpForward.normalize();
-      camera.getWorldPosition(tmpCamPos);
-
-      // Right vector perpendicular to forward, in XZ plane
-      tmpRight.crossVectors(tmpForward, new THREE.Vector3(0, 1, 0)).normalize();
-
-      const base = tmpCamPos.clone().addScaledVector(tmpForward, ICON_FORWARD_DISTANCE);
-      base.y = groundYEstimate + ICON_HEIGHT_ABOVE_GROUND;
-
-      // icon1 = clock, offset left
-      const icon1 = makeIcon('icon1.png', 'clock');
-      icon1.position.copy(base).addScaledVector(tmpRight, -0.28);
-      icon1.lookAt(tmpCamPos);
-      icon1.userData._baseY = icon1.position.y;
-      scene.add(icon1); panels.push(icon1);
-
-      // icon2 = air draw, offset right
-      const icon2 = makeIcon('icon2.webp', 'draw');
-      icon2.position.copy(base).addScaledVector(tmpRight, 0);
-      icon2.lookAt(tmpCamPos);
-      icon2.userData._baseY = icon2.position.y;
-      drawModeIconPos = icon2.position.clone();
-      scene.add(icon2); panels.push(icon2);
-
-      // icon3 = keyboard, further right
-      const icon3 = makeIcon('icon3.png', 'stock');
-      icon3.position.copy(base).addScaledVector(tmpRight, 0.28);
-      icon3.lookAt(tmpCamPos);
-      icon3.userData._baseY = icon3.position.y;
-      scene.add(icon3); panels.push(icon3);
-    }
-
-    function updateHandDisplay(handCount, twoHandDistance) {
-      handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
-      
-
-      if (!handLandmarks || handCount === 0) {
-        
-        lastPinch = false; isResizing = false; lastTwoHandDistance = null;
-        if (pointerEnabled) pointerCtx.clearRect(0, 0, pointerCanvas.width, pointerCanvas.height);
-        return;
-      }
-
-      if (drawMode) { handleDrawMode(); return; }
-      if (handCount === 2 && twoHandDistance) { handleTwoHandResize(twoHandDistance); return; }
-      if (handCount === 1) { handleSingleHandPinch(); }
-    }
-
-    function handleTwoHandResize(currentDistance) {
-      // Check if both hands are pinching (very small distance between index tips)
-      const hands = Array.isArray(handLandmarks[0]) ? handLandmarks : [handLandmarks];
-      let bothPinching = false;
-      if (hands.length >= 2) {
-        const h1 = hands[0], h2 = hands[1];
-        const p1 = Math.hypot((h1[4].x-h1[8].x)*handCanvas.width, (h1[4].y-h1[8].y)*handCanvas.height);
-        const p2 = Math.hypot((h2[4].x-h2[8].x)*handCanvas.width, (h2[4].y-h2[8].y)*handCanvas.height);
-        bothPinching = p1 < 50 && p2 < 50;
-      }
-
-      if (bothPinching) {
-        // If gazing at keyboard, do nothing (keyboard is not movable)
-        if (hoveredObject && hoveredObject.userData.isKeyboardPanel) {
-          // blocked
-          lastPinch = false;
-          // do nothing - keyboard not movable
-        } else {
-          if (!deleteBtnVisible) spawnDeleteBtn();
-        }
-      } else {
-        if (deleteBtnVisible) removeDeleteBtn();
-        // Release keyboard if we were moving it
-        if (activePanel && activePanel.userData.isKeyboardPanel && isResizing === false) {
-          if (activePanel.userData.glassShell) {
-            activePanel.userData.glassShell.material.opacity = activePanel.userData.shellOpacity || 0.82;
-          }
-          activePanel.userData.selected = false;
-          activePanel = null;
-        }
-      }
-
-      // If activePanel is keyboard, move it with gaze instead of resize
-      if (activePanel && activePanel.userData.isKeyboardPanel) {
-        camera.getWorldPosition(tmpOrigin);
-        camera.getWorldDirection(tmpDirection);
-        const dist = Math.max(0.6, Math.min(2.0, activePanel.position.distanceTo(tmpOrigin)));
-        const target = tmpOrigin.clone().addScaledVector(tmpDirection, dist);
-        activePanel.position.copy(target); // instant
-        activePanel.lookAt(tmpOrigin);
-        activePanel.rotateX(THREE.MathUtils.degToRad(35));
-        return;
-      }
-
-      if (!isResizing && activePanel) {
-        isResizing = true; lastTwoHandDistance = currentDistance;
-        initialPanelScale = activePanel.scale.x; return;
-      }
-      if (isResizing && activePanel && lastTwoHandDistance) {
-        const scaleChange = currentDistance / lastTwoHandDistance;
-        const newScale = initialPanelScale * scaleChange;
-        const clampedScale = Math.max(0.5, Math.min(3.0, newScale));
-        activePanel.scale.setScalar(clampedScale);
-        
-      }
-      if (!activePanel) { isResizing = false; lastTwoHandDistance = null; }
-    }
-
-    function handleSingleHandPinch() {
-      if (isResizing) { isResizing = false; lastTwoHandDistance = null; }
-      const landmarks = Array.isArray(handLandmarks[0]) ? handLandmarks[0] : handLandmarks;
-      const thumb = landmarks[4]; const index = landmarks[8];
-      const thumbX = (thumb.x * handCanvas.width) + HAND_OFFSET_X;
-      const thumbY = (thumb.y * handCanvas.height) + HAND_OFFSET_Y;
-      const indexX = (index.x * handCanvas.width) + HAND_OFFSET_X;
-      const indexY = (index.y * handCanvas.height) + HAND_OFFSET_Y;
-      const dx = thumbX - indexX; const dy = thumbY - indexY;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      const isPinching = distance < 50;
-
-      // ── PINCH START — toggle panel lock on/off ──
-      if (isPinching && !lastPinch) {
-        // Key press
-        if (hoveredKey) {
-          pressKey(hoveredKey.userData.key, hoveredKey.userData.panelRef);
-          lastPinch = isPinching;
-          return;
-        }
-
-        const now = Date.now();
-        const isDoublePinch = (now - lastPinchTime) < DOUBLE_PINCH_MS;
-        lastPinchTime = now;
-
-        if (isDoublePinch && !hoveredObject) {
-          createWallAnchor();
-        } else {
-          const gazedAt = hoveredObject;
-          // If holding panel and pinch on empty = DROP
-          if (activePanel && !gazedAt) {
-            checkAnchorSnap(activePanel);
-            if (activePanel.userData.glassShell) activePanel.userData.glassShell.material.opacity = activePanel.userData.shellOpacity || 0.82;
-            activePanel.userData.selected = false;
-            activePanel.scale.setScalar(1);
-            activePanel = null;
-          } else if (gazedAt) {
-            if (gazedAt.userData.isCloseBtn) {
-              closePanel(gazedAt.userData.panelRef);
-            } else if (gazedAt.userData.isIcon && !gazedAt.userData.openPanel) {
-              openPanelForIcon(gazedAt);
-            } else if (gazedAt.userData.isPanel && !gazedAt.userData.notMovable) {
-              // Pinch on panel = pick up
-              if (activePanel) {
-                activePanel.userData.selected = false;
-                activePanel.scale.setScalar(1);
-                if (activePanel.userData.glassShell) activePanel.userData.glassShell.material.opacity = activePanel.userData.shellOpacity || 0.82;
-              }
-              activePanel = gazedAt;
-              activePanel.userData.selected = true;
-              activePanel.scale.setScalar(1.06);
-              if (activePanel.userData.glassShell) activePanel.userData.glassShell.material.opacity = 0.30;
-            }
-          }
-        }
-      }
-
-
-
-      // Panel drops only on second pinch on panel (handled above)
-
-      lastPinch = isPinching;
-    }
-
-    function init() {
-      scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.01, 20);
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_RENDER_PIXEL_RATIO));
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.outputColorSpace = THREE.SRGBColorSpace;
-      renderer.xr.enabled = true;
-      renderer.xr.setFramebufferScaleFactor(XR_FRAMEBUFFER_SCALE);
-      renderer.xr.addEventListener('sessionstart', () => {
-        startClarityCameraProbe();
-        const b = document.getElementById('ARButton');
-        if (b) b.style.display = 'none';
-      });
-      renderer.xr.addEventListener('sessionend', () => {
-        stopClarityCameraProbe();
-        const b = document.getElementById('ARButton');
-        if (b) b.style.display = '';
-      });
-      document.body.appendChild(renderer.domElement);
-
-      const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
-      scene.add(light);
-
-      // Original reticle — simple white ring on the floor
-      reticle = new THREE.Mesh(
-        new THREE.RingGeometry(0.06, 0.075, 32).rotateX(-Math.PI / 2),
-        new THREE.MeshBasicMaterial({ color: 0x6b6b6b, transparent: true, opacity: 0.55, side: THREE.DoubleSide })
-      );
-      reticle.matrixAutoUpdate = false;
-      reticle.visible = false;
-      scene.add(reticle);
-
-      controller = renderer.xr.getController(0);
-      controller.addEventListener("select", onSelect);
-      scene.add(controller);
-
-      renderer.domElement.addEventListener("click", onCanvasClick);
-
-      // Use Three.js ARButton — proven to work with WebXR
-      const arBtn = ARButton.createButton(renderer, {
-        optionalFeatures: ['hit-test', 'dom-overlay'],
-        domOverlay: { root: document.body }
-      });
-      arBtn.id = 'ARButton';
-      // Apply our glassy styling after creation
-      const applyBtnStyle = () => {
-        Object.assign(arBtn.style, {
-          border: '3px solid hsla(0,0%,100%,0.35)',
-          background: 'hsla(0,0%,42%,0.55)',
-          backdropFilter: 'blur(6px)',
-          boxShadow: 'inset 0 0 10px 2px hsla(0,0%,100%,0.7), 0 0 28px 6px hsla(0,0%,100%,0.22), 0 6px 32px rgba(0,0,0,0.4)',
-          color: '#fff',
-          borderRadius: '0.65em',
-          font: '700 15px system-ui, sans-serif',
-          letterSpacing: '0.05em',
-          padding: '14px 28px',
-          cursor: 'pointer',
-          position: 'fixed',
-          bottom: '24px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: '50',
-          textTransform: 'uppercase'
-        });
-      };
-      applyBtnStyle();
-      document.body.appendChild(arBtn);
-      window.addEventListener("resize", onWindowResize);
-    }
-
-    function onSelect() {
-      // If gazing at a key on keyboard, press it
-      if (hoveredKey) {
-        pressKey(hoveredKey.userData.key, hoveredKey.userData.panelRef);
-        return;
-      }
-      const hitPanel = getPanelUnderGaze();
-      // Drop if holding
-      if (activePanel) {
-        activePanel.userData.selected = false;
-        activePanel.scale.setScalar(1);
-        if (activePanel.userData.glassShell) activePanel.userData.glassShell.material.opacity = activePanel.userData.shellOpacity || 0.82;
-        activePanel = null;
-        return;
-      }
-      // Pick up only if movable
-      if (hitPanel && !hitPanel.userData.notMovable) {
-        activePanel = hitPanel;
-        activePanel.userData.selected = true;
-        activePanel.scale.setScalar(1.06);
-        if (activePanel.userData.glassShell) activePanel.userData.glassShell.material.opacity = 0.30;
-      }
-    }
-
-    function onCanvasClick() {
-      // Key press on tap
-      if (hoveredKey) {
-        pressKey(hoveredKey.userData.key, hoveredKey.userData.panelRef);
-        return;
-      }
-      const hitIcon = getIconUnderGaze();
-      if (hitIcon) { openPanelForIcon(hitIcon); return; }
-      // Drop panel on tap on empty
-      if (activePanel) {
-        activePanel.userData.selected = false;
-        activePanel.scale.setScalar(1);
-        if (activePanel.userData.glassShell) activePanel.userData.glassShell.material.opacity = activePanel.userData.shellOpacity || 0.82;
-        activePanel = null;
-        return;
-      }
-    }
-
-    function getPanelUnderGaze() {
-      if (panels.length === 0) return null;
-      camera.getWorldPosition(tmpOrigin);
-      camera.getWorldDirection(tmpDirection);
-      raycaster.set(tmpOrigin, tmpDirection);
-      const hits = raycaster.intersectObjects(panels, true);
-      if (!hits.length) return null;
-      let candidate = hits[0].object;
-      while (candidate && !candidate.userData.isPanel) { candidate = candidate.parent; }
-      return candidate;
-    }
-
-    function getIconUnderGaze() {
-      if (panels.length === 0) return null;
-      camera.getWorldPosition(tmpOrigin);
-      camera.getWorldDirection(tmpDirection);
-      raycaster.set(tmpOrigin, tmpDirection);
-      const allIcons = [];
-      panels.forEach(panel => { if (panel.userData.isIcon) allIcons.push(panel); });
-      const hits = raycaster.intersectObjects(allIcons, true);
-      return hits.length > 0 ? hits[0].object.parent || hits[0].object : null;
-    }
-
-    // ── Icon factory: accepts filename + type ('clock' | 'weather') ──────
-    function makeIcon(filename, type) {
-      const group = new THREE.Group();
-      group.userData = { isIcon: true, isPanel: false, iconType: type, hoverTime: 0 };
-
-      // Pure image — no background, no disc, no ring
-      new THREE.TextureLoader().load(filename, tex => {
-        tex.colorSpace = THREE.SRGBColorSpace;
-        tex.minFilter = THREE.LinearMipmapLinearFilter;
-        tex.magFilter = THREE.LinearFilter;
-        tex.generateMipmaps = true;
-        tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-        const aspect = (tex.image.width || 1) / (tex.image.height || 1);
-        // 20cm tall in world space so it's clearly visible at 1m
-        const h = 0.20, w = h * aspect;
-        const m = new THREE.Mesh(
-          new THREE.PlaneGeometry(w, h),
-          new THREE.MeshBasicMaterial({
-            map: tex, transparent: true,
-            depthWrite: false, side: THREE.DoubleSide
-          })
-        );
-        group.add(m); group.userData.iconMesh = m;
-      }, undefined, () => {
-        // Fallback: small coloured dot if image fails to load
-        const fb = new THREE.Mesh(
-          new THREE.CircleGeometry(0.08, 32),
-          new THREE.MeshBasicMaterial({
-            color: type === 'clock' ? 0x3366ff : 0x22aacc,
-            transparent: true, opacity: 0.85
-          })
-        );
-        group.add(fb);
-      });
-
-      return group;
-    }
-
-    // ── Open the correct panel to the SIDE of the icon ────────────────
-    function openPanelForIcon(icon) {
-      if (icon.userData.openPanel) return;
-      const type = icon.userData.iconType;
-
-      // Draw mode icon
-      if (type === 'draw') {
-        enterDrawMode(icon);
-        return;
-      }
-
-      if (type === 'stock') {
-        // Spawn keyboard in stock-search mode
-        typedText = '';
-        const panel = makeKeyboardPanel();
-        panel.userData.isStockKeyboard = true;
-        panel.userData.notMovable = true;
-        camera.getWorldPosition(tmpOrigin);
-        camera.getWorldDirection(tmpDirection);
-        panel.position.copy(tmpOrigin).addScaledVector(tmpDirection, 0.85);
-        panel.position.y = tmpOrigin.y - 0.18;
-        panel.lookAt(tmpOrigin);
-        panel.rotateX(THREE.MathUtils.degToRad(35));
-        panel.userData.baseZ = panel.position.z;
-        stockKeyboardIcon = icon;
-        scene.add(panel); panels.push(panel);
-        icon.visible = false;
-        icon.userData.openPanel = panel;
-        panel.userData.iconRef = icon;
-        // Show prompt
-        typedText = '';
-        if (panel.userData.drawKeyboard) panel.userData.drawKeyboard(null);
-        return;
-      }
-
-      if (type === 'keyboard') {
-        const panel = makeKeyboardPanel();
-        panel.userData.notMovable = true;
-        camera.getWorldPosition(tmpOrigin);
-        camera.getWorldDirection(tmpDirection);
-        panel.position.copy(tmpOrigin).addScaledVector(tmpDirection, 0.85);
-        panel.position.y = tmpOrigin.y - 0.18;
-        panel.lookAt(tmpOrigin); // 90° = straight vertical facing user
-        panel.userData.baseZ = panel.position.z;
-        scene.add(panel); panels.push(panel);
-        icon.visible = false;
-        icon.userData.openPanel = panel;
-        panel.userData.iconRef = icon;
-        return;
-      }
-      const panel = type === 'clock' ? makeClockPanel() : makeWeatherPanel();
-
-      // Spawn panel 0.82m to the right of the icon (in icon's local space)
-      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(icon.quaternion);
-      panel.position.copy(icon.position).addScaledVector(right, 0.82);
-      if (type === 'clock') {
-        panel.rotation.set(0, 0, 0);
-      } else {
-        panel.quaternion.copy(icon.quaternion);
-      }
-      panel.userData.baseZ = panel.position.z;
-
-      scene.add(panel); panels.push(panel);
-      icon.visible = false;
-      icon.userData.openPanel = panel;
-      panel.userData.iconRef = icon;
-    }
-
-    // ── Air Drawing ─────────────────────────────────────────────────
-    // ── Color Palette (DOM overlay near left palm) ──────────────────
-    const PALETTE_COLORS = [
-      '#ffffff','#ff3333','#ff9900','#ffee00',
-      '#33ff66','#33ccff','#aa44ff','#ff44aa',
-      '#aaaaaa','#442200'
-    ];
-
-    function createColorPalette() {
-      if (colorPaletteEl) return;
-      colorPaletteEl = document.createElement('div');
-      colorPaletteEl.id = 'colorPalette';
-      Object.assign(colorPaletteEl.style, {
-        position: 'fixed',
-        display: 'none',
-        flexWrap: 'wrap',
-        gap: '10px',
-        padding: '14px',
-        borderRadius: '1em',
-        border: '2px solid hsla(0,0%,100%,0.3)',
-        background: 'hsla(0,0%,10%,0.75)',
-        backdropFilter: 'blur(12px)',
-        boxShadow: 'inset 0 0 8px 1px hsla(0,0%,100%,0.4)',
-        width: '180px',
-        zIndex: '100',
-        pointerEvents: 'none'
-      });
-      PALETTE_COLORS.forEach(col => {
-        const dot = document.createElement('div');
-        Object.assign(dot.style, {
-          width: '32px', height: '32px',
-          borderRadius: '50%',
-          background: col,
-          border: '2px solid rgba(255,255,255,0.25)',
-          transition: 'transform 0.15s, border-color 0.15s',
-          flexShrink: '0'
-        });
-        dot.dataset.color = col;
-        colorPaletteEl.appendChild(dot);
-      });
-      // Thickness slider row
-      const sliderWrap = document.createElement('div');
-      Object.assign(sliderWrap.style, {
-        width: '100%', marginTop: '8px', position: 'relative',
-        display: 'flex', flexDirection: 'column', gap: '4px'
-      });
-
-      const sliderLabel = document.createElement('div');
-      sliderLabel.id = 'thicknessLabel';
-      Object.assign(sliderLabel.style, {
-        color: 'rgba(255,255,255,0.6)', fontSize: '11px',
-        fontFamily: 'system-ui', textAlign: 'center'
-      });
-      sliderLabel.textContent = 'THICKNESS';
-
-      const sliderTrack = document.createElement('div');
-      sliderTrack.id = 'thicknessTrack';
-      Object.assign(sliderTrack.style, {
-        width: '100%', height: '8px', borderRadius: '4px',
-        background: 'rgba(255,255,255,0.15)',
-        position: 'relative', cursor: 'pointer'
-      });
-
-      const sliderFill = document.createElement('div');
-      sliderFill.id = 'thicknessFill';
-      Object.assign(sliderFill.style, {
-        height: '100%', borderRadius: '4px',
-        background: 'rgba(255,255,255,0.7)',
-        width: '30%', transition: 'width 0.1s'
-      });
-
-      const sliderThumb = document.createElement('div');
-      sliderThumb.id = 'thicknessThumb';
-      Object.assign(sliderThumb.style, {
-        position: 'absolute', top: '50%',
-        transform: 'translate(-50%,-50%)',
-        width: '18px', height: '18px',
-        borderRadius: '50%', background: '#fff',
-        border: '2px solid rgba(255,255,255,0.5)',
-        left: '30%', transition: 'left 0.1s'
-      });
-
-      sliderTrack.appendChild(sliderFill);
-      sliderTrack.appendChild(sliderThumb);
-      sliderWrap.appendChild(sliderLabel);
-      sliderWrap.appendChild(sliderTrack);
-      colorPaletteEl.appendChild(sliderWrap);
-      document.body.appendChild(colorPaletteEl);
-    }
-
-    function showColorPalette(screenX, screenY) {
-      if (!colorPaletteEl) createColorPalette();
-      colorPaletteEl.style.display = 'flex';
-      colorPaletteEl.style.left = Math.min(screenX, window.innerWidth - 210) + 'px';
-      colorPaletteEl.style.top  = Math.min(screenY, window.innerHeight - 180) + 'px';
-      colorPaletteVisible = true;
-      highlightSelectedColor();
-    }
-
-    function hideColorPalette() {
-      if (colorPaletteEl) colorPaletteEl.style.display = 'none';
-      colorPaletteVisible = false;
-    }
-
-    function updateThicknessSlider() {
-      const fill = document.getElementById('thicknessFill');
-      const thumb = document.getElementById('thicknessThumb');
-      if (!fill || !thumb) return;
-      const pct = ((strokeRadius - 0.002) / (0.018 - 0.002)) * 100;
-      fill.style.width = pct + '%';
-      thumb.style.left = pct + '%';
-    }
-
-    function highlightSelectedColor() {
-      if (!colorPaletteEl) return;
-      colorPaletteEl.querySelectorAll('div[data-color]').forEach(dot => {
-        const isSelected = dot.dataset.color === drawColor;
-        dot.style.border = isSelected ? '3px solid #fff' : '2px solid rgba(255,255,255,0.25)';
-        dot.style.transform = isSelected ? 'scale(1.25)' : 'scale(1)';
-      });
-    }
-
-    function highlightColorWithGaze() {
-      if (!colorPaletteEl || !colorPaletteVisible) return;
-      const cx = window.innerWidth / 2;
-      const cy = window.innerHeight / 2;
-      let closest = null, closestDist = 60;
-      colorPaletteEl.querySelectorAll('div[data-color]').forEach(dot => {
-        const r = dot.getBoundingClientRect();
-        const dist = Math.hypot(cx - (r.left + r.width/2), cy - (r.top + r.height/2));
-        if (dist < closestDist) { closestDist = dist; closest = dot; }
-        // Reset non-selected, non-hovered
-        if (dot.dataset.color !== drawColor) {
-          dot.style.transform = 'scale(1)';
-          dot.style.border = '2px solid rgba(255,255,255,0.25)';
-        }
-      });
-      if (closest && closest.dataset.color !== drawColor) {
-        closest.style.transform = 'scale(1.3)';
-        closest.style.border = '2px solid rgba(255,255,255,0.8)';
-      }
-    }
-
-    function pickColorWithGaze() {
-      if (!colorPaletteEl || !colorPaletteVisible) return;
-      const cx = window.innerWidth / 2;
-      const cy = window.innerHeight / 2;
-      let closest = null, closestDist = 60;
-      colorPaletteEl.querySelectorAll('div[data-color]').forEach(dot => {
-        const r = dot.getBoundingClientRect();
-        const dist = Math.hypot(cx - (r.left + r.width/2), cy - (r.top + r.height/2));
-        if (dist < closestDist) { closestDist = dist; closest = dot; }
-      });
-      if (closest) {
-        drawColor = closest.dataset.color;
-        highlightSelectedColor();
-      }
-    }
-
-    function enterDrawMode(icon) {
-      drawMode = true;
-      icon.visible = false;
-      icon.userData.openPanel = true; // prevent re-open
-      // Show hint
-      showDrawHint(true);
-    }
-
-    function exitDrawMode() {
-      drawMode = false;
-      isDrawing = false;
-      lastDrawPoint = null;
-      drawLastPinch = false;
-      drawPinchStartTime = 0;
-      drawPinchCount = 0;
-      drawPinchMoved = false;
-      hideColorPalette();
-      showDrawHint(false);
-      // Unhide icon2
-      panels.forEach(p => {
-        if (p.userData.iconType === 'draw') {
-          p.visible = true;
-          p.userData.openPanel = false;
-        }
-      });
-    }
-
-    function showDrawHint(show) {
-      let hint = document.getElementById('drawHint');
-      if (!hint) {
-        hint = document.createElement('div');
-        hint.id = 'drawHint';
-        Object.assign(hint.style, {
-          position: 'fixed', bottom: '100px', left: '50%',
-          transform: 'translateX(-50%)',
-          background: 'hsla(0,0%,100%,0.2)',
-          border: '1px solid hsla(0,0%,100%,0.35)',
-          backdropFilter: 'blur(12px)',
-          color: '#fff', padding: '10px 20px',
-          borderRadius: '999px', fontSize: '13px',
-          fontFamily: 'system-ui', zIndex: '30',
-          boxShadow: 'inset 0 0 8px 1px hsla(0,0%,100%,0.4)',
-          pointerEvents: 'none'
-        });
-        document.body.appendChild(hint);
-      }
-      hint.textContent = '✏️ Pinch = draw · Double pinch = colors · Hold pinch 1.5s = exit';
-      hint.style.display = show ? 'block' : 'none';
-    }
-
-    let rightPalmFrames = 0;
-    let leftPalmFrames2 = 0;
-    function isOpenPalm(landmarks, side) {
-      // Finger tip y < knuckle y (in image space, smaller y = higher up = extended)
-      const tips  = [landmarks[8],  landmarks[12], landmarks[16], landmarks[20]];
-      const knuck = [landmarks[6],  landmarks[10], landmarks[14], landmarks[18]];
-      let extended = 0;
-      for (let i = 0; i < 4; i++) {
-        if (tips[i].y < knuck[i].y) extended++;
-      }
-      // Also check thumb spread
-      const thumbTip = landmarks[4];
-      const indexBase = landmarks[5];
-      const thumbSpread = Math.abs(thumbTip.x - indexBase.x) > 0.07;
-      const isOpen = extended >= 3 && thumbSpread;
-      if (side === 'left') {
-        leftPalmFrames2 = isOpen ? leftPalmFrames2 + 1 : 0;
-        return leftPalmFrames2 > 5;
-      } else {
-        rightPalmFrames = isOpen ? rightPalmFrames + 1 : 0;
-        return rightPalmFrames > 8;
-      }
-    }
-
-    function handleDrawMode() {
-      if (!handLandmarks) return;
-      const hands = Array.isArray(handLandmarks[0]) ? handLandmarks : [handLandmarks];
-      const lm = hands[0];
-      if (!lm || lm.length < 21) return;
-
-      const thumb = lm[4], index = lm[8];
-      const dx = (thumb.x - index.x) * handCanvas.width;
-      const dy = (thumb.y - index.y) * handCanvas.height;
-      const pinching = Math.sqrt(dx*dx + dy*dy) < 50;
-
-      const now = Date.now();
-
-      if (pinching && !drawLastPinch) {
-        // Pinch start
-        drawPinchStartTime = now;
-        drawPinchMoved = false; // reset movement flag
-        drawPinchCount++;
-        if (drawPinchCountTimer) clearTimeout(drawPinchCountTimer);
-        drawPinchCountTimer = setTimeout(() => {
-          if (drawPinchCount === 2) {
-            // Double pinch = toggle palette
-            if (colorPaletteVisible) {
-              hideColorPalette();
-            } else {
-              showColorPalette(window.innerWidth / 2 - 90, window.innerHeight / 2 - 220);
-              highlightColorWithGaze();
-              updateThicknessSlider();
-            }
-          }
-          drawPinchCount = 0;
-        }, 400);
-      }
-
-      if (pinching) {
-        // Track if finger moved while pinching
-        const nx2 = index.x * 2 - 1;
-        const ny2 = -(index.y * 2 - 1);
-        if (drawLastPinchX !== undefined) {
-          const moved = Math.hypot(nx2 - drawLastPinchX, ny2 - drawLastPinchY);
-          if (moved > 0.01) drawPinchMoved = true;
-        }
-        drawLastPinchX = nx2; drawLastPinchY = ny2;
-
-        // Hold pinch 1.5s WITHOUT moving = exit
-        if (drawPinchStartTime && !drawPinchMoved && (now - drawPinchStartTime) > 1500) {
-          exitDrawMode();
-          drawPinchStartTime = 0;
-          return;
-        }
-
-        // If palette visible, pick color on pinch start
-        if (colorPaletteVisible && !drawLastPinch) {
-          pickColorWithGaze();
-          drawLastPinch = pinching;
-          return;
-        }
-
-        // Draw only if palette not visible
-        if (!colorPaletteVisible) {
-          const nx = index.x * 2 - 1;
-          const ny = -(index.y * 2 - 1);
-          const ndc = new THREE.Vector3(nx, ny, 0.5);
-          ndc.unproject(camera);
-          camera.getWorldPosition(tmpOrigin);
-          const dir = ndc.sub(tmpOrigin).normalize();
-          const drawPoint = tmpOrigin.clone().addScaledVector(dir, 0.65);
-
-          if (!isDrawing) {
-            isDrawing = true;
-            currentStroke = [drawPoint.clone()];
-            lastDrawPoint = drawPoint.clone();
-          } else {
-            const dist = drawPoint.distanceTo(lastDrawPoint);
-            if (dist > DRAW_MIN_DIST) {
-              currentStroke.push(drawPoint.clone());
-              lastDrawPoint = drawPoint.clone();
-              rebuildCurrentStrokeLine();
-            }
-          }
-        }
-      } else {
-        if (isDrawing && currentStroke.length > 1) commitStroke();
-        isDrawing = false;
-        lastDrawPoint = null;
-        currentStroke = [];
-        drawPinchStartTime = 0;
-      }
-
-      drawLastPinch = pinching;
-    }
-
-    let currentStrokeLine = null;
-    function rebuildCurrentStrokeLine() {
-      if (currentStrokeLine) scene.remove(currentStrokeLine);
-      if (currentStroke.length < 2) return;
-      // Use tube geometry for thick visible strokes
-      const curve = new THREE.CatmullRomCurve3(currentStroke);
-      const segments = Math.max(currentStroke.length * 3, 20);
-      const geo = new THREE.TubeGeometry(curve, segments, strokeRadius, 8, false);
-      const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(drawColor), side: THREE.DoubleSide });
-      currentStrokeLine = new THREE.Mesh(geo, mat);
-      scene.add(currentStrokeLine);
-    }
-
-    function commitStroke() {
-      if (currentStrokeLine) {
-        drawnStrokes.push(currentStrokeLine);
-        currentStrokeLine = null;
-      }
-    }
-
-    // ── Shared: rounded rect THREE.Shape ─────────────────────────────
-    function makeRoundedRectShape(width, height, radius) {
-      const shape = new THREE.Shape();
-      const w = width, h = height, r = Math.min(radius, w * 0.5, h * 0.5);
-      shape.moveTo(-w/2+r, -h/2); shape.lineTo(w/2-r, -h/2);
-      shape.quadraticCurveTo(w/2, -h/2, w/2, -h/2+r);
-      shape.lineTo(w/2, h/2-r); shape.quadraticCurveTo(w/2, h/2, w/2-r, h/2);
-      shape.lineTo(-w/2+r, h/2); shape.quadraticCurveTo(-w/2, h/2, -w/2, h/2-r);
-      shape.lineTo(-w/2, -h/2+r); shape.quadraticCurveTo(-w/2, -h/2, -w/2+r, -h/2);
-      return shape;
-    }
-
-    // ── Shared: Vision Pro glass shell ────────────────────────────────
-    function makeGlassShell(w, h, r, tint, shellOpacity = 0.82) {
-      const shape = makeRoundedRectShape(w, h, r);
-      const geom = new THREE.ShapeGeometry(shape, 28);
-      const group = new THREE.Group();
-
-      // Exact AR button style: white 0.2 opacity base, blur = transmission
-      const shell = new THREE.Mesh(geom, new THREE.MeshPhysicalMaterial({
-        color: 0x9a9a9a, transparent: true, opacity: shellOpacity,
-        transmission: 0.15, roughness: 0.45, metalness: 0,
-        clearcoat: 1.0, clearcoatRoughness: 0.35,
-        reflectivity: 0.5, ior: 1.45, thickness: 0.5,
-        side: THREE.DoubleSide
-      }));
-      group.add(shell);
-
-      // Inset glow — bright edges like CSS inset box-shadow
-      const glowCvs = document.createElement('canvas');
-      glowCvs.width = glowCvs.height = 512;
-      const glowCtx = glowCvs.getContext('2d');
-      const insetGrad = glowCtx.createRadialGradient(256,256,140, 256,256,256);
-      insetGrad.addColorStop(0, 'rgba(255,255,255,0)');
-      insetGrad.addColorStop(0.70, 'rgba(255,255,255,0.06)');
-      insetGrad.addColorStop(1, 'rgba(255,255,255,0.72)');
-      glowCtx.fillStyle = insetGrad; glowCtx.fillRect(0,0,512,512);
-      const glowMesh = new THREE.Mesh(new THREE.ShapeGeometry(shape, 28),
-        new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(glowCvs), transparent: true, opacity: 1 }));
-      glowMesh.position.z = 0.001; group.add(glowMesh);
-
-      // Outer glow plane — slightly larger, white halo behind the panel
-      const outerGlowCvs = document.createElement('canvas');
-      outerGlowCvs.width = outerGlowCvs.height = 512;
-      const ogCtx = outerGlowCvs.getContext('2d');
-      const ogGrad = ogCtx.createRadialGradient(256,256,180, 256,256,256);
-      ogGrad.addColorStop(0, 'rgba(255,255,255,0)');
-      ogGrad.addColorStop(0.6, 'rgba(255,255,255,0.06)');
-      ogGrad.addColorStop(1, 'rgba(255,255,255,0.28)');
-      ogCtx.fillStyle = ogGrad; ogCtx.fillRect(0,0,512,512);
-      const outerGlowMesh = new THREE.Mesh(
-        new THREE.ShapeGeometry(makeRoundedRectShape(w * 1.06, h * 1.06, r * 1.1), 28),
-        new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(outerGlowCvs), transparent: true, opacity: 0.9, depthWrite: false })
-      );
-      outerGlowMesh.position.z = -0.005; group.add(outerGlowMesh);
-
-      // Border — matches: 3px solid hsla(0,0%,100%,0.35)
-      const border = new THREE.LineSegments(
-        new THREE.EdgesGeometry(geom),
-        new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 })
-      );
-      group.add(border);
-
-      // Drop shadow
-      const shadowMesh = new THREE.Mesh(new THREE.ShapeGeometry(shape, 28),
-        new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.18, depthWrite: false }));
-      shadowMesh.position.set(0.013, -0.02, -0.002); group.add(shadowMesh);
-
-      // Hover edge glow — brightens border on gaze
-      const hoverGlow = new THREE.LineSegments(
-        new THREE.EdgesGeometry(geom),
-        new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 })
-      );
-      hoverGlow.position.z = 0.006; group.add(hoverGlow);
-
-      group.userData.isPanel = true; group.userData.hoverTime = 0;
-      group.userData.shellOpacity = shellOpacity;
-      group.userData.glassShell = shell;
-      group.userData.innerBorder = border;
-      group.userData.shadowMesh = shadowMesh;
-      group.userData.hoverGlow = hoverGlow;
-      return { group, shape };
-    }
-
-    // ── Canvas texture helper ─────────────────────────────────────────
-    function makeCanvasTex(w, h, drawFn) {
-      const cvs = document.createElement('canvas');
-      cvs.width = w; cvs.height = h;
-      const ctx = cvs.getContext('2d');
-      drawFn(ctx, cvs);
-      const tex = new THREE.CanvasTexture(cvs);
-      tex.minFilter = THREE.LinearMipmapLinearFilter;
-      tex.magFilter = THREE.LinearFilter;
-      tex.generateMipmaps = true;
-      tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-      return { tex, cvs, ctx };
-    }
-
-    function fillRR(ctx, x, y, w, h, r, fill) {
-      r = Math.min(r, w / 2, h / 2);
-      ctx.beginPath();
-      ctx.moveTo(x+r, y); ctx.lineTo(x+w-r, y);
-      ctx.quadraticCurveTo(x+w, y, x+w, y+r);
-      ctx.lineTo(x+w, y+h-r); ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
-      ctx.lineTo(x+r, y+h); ctx.quadraticCurveTo(x, y+h, x, y+h-r);
-      ctx.lineTo(x, y+r); ctx.quadraticCurveTo(x, y, x+r, y);
-      ctx.closePath();
-      if (fill) { ctx.fillStyle = fill; ctx.fill(); }
-    }
-
-
-    // ════════════════════════════════════════════════════════════════
-    //  KEYBOARD PANEL
-    // ════════════════════════════════════════════════════════════════
-    function makeKeyboardPanel() {
-      const KW = 0.72, KH = 0.36;
-      const group = new THREE.Group();
-      group.userData.isPanel = true;
-      group.userData.isKeyboardPanel = true;
-      group.userData.hoverTime = 0;
-      group.userData.keys = [];
-      typedText = '';
-
-      // Single large canvas for entire keyboard
-      const CVS_W = 1400, CVS_H = 660;
-      const cvs = document.createElement('canvas');
-      cvs.width = CVS_W; cvs.height = CVS_H;
-      const ctx = cvs.getContext('2d');
-      const tex = new THREE.CanvasTexture(cvs);
-
-      const kbMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(KW, KH),
-        new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide })
-      );
-      group.add(kbMesh);
-      group.userData.kbCtx = ctx;
-      group.userData.kbCvs = cvs;
-      group.userData.kbTex = tex;
-      group.userData.kbW = CVS_W;
-      group.userData.kbH = CVS_H;
-
-      // Key layout definition
-      const rows = [
-        ['Q','W','E','R','T','Y','U','I','O','P'],
-        ['A','S','D','F','G','H','J','K','L'],
-        ['⇧','Z','X','C','V','B','N','M','⌫'],
-        ['123','space','return']
-      ];
-
-      // Key sizes in canvas pixels
-      const KEY_H = 98;
-      const KEY_GAP = 10;
-      const PAD_X = 32;
-      const TOP_BAR = 110; // text preview bar height
-      const PAD_TOP = 16;
-
-      function getKeyW(k) {
-        if (k === 'space') return 320;
-        if (k === '123' || k === 'return') return 130;
-        return 104;
-      }
-
-      // Build key hit areas (normalized 0-1)
-      const keyHits = []; // {key, x0,y0,x1,y1} in canvas px
-
-      function drawKeyboard(highlightKey = null) {
-        ctx.clearRect(0, 0, CVS_W, CVS_H);
-
-        // Overall background - frosted dark glass
-        ctx.fillStyle = 'rgba(30,28,32,0.82)';
-        roundRectPath(ctx, 0, 0, CVS_W, CVS_H, 36);
-        ctx.fill();
-
-        // Subtle border
-        ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-        ctx.lineWidth = 2;
-        roundRectPath(ctx, 1, 1, CVS_W-2, CVS_H-2, 36);
-        ctx.stroke();
-
-        // Text preview bar
-        ctx.fillStyle = 'rgba(255,255,255,0.07)';
-        roundRectPath(ctx, PAD_X, PAD_TOP, CVS_W - PAD_X*2, TOP_BAR - PAD_TOP - 6, 14);
-        ctx.fill();
-        ctx.font = '300 46px system-ui';
-        ctx.fillStyle = typedText ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.28)';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        let txt = typedText || 'Text preview';
-        const maxW = CVS_W - PAD_X*2 - 40;
-        while (ctx.measureText(txt + '|').width > maxW && txt.length > 0) txt = txt.slice(1);
-        ctx.fillText(txt + (typedText ? '|' : ''), PAD_X + 18, TOP_BAR/2 + 2);
-
-        // Draw rows
-        keyHits.length = 0;
-        rows.forEach((row, ri) => {
-          let totalW = row.reduce((s, k) => s + getKeyW(k) + KEY_GAP, 0) - KEY_GAP;
-          let kx = (CVS_W - totalW) / 2;
-          const ky = TOP_BAR + PAD_TOP + ri * (KEY_H + KEY_GAP);
-
-          row.forEach(key => {
-            const kw = getKeyW(key);
-            const isHovered = key === highlightKey;
-            const isSpecial = key === '⇧' || key === '123' || key === 'return' || key === '⌫';
-
-            // Key fill
-            if (isHovered) {
-              ctx.fillStyle = 'rgba(255,255,255,0.85)';
-            } else if (isSpecial) {
-              ctx.fillStyle = 'rgba(80,78,86,0.70)';
-            } else {
-              ctx.fillStyle = 'rgba(110,108,118,0.60)';
-            }
-            roundRectPath(ctx, kx, ky, kw, KEY_H, 14);
-            ctx.fill();
-
-            // Subtle top highlight for 3D feel
-            if (!isHovered) {
-              const grad = ctx.createLinearGradient(kx, ky, kx, ky + KEY_H * 0.4);
-              grad.addColorStop(0, 'rgba(255,255,255,0.10)');
-              grad.addColorStop(1, 'rgba(255,255,255,0.00)');
-              ctx.fillStyle = grad;
-              roundRectPath(ctx, kx, ky, kw, KEY_H, 14);
-              ctx.fill();
-            }
-
-            // Key label
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            const fs = key.length > 4 ? 28 : key.length > 1 ? 32 : 44;
-            ctx.font = `${isSpecial ? '400' : '300'} ${fs}px system-ui`;
-            ctx.fillStyle = isHovered ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.92)';
-            ctx.fillText(key, kx + kw/2, ky + KEY_H/2 + 1);
-
-            keyHits.push({ key, x0: kx, y0: ky, x1: kx + kw, y1: ky + KEY_H });
-            kx += kw + KEY_GAP;
-          });
-        });
-
-        tex.needsUpdate = true;
-      }
-
-      function roundRectPath(c, x, y, w, h, r) {
-        c.beginPath();
-        c.moveTo(x+r, y);
-        c.lineTo(x+w-r, y);
-        c.quadraticCurveTo(x+w, y, x+w, y+r);
-        c.lineTo(x+w, y+h-r);
-        c.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
-        c.lineTo(x+r, y+h);
-        c.quadraticCurveTo(x, y+h, x, y+h-r);
-        c.lineTo(x, y+r);
-        c.quadraticCurveTo(x, y, x+r, y);
-        c.closePath();
-      }
-
-      group.userData.drawKeyboard = drawKeyboard;
-      group.userData.keyHits = keyHits;
-      group.userData.getKeyW = getKeyW;
-      group.userData.CVS_W = CVS_W;
-      group.userData.CVS_H = CVS_H;
-      group.userData.KW = KW;
-      group.userData.KH = KH;
-      group.userData.drawDisplay = () => drawKeyboard(group.userData.hoveredKeyName);
-      drawKeyboard();
-
-      // Invisible key hit meshes for raycasting
-      keyHits.forEach(hit => {
-        const kw3 = (hit.x1 - hit.x0) / CVS_W * KW;
-        const kh3 = (hit.y1 - hit.y0) / CVS_H * KH;
-        const cx3 = ((hit.x0 + hit.x1)/2 / CVS_W - 0.5) * KW;
-        const cy3 = (0.5 - (hit.y0 + hit.y1)/2 / CVS_H) * KH;
-        const hitMesh = new THREE.Mesh(
-          new THREE.PlaneGeometry(kw3, kh3),
-          new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })
-        );
-        hitMesh.position.set(cx3, cy3, 0.005);
-        hitMesh.userData.isKey = true;
-        hitMesh.userData.key = hit.key;
-        hitMesh.userData.keyMat = { color: { set: () => {} } }; // no-op, canvas handles highlight
-        hitMesh.userData.defaultColor = 0;
-        hitMesh.userData.panelRef = group;
-        group.add(hitMesh);
-        group.userData.keys.push(hitMesh);
-      });
-
-      return group;
-    }
-
-    function pressKey(key, panel) {
-      if (key === '⌫') {
-        typedText = typedText.slice(0, -1);
-      } else if (key === 'space') {
-        typedText += ' ';
-      } else if (key === 'return') {
-        if (panel.userData.isStockKeyboard && typedText.trim().length > 0) {
-          const symbol = typedText.trim().toUpperCase();
-          // Close keyboard, restore icon
-          scene.remove(panel);
-          const idx = panels.indexOf(panel);
-          if (idx > -1) panels.splice(idx, 1);
-          if (stockKeyboardIcon) {
-            stockKeyboardIcon.visible = true;
-            stockKeyboardIcon.userData.openPanel = null;
-          }
-          typedText = '';
-          spawnStockPanel(symbol);
-          return;
-        }
-        typedText += '\n';
-      } else if (key === '⇧' || key === '123') {
-        // toggle — future enhancement
-      } else {
-        typedText += key;
-      }
-      if (panel.userData.drawDisplay) panel.userData.drawDisplay();
-
-      // Flash - redraw without highlight briefly then restore
-      if (panel.userData.isKeyboardPanel && panel.userData.drawKeyboard) {
-        panel.userData.drawKeyboard(null);
-        setTimeout(() => {
-          if (panel.userData.drawKeyboard) panel.userData.drawKeyboard(panel.userData.hoveredKeyName || null);
-        }, 100);
-      } else {
-        const keys = panel.userData.keys || [];
-        const k = keys.find(k => k.userData.key === key);
-        if (k) {
-          k.userData.keyMat.color.set(0xffffff);
-          setTimeout(() => k.userData.keyMat.color.set(0x3a3a3a), 120);
-        }
-      }
-    }
-
-
-    // ════════════════════════════════════════════════════════════════
-    //  STOCK PANEL
-    // ════════════════════════════════════════════════════════════════
-    async function spawnStockPanel(symbol) {
-      // Spawn loading panel first
-      const panel = makeStockPanel(symbol, null);
-      camera.getWorldPosition(tmpOrigin);
-      camera.getWorldDirection(tmpDirection);
-      panel.position.copy(tmpOrigin).addScaledVector(tmpDirection, 1.0);
-      panel.position.y = tmpOrigin.y + 0.05;
-      panel.lookAt(tmpOrigin);
-      scene.add(panel); panels.push(panel);
-
-      try {
-        // Fetch candles from Finnhub - 1D resolution, last 60 trading days
-        const now = Math.floor(Date.now() / 1000);
-        const from = now - 60 * 24 * 3600; // 60 days back
-        const url = `https://finnhub.io/api/v1/stock/candle?symbol=${symbol}&resolution=D&from=${from}&to=${now}&token=${FINNHUB_KEY}`;
-        const res = await fetch(url);
-        const data = await res.json();
-
-        // Also fetch quote for current price
-        const qurl = `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB_KEY}`;
-        const qres = await fetch(qurl);
-        const quote = await qres.json();
-
-        if (data.s === 'no_data' || !data.c || data.c.length === 0) {
-          drawStockError(panel, symbol, 'No data found');
-          return;
-        }
-
-        drawStockChart(panel, symbol, data, quote);
-
-        // Auto-refresh every 60s
-        panel.userData.refreshTimer = setInterval(async () => {
-          try {
-            const r2 = await fetch(url);
-            const d2 = await r2.json();
-            const q2res = await fetch(qurl);
-            const q2 = await q2res.json();
-            if (d2.s !== 'no_data') drawStockChart(panel, symbol, d2, q2);
-          } catch(e) {}
-        }, 60000);
-
-      } catch(e) {
-        drawStockError(panel, symbol, 'Connection error');
-      }
-    }
-
-    function makeStockPanel(symbol, data) {
-      const SW = 1.10, SH = 0.70;
-      const group = new THREE.Group();
-      group.userData.isPanel = true;
-      group.userData.isStockPanel = true;
-      group.userData.hoverTime = 0;
-
-      // Dark glass background
-      const bgMat = new THREE.MeshBasicMaterial({ color: 0x060a0f, transparent: true, opacity: 0.94, side: THREE.DoubleSide });
-      const bg = new THREE.Mesh(new THREE.PlaneGeometry(SW, SH), bgMat);
-      group.add(bg);
-      group.userData.glassShell = bg;
-      group.userData.shellOpacity = 0.94;
-
-      // Subtle border
-      const border = new THREE.LineSegments(
-        new THREE.EdgesGeometry(new THREE.PlaneGeometry(SW, SH)),
-        new THREE.LineBasicMaterial({ color: 0x1a3a1a, transparent: true, opacity: 0.8 })
-      );
-      group.add(border);
-      group.userData.borderMat = border.material;
-
-      // Canvas for chart
-      const cvs = document.createElement('canvas');
-      cvs.width = 1100; cvs.height = 700;
-      const ctx = cvs.getContext('2d');
-      const tex = new THREE.CanvasTexture(cvs);
-      tex.minFilter = THREE.LinearFilter;
-      const mesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(SW - 0.04, SH - 0.04),
-        new THREE.MeshBasicMaterial({ map: tex, transparent: true })
-      );
-      mesh.position.z = 0.003;
-      group.add(mesh);
-      group.userData.chartCtx = ctx;
-      group.userData.chartCvs = cvs;
-      group.userData.chartTex = tex;
-
-      // Draw loading state
-      ctx.fillStyle = '#060a0f';
-      ctx.fillRect(0, 0, 1100, 700);
-      ctx.fillStyle = 'rgba(255,255,255,0.4)';
-      ctx.font = '500 48px system-ui';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(`Loading ${symbol}...`, 550, 350);
-      tex.needsUpdate = true;
-
-      return group;
-    }
-
-    function drawStockChart(panel, symbol, data, quote) {
-      const ctx = panel.userData.chartCtx;
-      const cvs = panel.userData.chartCvs;
-      const W = cvs.width, H = cvs.height;
-
-      // Use last 30 candles
-      const N = Math.min(30, data.c.length);
-      const opens  = data.o.slice(-N);
-      const highs  = data.h.slice(-N);
-      const lows   = data.l.slice(-N);
-      const closes = data.c.slice(-N);
-      const times  = data.t.slice(-N);
-
-      const currentPrice = quote.c || closes[closes.length-1];
-      const prevClose = quote.pc || opens[0];
-      const change = currentPrice - prevClose;
-      const changePct = (change / prevClose * 100);
-      const isUp = change >= 0;
-
-      // Background
-      ctx.fillStyle = '#060a0f';
-      ctx.fillRect(0, 0, W, H);
-
-      // Header
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '700 72px system-ui';
-      ctx.fillText(symbol, 40, 28);
-
-      // Current price
-      ctx.textAlign = 'right';
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '300 64px system-ui';
-      ctx.fillText('$' + currentPrice.toFixed(2), W - 40, 28);
-
-      // Change
-      ctx.font = '400 36px system-ui';
-      ctx.fillStyle = isUp ? '#26a69a' : '#ef5350';
-      const arrow = isUp ? '▲' : '▼';
-      ctx.fillText(`${arrow} ${Math.abs(change).toFixed(2)} (${Math.abs(changePct).toFixed(2)}%)`, W - 40, 104);
-
-      // Divider
-      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(40, 158); ctx.lineTo(W - 40, 158);
-      ctx.stroke();
-
-      // Chart area
-      const PAD_L = 40, PAD_R = 40, PAD_T = 170, PAD_B = 60;
-      const CW = W - PAD_L - PAD_R;
-      const CH = H - PAD_T - PAD_B;
-
-      const allH = highs, allL = lows;
-      const priceMax = Math.max(...allH) * 1.002;
-      const priceMin = Math.min(...allL) * 0.998;
-      const priceRange = priceMax - priceMin;
-
-      function priceToY(p) { return PAD_T + CH - ((p - priceMin) / priceRange) * CH; }
-
-      // Grid lines
-      const gridCount = 4;
-      ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-      ctx.lineWidth = 1;
-      for (let i = 0; i <= gridCount; i++) {
-        const y = PAD_T + (CH / gridCount) * i;
-        ctx.beginPath(); ctx.moveTo(PAD_L, y); ctx.lineTo(W - PAD_R, y); ctx.stroke();
-        const price = priceMax - (priceRange / gridCount) * i;
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = 'rgba(255,255,255,0.25)';
-        ctx.font = '300 22px system-ui';
-        ctx.fillText('$' + price.toFixed(2), 4, y);
-      }
-
-      // Candles
-      const candleW = Math.max(8, Math.floor(CW / N) - 4);
-      const step = CW / N;
-
-      for (let i = 0; i < N; i++) {
-        const x = PAD_L + i * step + step / 2;
-        const o = priceToY(opens[i]);
-        const c2 = priceToY(closes[i]);
-        const h = priceToY(highs[i]);
-        const l = priceToY(lows[i]);
-        const up = closes[i] >= opens[i];
-        const col = up ? '#26a69a' : '#ef5350';
-
-        // Wick
-        ctx.strokeStyle = col;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(x, h); ctx.lineTo(x, l);
-        ctx.stroke();
-
-        // Body
-        const bodyTop = Math.min(o, c2);
-        const bodyH = Math.max(2, Math.abs(o - c2));
-        ctx.fillStyle = col;
-        ctx.fillRect(x - candleW/2, bodyTop, candleW, bodyH);
-      }
-
-      // Date labels - first, middle, last
-      ctx.fillStyle = 'rgba(255,255,255,0.30)';
-      ctx.font = '300 22px system-ui';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      [[0, times[0]], [Math.floor(N/2), times[Math.floor(N/2)]], [N-1, times[N-1]]].forEach(([i, t]) => {
-        const d = new Date(t * 1000);
-        const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        const x = PAD_L + i * step + step / 2;
-        ctx.fillText(label, x, H - PAD_B + 8);
-      });
-
-      // Update border color to match direction
-      if (panel.userData.borderMat) {
-        panel.userData.borderMat.color.set(isUp ? 0x1a3a2a : 0x3a1a1a);
-      }
-
-      panel.userData.chartTex.needsUpdate = true;
-    }
-
-    function drawStockError(panel, symbol, msg) {
-      const ctx = panel.userData.chartCtx;
-      const cvs = panel.userData.chartCvs;
-      ctx.fillStyle = '#060a0f';
-      ctx.fillRect(0, 0, cvs.width, cvs.height);
-      ctx.fillStyle = '#ef5350';
-      ctx.font = '500 48px system-ui';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(`${symbol}: ${msg}`, cvs.width/2, cvs.height/2);
-      panel.userData.chartTex.needsUpdate = true;
-    }
-
-    // ════════════════════════════════════════════════════════════════
-    //  CLOCK PANEL
-    // ════════════════════════════════════════════════════════════════
-    function makeClockPanel() {
-      const group = new THREE.Group();
-      group.userData.isPanel = true;
-      group.userData.isClockPanel = true;
-      group.userData.hoverTime = 0;
-
-      // Black background panel
-      const panelMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: false, side: THREE.DoubleSide });
-      const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.80, 0.32), panelMat);
-      group.add(panel);
-      group.userData.glassShell = panel; // for opacity changes on drag
-      group.userData.shellOpacity = 0.92;
-
-      // Gold border
-      const border = new THREE.LineSegments(
-        new THREE.EdgesGeometry(new THREE.PlaneGeometry(0.80, 0.32)),
-        new THREE.LineBasicMaterial({ color: 0xd4a84b, transparent: true, opacity: 0.6 })
-      );
-      group.add(border);
-
-      // Clock canvas
-      const clockCanvas = document.createElement('canvas');
-      clockCanvas.width = 512; clockCanvas.height = 128;
-      const clockCtx = clockCanvas.getContext('2d');
-      const clockTexture = new THREE.CanvasTexture(clockCanvas);
-      clockTexture.minFilter = THREE.LinearFilter;
-      clockTexture.magFilter = THREE.LinearFilter;
-      const clockMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.75, 0.25),
-        new THREE.MeshBasicMaterial({ map: clockTexture, transparent: true })
-      );
-      clockMesh.position.z = 0.003;
-      group.add(clockMesh);
-
-      Object.assign(group.userData, { clockCtx, clockCanvas, clockTexture });
-      drawClockFace(clockCtx, clockCanvas);
-      return group;
-    }
-
-    function drawClockFace(ctx, cvs) {
-      const W = cvs.width, H = cvs.height;
-      ctx.clearRect(0, 0, W, H);
-      const now = new Date();
-      const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
-      const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-      // Gold time
-      ctx.fillStyle = '#d4a84b';
-      ctx.font = 'bold 56px system-ui';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(timeStr, W/2, 55);
-      // Dim gold date
-      ctx.font = '24px system-ui';
-      ctx.fillStyle = 'rgba(212,168,75,0.65)';
-      ctx.fillText(dateStr, W/2, 100);
-    }
-
-    // ════════════════════════════════════════════════════════════════
-    //  WEATHER PANEL
-    // ════════════════════════════════════════════════════════════════
-    function makeWeatherPanel() {
-      const PW = 0.95, PH = 0.72, CR = 0.09;
-      const { group, shape } = makeGlassShell(PW, PH, CR, 0x081624);
-      const { tex, cvs, ctx } = makeCanvasTex(1024, 768, (c, cv) => drawWeatherFace(c, cv, weatherData));
-      const content = new THREE.Mesh(
-        new THREE.ShapeGeometry(makeRoundedRectShape(PW - 0.055, PH - 0.045, 0.065), 20),
-        new THREE.MeshBasicMaterial({ map: tex, transparent: false })
-      );
-      content.position.z = 0.003; group.add(content);
-      Object.assign(group.userData, {
-        isWeatherPanel: true, weatherCanvas: cvs, weatherCtx: ctx, weatherTexture: tex
-      });
-      // Refresh weather every WEATHER_TTL ms
-      const timer = setInterval(async () => {
-        navigator.geolocation.getCurrentPosition(async pos => {
-          await fetchWeather(pos.coords.latitude, pos.coords.longitude);
-          drawWeatherFace(group.userData.weatherCtx, group.userData.weatherCanvas, weatherData);
-          group.userData.weatherTexture.needsUpdate = true;
-        }, async () => {
-          await fetchWeather(userLat, userLon);
-          drawWeatherFace(group.userData.weatherCtx, group.userData.weatherCanvas, weatherData);
-          group.userData.weatherTexture.needsUpdate = true;
-        });
-      }, WEATHER_TTL);
-      group.userData.weatherTimer = timer;
-      return group;
-    }
-
-    function wCode(code) {
-      if (code === 0) return { label: 'Clear Sky', emoji: '☀️', sky: ['#0a1a3a','#1a4080'] };
-      if (code <= 2)  return { label: 'Partly Cloudy', emoji: '🌤️', sky: ['#1a2a45','#243560'] };
-      if (code === 3) return { label: 'Overcast', emoji: '☁️', sky: ['#1e2a38','#2a3848'] };
-      if (code <= 49) return { label: 'Foggy', emoji: '🌫️', sky: ['#222830','#303848'] };
-      if (code <= 59) return { label: 'Drizzle', emoji: '🌦️', sky: ['#182030','#222c3a'] };
-      if (code <= 69) return { label: 'Rain', emoji: '🌧️', sky: ['#101820','#1a2430'] };
-      if (code <= 79) return { label: 'Snow', emoji: '❄️', sky: ['#1a2848','#243060'] };
-      if (code <= 84) return { label: 'Showers', emoji: '🌧️', sky: ['#101820','#1c2835'] };
-      return { label: 'Thunderstorm', emoji: '⛈️', sky: ['#0c1020','#18202c'] };
-    }
-
-    function drawWeatherFace(ctx, cvs, data) {
-      const W = cvs.width, H = cvs.height;
-      ctx.clearRect(0, 0, W, H);
-
-      if (!data) {
-        fillRR(ctx, 0, 0, W, H, 48, '#030810');
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.font = '300 38px system-ui'; ctx.fillStyle = 'rgba(255,255,255,0.38)';
-        ctx.fillText('Fetching weather…', W/2, H/2); return;
-      }
-
-      const info = wCode(data.weather_code || 0);
-      const bg = ctx.createLinearGradient(0, 0, 0, H);
-      bg.addColorStop(0, info.sky[0]); bg.addColorStop(1, info.sky[1]);
-      fillRR(ctx, 0, 0, W, H, 48, null); ctx.fillStyle = bg; ctx.fill();
-
-      const temp = Math.round(data.temperature_2m ?? '--');
-      const feels = Math.round(data.apparent_temperature ?? '--');
-      const humidity = Math.round(data.relative_humidity_2m ?? '--');
-      const wind = Math.round(data.wind_speed_10m ?? '--');
-
-      // Emoji
-      ctx.textAlign = 'center';
-      ctx.font = '130px serif'; ctx.fillText(info.emoji, W/2, 205);
-
-      // Temperature
-      ctx.save();
-      ctx.font = '200 148px system-ui'; ctx.fillStyle = 'rgba(255,255,255,0.97)';
-      ctx.shadowColor = 'rgba(100,200,255,0.22)'; ctx.shadowBlur = 28;
-      ctx.textAlign = 'center'; ctx.fillText(`${temp}°`, W/2, 400); ctx.restore();
-
-      // Condition label
-      ctx.font = '300 38px system-ui'; ctx.fillStyle = 'rgba(255,255,255,0.60)';
-      ctx.fillText(info.label, W/2, 462);
-
-      // Divider
-      const dg = ctx.createLinearGradient(W*0.1, 0, W*0.9, 0);
-      dg.addColorStop(0, 'rgba(255,255,255,0)'); dg.addColorStop(0.5, 'rgba(255,255,255,0.14)'); dg.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.save(); ctx.strokeStyle = dg; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(W*0.1, 505); ctx.lineTo(W*0.9, 505); ctx.stroke(); ctx.restore();
-
-      // Stats row
-      [{ label: 'FEELS LIKE', val: `${feels}°` }, { label: 'HUMIDITY', val: `${humidity}%` }, { label: 'WIND', val: `${wind} mph` }]
-        .forEach((s, i) => {
-          const x = W * (0.19 + i * 0.31);
-          ctx.font = '500 36px system-ui'; ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillText(s.val, x, 580);
-          ctx.font = '300 21px system-ui'; ctx.fillStyle = 'rgba(255,255,255,0.34)'; ctx.fillText(s.label, x, 618);
-        });
-
-      // Timestamp
-      ctx.font = '200 19px system-ui'; ctx.fillStyle = 'rgba(255,255,255,0.18)';
-      ctx.fillText(`Updated ${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`, W/2, H - 26);
-    }
-
-    // ════════════════════════════════════════════════════════════════
-    //  WEATHER FETCH (Open-Meteo, no API key)
-    // ════════════════════════════════════════════════════════════════
-    function prefetchWeather() {
-      navigator.geolocation.getCurrentPosition(pos => {
-        userLat = pos.coords.latitude; userLon = pos.coords.longitude;
-        fetchWeather(userLat, userLon);
-      }, () => fetchWeather(userLat, userLon));
-    }
-
-    async function fetchWeather(lat, lon) {
-      if (weatherData && Date.now() - weatherFetchedAt < WEATHER_TTL) return;
-      try {
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m&temperature_unit=celsius&wind_speed_unit=mph&timezone=auto`;
-        const r = await fetch(url);
-        const j = await r.json();
-        weatherData = j.current; weatherFetchedAt = Date.now();
-      } catch(e) { console.warn('Weather fetch failed', e); }
-    }
-
-        function onWindowResize() {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      handCanvas.width = window.innerWidth;
-      handCanvas.height = window.innerHeight;
-      resizePointerCanvas();
-    }
-
-    function animate() { renderer.setAnimationLoop(render); }
-
-    function render(timestamp, frame) {
-      if (frame) {
-        const referenceSpace = renderer.xr.getReferenceSpace();
-        const session = renderer.xr.getSession();
-
-        if (!hitTestSourceRequested) {
-          session.requestReferenceSpace("viewer").then((space) => {
-            // Floor hit test
-            session.requestHitTestSource({ space }).then((source) => { hitTestSource = source; }).catch(()=>{});
-            // Wall hit test — vertical planes
-            session.requestHitTestSource({ space, entityTypes: ['plane'] }).then((source) => { wallHitTestSource = source; }).catch(()=>{});
-          });
-          session.addEventListener("end", () => {
-            hitTestSourceRequested = false;
-            hitTestSource = null;
-            wallHitTestSource = null;
-          });
-          hitTestSourceRequested = true;
-          // Show surface toggle button in AR
-          document.getElementById('surfaceToggleBtn').style.display = 'block';
-        }
-
-        if (hitTestSource) {
-          // Pick correct source based on mode
-          const activeSource = (isWallMode && wallHitTestSource) ? wallHitTestSource : hitTestSource;
-          const hitTestResults = frame.getHitTestResults(activeSource);
-
-          if (hitTestResults.length) {
-            const hit = hitTestResults[0];
-            const pose = hit.getPose(referenceSpace);
-
-            // Check normal to filter: wall = mostly vertical normal, floor = mostly horizontal
-            const mat = new THREE.Matrix4().fromArray(pose.transform.matrix);
-            const normal = new THREE.Vector3(0, 1, 0).applyMatrix4(mat).normalize();
-            const isVertical = Math.abs(normal.y) < 0.5; // normal pointing sideways = wall
-
-            if (isWallMode ? isVertical : !isVertical) {
-              reticle.visible = true;
-              reticle.matrix.fromArray(pose.transform.matrix);
-              tmpReticlePos.setFromMatrixPosition(reticle.matrix);
-              if (!isWallMode) groundYEstimate = tmpReticlePos.y;
-            } else {
-              reticle.visible = false;
-            }
-          } else { reticle.visible = false; }
-          spawnIconInAir();
-        }
-      }
-
-      if (activePanel) {
-        if (reticle.visible) {
-          activePanel.position.setFromMatrixPosition(reticle.matrix);
-          if (activePanel.userData.isClockPanel) {
-            // Keep clock horizontal — only take position, reset rotation
-            activePanel.rotation.set(0, 0, 0);
-          } else {
-            activePanel.quaternion.setFromRotationMatrix(reticle.matrix);
-          }
-        } else {
-          camera.getWorldPosition(tmpOrigin);
-          camera.getWorldDirection(tmpDirection);
-          activePanel.position.copy(tmpOrigin).addScaledVector(tmpDirection, 1.0);
-          if (activePanel.userData.isClockPanel) {
-            activePanel.rotation.set(0, 0, 0);
-          } else {
-            activePanel.quaternion.copy(camera.quaternion);
-          }
-        }
-      }
-
-      panels.forEach(panel => {
-        if (panel.userData.isClockPanel) { drawClockFace(panel.userData.clockCtx, panel.userData.clockCanvas); panel.userData.clockTexture.needsUpdate = true; }
-        updateHoverEffect(panel);
-      });
-
-      // Animate delete button
-      if (deleteBtn && deleteBtnVisible) {
-        deleteBtn.lookAt(camera.position);
-        const age = (Date.now() - deleteBtn.userData.spawnTime) / 1000;
-        const pulse = 1 + Math.sin(age * 5) * 0.07;
-        // Glow brighter if a panel is close
-        let closest = Infinity;
-        panels.forEach(p => { if (p.userData.isPanel) closest = Math.min(closest, p.position.distanceTo(deleteBtn.position)); });
-        const nearScale = closest < DELETE_SNAP_DIST * 1.5 ? 1.25 : 1.0;
-        deleteBtn.scale.setScalar(pulse * nearScale);
-        deleteBtn.children[1].material.opacity = closest < DELETE_SNAP_DIST * 1.5 ? 1.0 : 0.9;
-      }
-
-      // Animate wall anchors — pulse scale
-      wallAnchors.forEach(anchor => {
-        const age = (Date.now() - anchor.userData.spawnTime) / 1000;
-        const pulse = 1 + Math.sin(age * 4) * 0.08;
-        anchor.scale.setScalar(pulse);
-        // Face user always
-        anchor.lookAt(camera.position);
-      });
-
-      detectHover();
-      renderer.render(scene, camera);
-    }
-
-    function detectHover() {
-      camera.getWorldPosition(tmpOrigin);
-      camera.getWorldDirection(tmpDirection);
-      raycaster.set(tmpOrigin, tmpDirection);
-      const hits = raycaster.intersectObjects(panels, true);
-
-      // Reset previously hovered key
-      if (hoveredKey) {
-        const prevPanel = hoveredKey.userData.panelRef;
-        if (prevPanel && prevPanel.userData.isKeyboardPanel) {
-          prevPanel.userData.hoveredKeyName = null;
-          if (prevPanel.userData.drawKeyboard) prevPanel.userData.drawKeyboard(null);
-        } else {
-          hoveredKey.userData.keyMat.color.set(hoveredKey.userData.defaultColor);
-        }
-        hoveredKey = null;
-      }
-
-      let target = null;
-      if (hits.length > 0) {
-        // Check if hit is a key first
-        for (const hit of hits) {
-          if (hit.object.userData.isKey) {
-            hoveredKey = hit.object;
-            const panel = hoveredKey.userData.panelRef;
-            if (panel && panel.userData.isKeyboardPanel) {
-              panel.userData.hoveredKeyName = hoveredKey.userData.key;
-              if (panel.userData.drawKeyboard) panel.userData.drawKeyboard(hoveredKey.userData.key);
-            } else {
-              hoveredKey.userData.keyMat.color.set(0x666666);
-            }
-            break;
-          }
-        }
-        let t = hits[0].object;
-        while (t && !t.userData.isIcon && !t.userData.isPanel) t = t.parent;
-        if (t && (t.userData.isIcon || t.userData.isPanel)) target = t;
-      }
-
-      if (target !== hoveredObject) {
-        if (hoveredObject) hoveredObject.userData.hoverTime = 0;
-        hoveredObject = target;
-      }
-    }
-
-    function updateHoverEffect(object) {
-      if (!object.userData) return;
-      const isHovered = (hoveredObject === object);
-      if (isHovered) { object.userData.hoverTime = Math.min(object.userData.hoverTime + 0.045, 1); }
-      else { object.userData.hoverTime = Math.max(object.userData.hoverTime - 0.055, 0); }
-      const hoverAmount = object.userData.hoverTime;
-
-      if (object.userData.isIcon) {
-        const pulse = Math.sin(Date.now() * 0.005) * 0.5 + 0.5;
-        // Scale up smoothly on hover
-        object.scale.setScalar(1 + hoverAmount * 0.18 + pulse * hoverAmount * 0.06);
-        // Idle float + rise toward camera on hover
-        if (object.userData._baseY !== undefined) {
-          object.position.y = object.userData._baseY
-            + hoverAmount * 0.025
-            + Math.sin(Date.now() * 0.0018) * 0.008;
-        }
-        // Icon image brightens slightly on hover
-        if (object.userData.iconMesh) {
-          object.userData.iconMesh.material.opacity = 0.85 + hoverAmount * 0.15;
-        }
-      }
-      if (object.userData.hoverRing) {
-        const ring = object.userData.hoverRing;
-        const pulse = Math.sin(Date.now() * 0.0045) * 0.18 + 0.82;
-        ring.material.opacity = hoverAmount * pulse * 0.9;
-        ring.scale.setScalar(1 + hoverAmount * 0.12);
-        object.scale.setScalar(1 + hoverAmount * 0.06);
-      }
-      if (object.userData.hoverGlow) {
-        const glow = object.userData.hoverGlow;
-        const sweep = Math.sin(Date.now() * 0.0035) * 0.25 + 0.75;
-        glow.material.opacity = hoverAmount * sweep * 0.75;
-        object.position.z = (object.userData.baseZ || object.position.z) + hoverAmount * 0.01;
-      }
-      if (object.userData.glassShell) {
-        object.userData.glassShell.material.clearcoat = 1.0 - (0.15 * (1 - hoverAmount));
-        object.userData.glassShell.material.transmission = 0.18 + (hoverAmount * 0.08);
-      }
-      if (object.userData.innerBorder) {
-        object.userData.innerBorder.material.opacity = 0.35 + (hoverAmount * 0.35);
-      }
-      if (object.userData.shadowMesh) {
-        object.userData.shadowMesh.material.opacity = 0.08 + (hoverAmount * 0.08);
-      }
-    }
-  </script>
+    }, null, { enableHighAccuracy: true });
+  }
+
+  // ── BACK TO SETUP ────────────────────────────────────────────────
+  function goBack() {
+    if (watchId) navigator.geolocation.clearWatch(watchId);
+    document.getElementById('setup-screen').style.display = 'flex';
+    document.getElementById('ar-wrapper').style.display = 'none';
+    document.getElementById('hud').style.display = 'none';
+    document.getElementById('crosshair').style.display = 'none';
+    // Reset scene
+    const scene = document.getElementById('ar-scene');
+    scene.querySelectorAll('[gps-entity-place]').forEach(e => e.remove());
+  }
+
+  // ── UTILS ────────────────────────────────────────────────────────
+  function getDistanceMeters(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2)**2 +
+              Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) *
+              Math.sin(dLon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  function showStatus(msg, autoDismiss = 0) {
+    const bar = document.getElementById('status-bar');
+    bar.textContent = msg;
+    bar.style.display = 'block';
+    if (autoDismiss) setTimeout(hideStatus, autoDismiss);
+  }
+
+  function hideStatus() {
+    document.getElementById('status-bar').style.display = 'none';
+  }
+
+  // ── INIT ─────────────────────────────────────────────────────────
+  addPin(); // start with one empty pin row
+</script>
 </body>
 </html>
