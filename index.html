@@ -4,12 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>AR Nav</title>
-
-  <!-- A-Frame + AR.js GPS -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/aframe/1.4.2/aframe.min.js"></script>
-  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
-  <script src="https://raw.githack.com/nicktindall/cyclon.p2p/master/lib/browser/UDPCommLayer.js"></script>
-  <!-- AR.js Location-Based -->
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
 
   <style>
@@ -21,7 +16,8 @@
       --neon: #00ffe7;
       --neon2: #ff2d78;
       --dark: #080c14;
-      --glass: rgba(8, 12, 20, 0.75);
+      --glass: rgba(8,12,20,0.82);
+      --warn: #ffe600;
     }
 
     body {
@@ -29,569 +25,711 @@
       font-family: 'Syne', sans-serif;
       color: #fff;
       overflow: hidden;
-      height: 100vh;
-      width: 100vw;
+      height: 100vh; width: 100vw;
     }
 
-    /* ── SETUP SCREEN ───────────────────────────────────────────── */
+    /* ── SETUP ─────────────────────────────── */
     #setup-screen {
-      position: fixed;
-      inset: 0;
-      z-index: 100;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 2rem;
-      background: var(--dark);
-      gap: 1.5rem;
+      position: fixed; inset: 0; z-index: 100;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 2rem; background: var(--dark); gap: 1.1rem;
     }
 
     #setup-screen::before {
       content: '';
-      position: absolute;
-      inset: 0;
+      position: absolute; inset: 0;
       background:
         radial-gradient(ellipse 60% 40% at 20% 80%, rgba(0,255,231,0.08) 0%, transparent 70%),
         radial-gradient(ellipse 50% 50% at 80% 20%, rgba(255,45,120,0.08) 0%, transparent 70%);
       pointer-events: none;
     }
 
-    .logo {
-      font-size: 3rem;
-      font-weight: 800;
-      letter-spacing: -2px;
-      line-height: 1;
-      text-align: center;
-    }
-
+    .logo { font-size: 3rem; font-weight: 800; letter-spacing: -2px; text-align: center; z-index: 1; }
     .logo span { color: var(--neon); }
 
     .tagline {
-      font-family: 'Syne Mono', monospace;
-      font-size: 0.7rem;
-      letter-spacing: 0.2em;
-      color: rgba(255,255,255,0.4);
-      text-transform: uppercase;
+      font-family: 'Syne Mono', monospace; font-size: 0.7rem;
+      letter-spacing: 0.2em; color: rgba(255,255,255,0.4);
+      text-transform: uppercase; z-index: 1;
     }
 
     .divider {
-      width: 100%;
-      height: 1px;
+      width: 100%; height: 1px;
       background: linear-gradient(90deg, transparent, var(--neon), transparent);
-      opacity: 0.3;
+      opacity: 0.25; z-index: 1;
     }
 
     .section-label {
-      font-family: 'Syne Mono', monospace;
-      font-size: 0.65rem;
-      letter-spacing: 0.15em;
-      color: var(--neon);
-      text-transform: uppercase;
-      align-self: flex-start;
+      font-family: 'Syne Mono', monospace; font-size: 0.65rem;
+      letter-spacing: 0.15em; color: var(--neon); text-transform: uppercase;
+      align-self: flex-start; z-index: 1;
     }
 
-    .pin-list {
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
+    .category-grid {
+      width: 100%; display: grid;
+      grid-template-columns: 1fr 1fr; gap: 0.6rem; z-index: 1;
     }
 
-    .pin-row {
-      display: flex;
-      gap: 0.5rem;
-      align-items: center;
-    }
-
-    .pin-row input {
-      flex: 1;
+    .cat-btn {
       background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(0,255,231,0.2);
-      border-radius: 8px;
-      padding: 0.6rem 0.8rem;
-      color: #fff;
-      font-family: 'Syne Mono', monospace;
-      font-size: 0.75rem;
-      outline: none;
-      transition: border-color 0.2s;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px; padding: 0.75rem 0.5rem;
+      color: rgba(255,255,255,0.6); font-family: 'Syne', sans-serif;
+      font-size: 0.78rem; cursor: pointer; text-align: center;
+      transition: all 0.18s;
+      display: flex; flex-direction: column; align-items: center; gap: 0.3rem;
     }
 
-    .pin-row input:focus { border-color: var(--neon); }
-    .pin-row input::placeholder { color: rgba(255,255,255,0.2); }
+    .cat-btn .icon { font-size: 1.3rem; }
+    .cat-btn.active { background: rgba(0,255,231,0.1); border-color: var(--neon); color: var(--neon); }
 
-    .remove-btn {
-      background: none;
-      border: 1px solid rgba(255,45,120,0.3);
-      color: var(--neon2);
-      border-radius: 6px;
-      width: 32px; height: 32px;
-      cursor: pointer;
-      font-size: 1rem;
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0;
-      transition: background 0.2s;
+    .slider-row {
+      width: 100%; display: flex; flex-direction: column; gap: 0.4rem; z-index: 1;
     }
 
-    .remove-btn:hover { background: rgba(255,45,120,0.1); }
-
-    .add-btn {
-      align-self: flex-start;
-      background: none;
-      border: 1px dashed rgba(0,255,231,0.3);
-      color: var(--neon);
-      border-radius: 8px;
-      padding: 0.5rem 1rem;
-      font-family: 'Syne Mono', monospace;
-      font-size: 0.7rem;
-      letter-spacing: 0.1em;
-      cursor: pointer;
-      transition: background 0.2s;
+    .slider-row label {
+      font-family: 'Syne Mono', monospace; font-size: 0.65rem;
+      color: rgba(255,255,255,0.5); display: flex; justify-content: space-between;
     }
 
-    .add-btn:hover { background: rgba(0,255,231,0.07); }
-
-    .use-location-btn {
-      width: 100%;
-      background: rgba(0,255,231,0.07);
-      border: 1px solid rgba(0,255,231,0.3);
-      color: var(--neon);
-      border-radius: 10px;
-      padding: 0.65rem;
-      font-family: 'Syne Mono', monospace;
-      font-size: 0.7rem;
-      letter-spacing: 0.1em;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-
-    .use-location-btn:hover { background: rgba(0,255,231,0.14); }
+    .slider-row label span { color: var(--neon); }
+    input[type=range] { width: 100%; accent-color: var(--neon); }
 
     .launch-btn {
-      width: 100%;
+      width: 100%; z-index: 1;
       background: linear-gradient(135deg, var(--neon) 0%, #00b8a0 100%);
-      border: none;
-      border-radius: 12px;
-      padding: 1rem;
-      color: var(--dark);
-      font-family: 'Syne', sans-serif;
-      font-weight: 800;
-      font-size: 1rem;
-      letter-spacing: 0.05em;
-      cursor: pointer;
+      border: none; border-radius: 12px; padding: 1rem;
+      color: var(--dark); font-family: 'Syne', sans-serif;
+      font-weight: 800; font-size: 1rem; cursor: pointer;
       transition: opacity 0.2s, transform 0.1s;
     }
 
     .launch-btn:active { transform: scale(0.98); }
 
-    /* ── AR SCENE ────────────────────────────────────────────────── */
-    #ar-wrapper {
-      display: none;
-      position: fixed;
-      inset: 0;
-    }
+    /* ── AR ────────────────────────────────── */
+    #ar-wrapper { display: none; position: fixed; inset: 0; }
+    a-scene { width: 100%; height: 100%; }
 
-    a-scene {
-      width: 100%;
-      height: 100%;
-    }
+    /* ── HUD ───────────────────────────────── */
+    #hud { display: none; position: fixed; inset: 0; pointer-events: none; z-index: 50; }
 
-    /* ── HUD OVERLAY ─────────────────────────────────────────────── */
-    #hud {
-      display: none;
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      z-index: 50;
-    }
-
+    /* top bar */
     #hud-top {
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      padding: 1rem;
-      background: linear-gradient(to bottom, rgba(8,12,20,0.85), transparent);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+      position: absolute; top: 0; left: 0; right: 0; padding: 0.9rem 1rem;
+      background: linear-gradient(to bottom, rgba(8,12,20,0.92), transparent);
+      display: flex; align-items: center; justify-content: space-between;
     }
 
-    #hud-title {
-      font-weight: 800;
-      font-size: 1.1rem;
-      letter-spacing: -0.5px;
-    }
-
+    #hud-title { font-weight: 800; font-size: 1.1rem; letter-spacing: -0.5px; }
     #hud-title span { color: var(--neon); }
 
-    #coords-pill {
-      font-family: 'Syne Mono', monospace;
-      font-size: 0.6rem;
-      background: var(--glass);
-      border: 1px solid rgba(0,255,231,0.2);
-      border-radius: 20px;
-      padding: 0.3rem 0.7rem;
-      color: rgba(255,255,255,0.5);
-      backdrop-filter: blur(8px);
+    #gps-pill {
+      font-family: 'Syne Mono', monospace; font-size: 0.6rem;
+      background: var(--glass); border: 1px solid rgba(0,255,231,0.2);
+      border-radius: 20px; padding: 0.3rem 0.7rem;
+      color: rgba(255,255,255,0.5); backdrop-filter: blur(8px);
+      transition: all 0.3s;
     }
 
-    #hud-bottom {
+    .gps-good { border-color: rgba(0,255,231,0.5) !important; color: var(--neon) !important; }
+    .gps-bad  { border-color: rgba(255,230,0,0.5) !important;  color: var(--warn) !important; }
+
+    /* ── DIRECTION COMPASS ─────────────────── */
+    #compass-wrap {
       position: absolute;
-      bottom: 0; left: 0; right: 0;
-      padding: 1rem;
-      background: linear-gradient(to top, rgba(8,12,20,0.9), transparent);
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      display: flex; flex-direction: column;
+      align-items: center; gap: 0.4rem;
+      pointer-events: none;
+    }
+
+    #compass-ring {
+      position: relative;
+      width: 130px; height: 130px;
+    }
+
+    #compass-ring svg {
+      width: 100%; height: 100%;
+      filter: drop-shadow(0 0 8px rgba(0,255,231,0.4));
+    }
+
+    /* the arrow rotates inside the ring */
+    #arrow-group {
+      transform-origin: 65px 65px;
+      transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1);
+    }
+
+    #target-label {
+      font-family: 'Syne Mono', monospace;
+      font-size: 0.7rem; color: var(--neon);
+      text-align: center; max-width: 160px;
+      line-height: 1.4;
+      text-shadow: 0 0 10px rgba(0,255,231,0.6);
+    }
+
+    #target-dist {
+      font-size: 1.1rem; font-weight: 800;
+      color: #fff; letter-spacing: -0.5px;
+    }
+
+    /* arrived indicator */
+    #arrived-badge {
+      display: none;
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%,-50%);
+      background: rgba(0,255,231,0.15);
+      border: 2px solid var(--neon);
+      border-radius: 50%; width: 130px; height: 130px;
+      align-items: center; justify-content: center;
+      flex-direction: column; text-align: center;
+      font-family: 'Syne', sans-serif; font-weight: 800;
+      font-size: 0.85rem; color: var(--neon);
+      animation: arriveGlow 1.5s ease-in-out infinite;
+    }
+
+    @keyframes arriveGlow {
+      0%,100% { box-shadow: 0 0 10px rgba(0,255,231,0.3); }
+      50%      { box-shadow: 0 0 30px rgba(0,255,231,0.7); }
+    }
+
+    /* ── PLACE SELECTOR ────────────────────── */
+    #place-selector {
+      position: absolute; top: 70px; left: 0; right: 0;
+      padding: 0 1rem; pointer-events: all;
+      display: flex; gap: 0.5rem; overflow-x: auto;
+      scrollbar-width: none; padding-bottom: 4px;
+    }
+
+    #place-selector::-webkit-scrollbar { display: none; }
+
+    .place-chip {
+      flex-shrink: 0;
+      background: var(--glass); border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 20px; padding: 0.35rem 0.8rem;
+      font-family: 'Syne Mono', monospace; font-size: 0.62rem;
+      color: rgba(255,255,255,0.55); cursor: pointer;
+      backdrop-filter: blur(8px); transition: all 0.18s;
+      white-space: nowrap;
+    }
+
+    .place-chip.active {
+      background: rgba(0,255,231,0.12);
+      border-color: var(--neon); color: var(--neon);
+    }
+
+    /* ── BOTTOM HUD ────────────────────────── */
+    #hud-bottom {
+      position: absolute; bottom: 0; left: 0; right: 0; padding: 1rem;
+      background: linear-gradient(to top, rgba(8,12,20,0.92), transparent);
       pointer-events: all;
     }
 
     #pin-legend {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-      margin-bottom: 1rem;
+      max-height: 110px; overflow-y: auto;
+      display: flex; flex-direction: column; gap: 0.4rem;
+      margin-bottom: 0.8rem;
     }
 
     .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-      font-size: 0.75rem;
+      display: flex; align-items: center; gap: 0.55rem; font-size: 0.73rem;
+      cursor: pointer; border-radius: 6px; padding: 0.1rem 0.3rem;
+      transition: background 0.15s;
     }
 
-    .legend-dot {
-      width: 10px; height: 10px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
+    .legend-item:hover { background: rgba(255,255,255,0.05); }
+    .legend-item.active-target { background: rgba(0,255,231,0.08); }
 
-    .legend-dist {
-      font-family: 'Syne Mono', monospace;
-      font-size: 0.65rem;
-      color: rgba(255,255,255,0.4);
-      margin-left: auto;
-    }
+    .legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .legend-type { font-family: 'Syne Mono', monospace; font-size: 0.58rem; color: rgba(255,255,255,0.3); flex-shrink: 0; }
+    .legend-dist { font-family: 'Syne Mono', monospace; font-size: 0.63rem; color: rgba(255,255,255,0.4); margin-left: auto; flex-shrink: 0; }
 
     .back-btn {
-      width: 100%;
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 10px;
-      padding: 0.7rem;
-      color: rgba(255,255,255,0.6);
-      font-family: 'Syne', sans-serif;
-      font-size: 0.8rem;
-      cursor: pointer;
+      width: 100%; background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1); border-radius: 10px;
+      padding: 0.65rem; color: rgba(255,255,255,0.6);
+      font-family: 'Syne', sans-serif; font-size: 0.8rem; cursor: pointer;
     }
 
-    /* ── STATUS ──────────────────────────────────────────────────── */
-    #status-bar {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: var(--glass);
-      border: 1px solid rgba(0,255,231,0.3);
-      border-radius: 12px;
-      padding: 1rem 1.5rem;
-      font-family: 'Syne Mono', monospace;
-      font-size: 0.75rem;
-      color: var(--neon);
-      z-index: 200;
-      backdrop-filter: blur(12px);
-      display: none;
-      text-align: center;
-    }
-
-    /* scanning pulse on the crosshair */
+    /* ── CROSSHAIR ─────────────────────────── */
     #crosshair {
-      position: fixed;
-      top: 50%; left: 50%;
+      position: fixed; top: 50%; left: 50%;
       transform: translate(-50%, -50%);
-      width: 40px; height: 40px;
-      border: 2px solid var(--neon);
-      border-radius: 50%;
-      opacity: 0.4;
-      pointer-events: none;
-      z-index: 51;
-      animation: pulse 2s ease-in-out infinite;
-      display: none;
+      width: 6px; height: 6px; border-radius: 50%;
+      background: rgba(0,255,231,0.6);
+      pointer-events: none; z-index: 51; display: none;
     }
 
-    @keyframes pulse {
-      0%, 100% { transform: translate(-50%,-50%) scale(1); opacity: 0.4; }
-      50% { transform: translate(-50%,-50%) scale(1.4); opacity: 0.15; }
+    /* ── STATUS ────────────────────────────── */
+    #status-bar {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: var(--glass); border: 1px solid rgba(0,255,231,0.3);
+      border-radius: 12px; padding: 1rem 1.5rem;
+      font-family: 'Syne Mono', monospace; font-size: 0.75rem;
+      color: var(--neon); z-index: 200; backdrop-filter: blur(12px);
+      display: none; text-align: center; min-width: 200px;
     }
+
+    .spinner {
+      display: inline-block; width: 12px; height: 12px;
+      border: 2px solid rgba(0,255,231,0.3);
+      border-top-color: var(--neon); border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-right: 0.5rem; vertical-align: middle;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
 
-<!-- ── SETUP SCREEN ────────────────────────────────────────────── -->
+<!-- ── SETUP ──────────────────────────────────────────────────── -->
 <div id="setup-screen">
   <div class="logo">AR<span>NAV</span></div>
-  <div class="tagline">GPS · WebXR · Location Anchors</div>
+  <div class="tagline">Now with Direction Arrow · Step 3</div>
   <div class="divider"></div>
 
-  <div class="section-label">📍 Drop Pins</div>
+  <div class="section-label">🏷 What to show nearby</div>
 
-  <div class="pin-list" id="pin-list">
-    <!-- pins injected by JS -->
+  <div class="category-grid">
+    <button class="cat-btn active" data-key="restaurant" onclick="toggleCat(this)">
+      <span class="icon">🍔</span>Food & Drink
+    </button>
+    <button class="cat-btn active" data-key="fuel" onclick="toggleCat(this)">
+      <span class="icon">⛽</span>Gas Stations
+    </button>
+    <button class="cat-btn active" data-key="shop" onclick="toggleCat(this)">
+      <span class="icon">🛍</span>Shops
+    </button>
+    <button class="cat-btn active" data-key="amenity" onclick="toggleCat(this)">
+      <span class="icon">🏥</span>Amenities
+    </button>
   </div>
 
-  <button class="add-btn" onclick="addPin()">+ Add Another Pin</button>
+  <div class="slider-row">
+    <label>
+      Search radius
+      <span id="radius-label">300 m</span>
+    </label>
+    <input type="range" id="radius-slider" min="100" max="1000" step="50" value="300"
+      oninput="document.getElementById('radius-label').textContent = this.value + ' m'" />
+  </div>
 
   <div class="divider"></div>
 
-  <button class="use-location-btn" onclick="addCurrentLocation()">
-    ◎ &nbsp;Add My Current Location as Pin
-  </button>
-
-  <button class="launch-btn" onclick="launchAR()">
-    Launch AR &nbsp;→
-  </button>
+  <button class="launch-btn" onclick="launchAR()">Find Places &amp; Launch AR →</button>
 </div>
 
-<!-- ── STATUS TOAST ────────────────────────────────────────────── -->
-<div id="status-bar">Acquiring GPS…</div>
+<!-- ── STATUS ─────────────────────────────────────────────────── -->
+<div id="status-bar"></div>
 
-<!-- ── AR SCENE ────────────────────────────────────────────────── -->
+<!-- ── AR SCENE ───────────────────────────────────────────────── -->
 <div id="ar-wrapper">
-  <a-scene
-    id="ar-scene"
-    embedded
+  <a-scene id="ar-scene" embedded
     arjs="sourceType: webcam; debugUIEnabled: false; videoTexture: true;"
     renderer="logarithmicDepthBuffer: true;"
     vr-mode-ui="enabled: false"
-    loading-screen="enabled: false"
-  >
+    loading-screen="enabled: false">
     <a-camera gps-camera rotation-reader></a-camera>
   </a-scene>
 </div>
 
-<!-- ── HUD ─────────────────────────────────────────────────────── -->
+<!-- ── HUD ────────────────────────────────────────────────────── -->
 <div id="hud">
+
+  <!-- top bar -->
   <div id="hud-top">
     <div id="hud-title">AR<span>NAV</span></div>
-    <div id="coords-pill" id="coords">---, ---</div>
+    <div id="gps-pill">--- , ---</div>
+  </div>
+
+  <!-- scrollable place chips -->
+  <div id="place-selector"></div>
+
+  <!-- direction compass (center of screen) -->
+  <div id="compass-wrap">
+
+    <!-- SVG compass ring + arrow -->
+    <div id="compass-ring">
+      <svg viewBox="0 0 130 130" xmlns="http://www.w3.org/2000/svg">
+        <!-- outer ring -->
+        <circle cx="65" cy="65" r="60" fill="none" stroke="rgba(0,255,231,0.15)" stroke-width="1.5"/>
+        <!-- tick marks -->
+        <g stroke="rgba(0,255,231,0.25)" stroke-width="1">
+          <line x1="65" y1="5"  x2="65" y2="15"/>
+          <line x1="65" y1="115" x2="65" y2="125"/>
+          <line x1="5"  y1="65" x2="15" y2="65"/>
+          <line x1="115" y1="65" x2="125" y2="65"/>
+        </g>
+        <!-- N label -->
+        <text x="65" y="24" text-anchor="middle" fill="rgba(0,255,231,0.5)"
+          font-family="Syne Mono, monospace" font-size="9">N</text>
+        <!-- rotating arrow group -->
+        <g id="arrow-group">
+          <!-- arrow head (pointing up = north at 0°) -->
+          <polygon points="65,22 59,50 65,44 71,50"
+            fill="#00ffe7" opacity="0.95"/>
+          <!-- arrow tail -->
+          <polygon points="65,108 59,80 65,86 71,80"
+            fill="rgba(255,45,120,0.7)"/>
+          <!-- center dot -->
+          <circle cx="65" cy="65" r="4" fill="#00ffe7" opacity="0.9"/>
+        </g>
+      </svg>
+      <!-- arrived overlay -->
+      <div id="arrived-badge">
+        <div style="font-size:1.6rem">✓</div>
+        <div>Arrived!</div>
+      </div>
+    </div>
+
+    <div id="target-dist">---</div>
+    <div id="target-label">tap a place to navigate</div>
+
   </div>
 
   <div id="crosshair"></div>
 
+  <!-- bottom legend -->
   <div id="hud-bottom">
     <div id="pin-legend"></div>
-    <button class="back-btn" onclick="goBack()">← Back to Setup</button>
+    <button class="back-btn" onclick="goBack()">← Back</button>
   </div>
 </div>
 
 <script>
-  // ── PIN COLORS ──────────────────────────────────────────────────
-  const COLORS = ['#00ffe7','#ff2d78','#ffe600','#a78bfa','#34d399','#fb923c'];
-  const PIN_HEIGHTS = [0, 3, 6, 9, 12, 15]; // stagger heights so pins don't overlap
+  // ── CONFIG ────────────────────────────────────────────────────
+  const CAT_COLORS = {
+    restaurant:'#ff9f43', cafe:'#ff9f43', bar:'#ff9f43', fast_food:'#ff9f43',
+    fuel:'#54a0ff', shop:'#a29bfe', supermarket:'#a29bfe', convenience:'#a29bfe',
+    pharmacy:'#00ffe7', hospital:'#00ffe7', amenity:'#00ffe7', default:'#fd79a8',
+  };
 
-  let pins = [];
+  const CAT_ICONS = {
+    restaurant:'🍔', cafe:'☕', bar:'🍺', fast_food:'🌮',
+    fuel:'⛽', shop:'🛍', supermarket:'🛒', convenience:'🏪',
+    pharmacy:'💊', hospital:'🏥', amenity:'📍', default:'📌',
+  };
+
+  let activeCats = new Set(['restaurant','fuel','shop','amenity']);
   let userLat = null, userLng = null;
+  let deviceHeading = 0;   // degrees from north (0–360)
+  let targetPlace = null;  // currently navigating to
+  let allPlaces = [];
   let watchId = null;
+  let headingInterval = null;
 
-  // ── SETUP UI ────────────────────────────────────────────────────
-  function addPin(lat = '', lng = '', label = '') {
-    const id = Date.now();
-    pins.push({ id, lat, lng, label });
-    renderPinList();
+  // ── SETUP UI ──────────────────────────────────────────────────
+  function toggleCat(btn) {
+    const key = btn.dataset.key;
+    activeCats.has(key) ? activeCats.delete(key) : activeCats.add(key);
+    btn.classList.toggle('active');
   }
 
-  function removePin(id) {
-    pins = pins.filter(p => p.id !== id);
-    renderPinList();
+  // ── LAUNCH ────────────────────────────────────────────────────
+  async function launchAR() {
+    if (activeCats.size === 0) { showStatus('Pick at least one category!', 2500); return; }
+
+    showStatus('<span class="spinner"></span>Getting your GPS…');
+
+    let pos;
+    try { pos = await getPosition(); }
+    catch(e) { showStatus('GPS denied. Please allow location.', 3000); return; }
+
+    userLat = pos.coords.latitude;
+    userLng = pos.coords.longitude;
+    updateGPSPill(pos.coords.accuracy);
+
+    showStatus('<span class="spinner"></span>Fetching nearby places…');
+
+    let places;
+    try { places = await fetchNearbyPlaces(userLat, userLng,
+      parseInt(document.getElementById('radius-slider').value)); }
+    catch(e) { showStatus('Could not reach OpenStreetMap. Check internet.', 3000); return; }
+
+    if (places.length === 0) { showStatus('No places found. Try bigger radius.', 3000); return; }
+
+    allPlaces = places;
+    buildARScene(places);
+    buildPlaceChips(places);
+    setTarget(places[0]); // default: navigate to nearest
+
+    document.getElementById('setup-screen').style.display = 'none';
+    document.getElementById('ar-wrapper').style.display = 'block';
+    document.getElementById('hud').style.display = 'block';
+    document.getElementById('crosshair').style.display = 'block';
+    hideStatus();
+
+    startLocationWatch();
+    startCompass();
   }
 
-  function renderPinList() {
-    const list = document.getElementById('pin-list');
-    list.innerHTML = '';
+  // ── FETCH OPENSTREETMAP ───────────────────────────────────────
+  async function fetchNearbyPlaces(lat, lng, radius) {
+    let filters = [];
+    if (activeCats.has('restaurant'))
+      filters.push(`node["amenity"~"restaurant|cafe|bar|fast_food"](around:${radius},${lat},${lng});`);
+    if (activeCats.has('fuel'))
+      filters.push(`node["amenity"="fuel"](around:${radius},${lat},${lng});`);
+    if (activeCats.has('shop'))
+      filters.push(`node["shop"~"supermarket|convenience|clothes|electronics|bakery"](around:${radius},${lat},${lng});`);
+    if (activeCats.has('amenity'))
+      filters.push(`node["amenity"~"pharmacy|hospital|bank|atm|police|post_office"](around:${radius},${lat},${lng});`);
 
-    if (pins.length === 0) {
-      addPin(); // always start with one row
-      return;
-    }
+    const query = `[out:json][timeout:10];(${filters.join('')});out body;`;
+    const res = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
+    const data = await res.json();
 
-    pins.forEach((pin, i) => {
-      const color = COLORS[i % COLORS.length];
-      const row = document.createElement('div');
-      row.className = 'pin-row';
-      row.innerHTML = `
-        <div style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;"></div>
-        <input type="text" placeholder="Label (e.g. Coffee Shop)"
-          value="${pin.label}"
-          onchange="updatePin(${pin.id}, 'label', this.value)"
-          style="flex:1.2"
-        />
-        <input type="number" placeholder="Lat" step="any"
-          value="${pin.lat}"
-          onchange="updatePin(${pin.id}, 'lat', this.value)"
-        />
-        <input type="number" placeholder="Lng" step="any"
-          value="${pin.lng}"
-          onchange="updatePin(${pin.id}, 'lng', this.value)"
-        />
-        <button class="remove-btn" onclick="removePin(${pin.id})">×</button>
-      `;
-      list.appendChild(row);
+    return data.elements
+      .filter(el => el.lat && el.lon && el.tags)
+      .map(el => {
+        const tags = el.tags;
+        const name = tags.name || tags['name:en'] || (tags.amenity||tags.shop||'place').replace(/_/g,' ');
+        const type = tags.amenity || tags.shop || 'place';
+        const dist = getDistanceMeters(lat, lng, el.lat, el.lon);
+        return { name, type, lat: el.lat, lng: el.lon, dist };
+      })
+      .filter(p => p.name)
+      .sort((a,b) => a.dist - b.dist)
+      .slice(0, 20);
+  }
+
+  // ── BUILD AR SCENE ────────────────────────────────────────────
+  function buildARScene(places) {
+    const scene = document.getElementById('ar-scene');
+    scene.querySelectorAll('[gps-entity-place]').forEach(e => e.remove());
+
+    places.forEach((place, i) => {
+      const color  = CAT_COLORS[place.type] || CAT_COLORS.default;
+      const icon   = CAT_ICONS[place.type]  || CAT_ICONS.default;
+      const height = 2 + (i % 5) * 2;
+
+      const pillar = document.createElement('a-cylinder');
+      pillar.setAttribute('gps-entity-place', `latitude: ${place.lat}; longitude: ${place.lng}`);
+      pillar.setAttribute('color', color);
+      pillar.setAttribute('radius', '0.4');
+      pillar.setAttribute('height', `${height}`);
+      pillar.setAttribute('position', `0 ${height/2} 0`);
+      pillar.setAttribute('opacity', '0.7');
+      scene.appendChild(pillar);
+
+      const sphere = document.createElement('a-sphere');
+      sphere.setAttribute('gps-entity-place', `latitude: ${place.lat}; longitude: ${place.lng}`);
+      sphere.setAttribute('color', color);
+      sphere.setAttribute('radius', '1');
+      sphere.setAttribute('position', `0 ${height+1} 0`);
+      sphere.setAttribute('opacity', '0.9');
+      sphere.setAttribute('animation',
+        `property: position; to: 0 ${height+2} 0; dir: alternate; dur: ${2000+i*150}; easing: easeInOutSine; loop: true`);
+      scene.appendChild(sphere);
+
+      const label = document.createElement('a-text');
+      label.setAttribute('gps-entity-place', `latitude: ${place.lat}; longitude: ${place.lng}`);
+      label.setAttribute('value', `${icon} ${place.name}`);
+      label.setAttribute('color', color);
+      label.setAttribute('align', 'center');
+      label.setAttribute('width', '18');
+      label.setAttribute('position', `0 ${height+3.5} 0`);
+      scene.appendChild(label);
     });
   }
 
-  function updatePin(id, field, value) {
-    const pin = pins.find(p => p.id === id);
-    if (pin) pin[field] = value;
+  // ── PLACE CHIPS (tap to navigate) ─────────────────────────────
+  function buildPlaceChips(places) {
+    const sel = document.getElementById('place-selector');
+    sel.innerHTML = '';
+    places.forEach((place, i) => {
+      const chip = document.createElement('div');
+      chip.className = 'place-chip' + (i===0 ? ' active' : '');
+      chip.dataset.index = i;
+      chip.textContent = `${CAT_ICONS[place.type]||'📌'} ${place.name}`;
+      chip.onclick = () => {
+        document.querySelectorAll('.place-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        setTarget(places[i]);
+      };
+      sel.appendChild(chip);
+    });
   }
 
-  // ── USE CURRENT LOCATION ─────────────────────────────────────────
-  function addCurrentLocation() {
-    showStatus('Getting your location…');
-    navigator.geolocation.getCurrentPosition(pos => {
-      hideStatus();
-      addPin(
-        pos.coords.latitude.toFixed(6),
-        pos.coords.longitude.toFixed(6),
-        'You Are Here'
-      );
-    }, err => {
-      hideStatus();
-      showStatus('Location denied. Enable GPS & retry.', 3000);
-    }, { enableHighAccuracy: true });
-  }
-
-  // ── LAUNCH AR ────────────────────────────────────────────────────
-  function launchAR() {
-    const valid = pins.filter(p => p.lat && p.lng);
-    if (valid.length === 0) {
-      showStatus('Add at least one pin with coordinates!', 2500);
-      return;
-    }
-
-    showStatus('Acquiring GPS…');
-
-    navigator.geolocation.getCurrentPosition(pos => {
-      userLat = pos.coords.latitude;
-      userLng = pos.coords.longitude;
-
-      buildARScene(valid);
-      document.getElementById('setup-screen').style.display = 'none';
-      document.getElementById('ar-wrapper').style.display = 'block';
-      document.getElementById('hud').style.display = 'block';
-      document.getElementById('crosshair').style.display = 'block';
-
-      hideStatus();
-      startLocationWatch();
-    }, err => {
-      hideStatus();
-      showStatus('GPS access denied. Please allow location.', 3000);
-    }, { enableHighAccuracy: true, timeout: 10000 });
-  }
-
-  // ── BUILD SCENE ──────────────────────────────────────────────────
-  function buildARScene(validPins) {
-    const scene = document.getElementById('ar-scene');
-
-    // Remove old entities (except camera)
-    scene.querySelectorAll('[gps-entity-place]').forEach(e => e.remove());
-
+  // ── LEGEND ───────────────────────────────────────────────────
+  function buildLegend(places) {
     const legend = document.getElementById('pin-legend');
     legend.innerHTML = '';
-
-    validPins.forEach((pin, i) => {
-      const color = COLORS[i % COLORS.length];
-      const height = PIN_HEIGHTS[i % PIN_HEIGHTS.length];
-      const label = pin.label || `Pin ${i + 1}`;
-
-      // Pillar
-      const pillar = document.createElement('a-cylinder');
-      pillar.setAttribute('gps-entity-place', `latitude: ${pin.lat}; longitude: ${pin.lng}`);
-      pillar.setAttribute('color', color);
-      pillar.setAttribute('radius', '0.6');
-      pillar.setAttribute('height', `${3 + height}`);
-      pillar.setAttribute('position', `0 ${(3 + height) / 2} 0`);
-      pillar.setAttribute('opacity', '0.85');
-      scene.appendChild(pillar);
-
-      // Floating sphere on top
-      const sphere = document.createElement('a-sphere');
-      sphere.setAttribute('gps-entity-place', `latitude: ${pin.lat}; longitude: ${pin.lng}`);
-      sphere.setAttribute('color', color);
-      sphere.setAttribute('radius', '1.2');
-      sphere.setAttribute('position', `0 ${3 + height + 1.2} 0`);
-      sphere.setAttribute('opacity', '0.95');
-      sphere.setAttribute('animation', 'property: position; to: 0 ' + (3 + height + 2.4) + ' 0; dir: alternate; dur: 2000; easing: easeInOutSine; loop: true');
-      scene.appendChild(sphere);
-
-      // Text label
-      const text = document.createElement('a-text');
-      text.setAttribute('gps-entity-place', `latitude: ${pin.lat}; longitude: ${pin.lng}`);
-      text.setAttribute('value', label);
-      text.setAttribute('color', color);
-      text.setAttribute('align', 'center');
-      text.setAttribute('width', '20');
-      text.setAttribute('position', `0 ${3 + height + 4} 0`);
-      scene.appendChild(text);
-
-      // HUD legend
-      const dist = getDistanceMeters(userLat, userLng, parseFloat(pin.lat), parseFloat(pin.lng));
-      const distLabel = dist > 1000 ? `${(dist / 1000).toFixed(1)} km` : `${Math.round(dist)} m`;
-      const item = document.createElement('div');
-      item.className = 'legend-item';
+    places.forEach((place, i) => {
+      const color = CAT_COLORS[place.type] || CAT_COLORS.default;
+      const dist  = fmtDist(place.dist);
+      const item  = document.createElement('div');
+      item.className = 'legend-item' + (targetPlace===place ? ' active-target' : '');
+      item.dataset.index = i;
       item.innerHTML = `
         <div class="legend-dot" style="background:${color}"></div>
-        <span>${label}</span>
-        <span class="legend-dist">${distLabel}</span>
+        <span>${CAT_ICONS[place.type]||'📌'} ${place.name}</span>
+        <span class="legend-type">${place.type}</span>
+        <span class="legend-dist">${dist}</span>
       `;
+      item.onclick = () => {
+        document.querySelectorAll('.place-chip').forEach((c,j) => {
+          c.classList.toggle('active', j===i);
+        });
+        setTarget(place);
+        buildLegend(allPlaces);
+      };
       legend.appendChild(item);
     });
   }
 
-  // ── LIVE LOCATION WATCH ──────────────────────────────────────────
+  // ── SET NAVIGATION TARGET ─────────────────────────────────────
+  function setTarget(place) {
+    targetPlace = place;
+    updateArrow();
+    buildLegend(allPlaces);
+  }
+
+  // ── COMPASS ARROW ─────────────────────────────────────────────
+  function startCompass() {
+    // Try DeviceOrientationEvent (needs HTTPS on Android)
+    if (window.DeviceOrientationEvent) {
+      // iOS 13+ requires permission
+      if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission()
+          .then(r => { if (r === 'granted') listenOrientation(); })
+          .catch(() => fallbackHeading());
+      } else {
+        listenOrientation();
+      }
+    } else {
+      fallbackHeading();
+    }
+
+    // Update arrow every second regardless
+    headingInterval = setInterval(updateArrow, 1000);
+  }
+
+  function listenOrientation() {
+    window.addEventListener('deviceorientationabsolute', onOrientation, true);
+    window.addEventListener('deviceorientation', onOrientation, true);
+  }
+
+  function onOrientation(e) {
+    // alpha = compass heading (0=North, clockwise)
+    if (e.absolute && e.alpha !== null) {
+      deviceHeading = (360 - e.alpha) % 360;
+    } else if (e.webkitCompassHeading !== undefined) {
+      deviceHeading = e.webkitCompassHeading; // iOS
+    } else if (e.alpha !== null) {
+      deviceHeading = (360 - e.alpha) % 360;
+    }
+    updateArrow();
+  }
+
+  function fallbackHeading() {
+    // If no orientation, just show bearing without rotation correction
+    deviceHeading = 0;
+  }
+
+  function updateArrow() {
+    if (!targetPlace || userLat === null) return;
+
+    const dist = getDistanceMeters(userLat, userLng, targetPlace.lat, targetPlace.lng);
+
+    // Bearing from user to target (degrees clockwise from north)
+    const bearing = getBearing(userLat, userLng, targetPlace.lat, targetPlace.lng);
+
+    // Arrow should point toward target relative to where phone is facing
+    const arrowAngle = (bearing - deviceHeading + 360) % 360;
+
+    // Rotate the SVG arrow group
+    const group = document.getElementById('arrow-group');
+    group.style.transform = `rotate(${arrowAngle}deg)`;
+
+    // Update distance display
+    document.getElementById('target-dist').textContent = fmtDist(dist);
+    document.getElementById('target-label').textContent =
+      `${CAT_ICONS[targetPlace.type]||'📌'} ${targetPlace.name}`;
+
+    // Arrived?
+    const arrived = dist < 15;
+    document.getElementById('arrived-badge').style.display = arrived ? 'flex' : 'none';
+    document.getElementById('compass-ring').style.opacity  = arrived ? '0.3' : '1';
+  }
+
+  // ── LIVE LOCATION ─────────────────────────────────────────────
   function startLocationWatch() {
     if (watchId) navigator.geolocation.clearWatch(watchId);
     watchId = navigator.geolocation.watchPosition(pos => {
       userLat = pos.coords.latitude;
       userLng = pos.coords.longitude;
-      const coordPill = document.getElementById('coords-pill');
-      if (coordPill) {
-        coordPill.textContent = `${userLat.toFixed(4)}, ${userLng.toFixed(4)}`;
+      updateGPSPill(pos.coords.accuracy);
+
+      // Refresh distances in legend
+      if (allPlaces.length) {
+        allPlaces.forEach(p => {
+          p.dist = getDistanceMeters(userLat, userLng, p.lat, p.lng);
+        });
+        buildLegend(allPlaces);
       }
+      updateArrow();
     }, null, { enableHighAccuracy: true });
   }
 
-  // ── BACK TO SETUP ────────────────────────────────────────────────
+  function updateGPSPill(accuracy) {
+    const pill = document.getElementById('gps-pill');
+    const good = accuracy < 20;
+    pill.textContent = good ? `GPS ±${Math.round(accuracy)}m ✓` : `GPS ±${Math.round(accuracy)}m ⚠`;
+    pill.className = good ? 'gps-good' : 'gps-bad';
+  }
+
+  // ── BACK ──────────────────────────────────────────────────────
   function goBack() {
-    if (watchId) navigator.geolocation.clearWatch(watchId);
+    if (watchId)       navigator.geolocation.clearWatch(watchId);
+    if (headingInterval) clearInterval(headingInterval);
+    window.removeEventListener('deviceorientationabsolute', onOrientation, true);
+    window.removeEventListener('deviceorientation', onOrientation, true);
+
     document.getElementById('setup-screen').style.display = 'flex';
-    document.getElementById('ar-wrapper').style.display = 'none';
-    document.getElementById('hud').style.display = 'none';
-    document.getElementById('crosshair').style.display = 'none';
-    // Reset scene
-    const scene = document.getElementById('ar-scene');
-    scene.querySelectorAll('[gps-entity-place]').forEach(e => e.remove());
+    document.getElementById('ar-wrapper').style.display   = 'none';
+    document.getElementById('hud').style.display          = 'none';
+    document.getElementById('crosshair').style.display    = 'none';
+    document.getElementById('ar-scene').querySelectorAll('[gps-entity-place]').forEach(e => e.remove());
+    allPlaces = []; targetPlace = null;
   }
 
-  // ── UTILS ────────────────────────────────────────────────────────
-  function getDistanceMeters(lat1, lon1, lat2, lon2) {
-    const R = 6371000;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
+  // ── UTILS ─────────────────────────────────────────────────────
+  function getPosition() {
+    return new Promise((res,rej) =>
+      navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 10000 })
+    );
+  }
+
+  function getDistanceMeters(lat1,lon1,lat2,lon2) {
+    const R=6371000, dLat=(lat2-lat1)*Math.PI/180, dLon=(lon2-lon1)*Math.PI/180;
     const a = Math.sin(dLat/2)**2 +
-              Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) *
-              Math.sin(dLon/2)**2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+    return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
   }
 
-  function showStatus(msg, autoDismiss = 0) {
+  function getBearing(lat1,lon1,lat2,lon2) {
+    const dLon=(lon2-lon1)*Math.PI/180;
+    const y = Math.sin(dLon)*Math.cos(lat2*Math.PI/180);
+    const x = Math.cos(lat1*Math.PI/180)*Math.sin(lat2*Math.PI/180) -
+              Math.sin(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.cos(dLon);
+    return (Math.atan2(y,x)*180/Math.PI+360)%360;
+  }
+
+  function fmtDist(m) {
+    return m > 1000 ? `${(m/1000).toFixed(1)} km` : `${Math.round(m)} m`;
+  }
+
+  function showStatus(html, autoDismiss=0) {
     const bar = document.getElementById('status-bar');
-    bar.textContent = msg;
-    bar.style.display = 'block';
+    bar.innerHTML = html; bar.style.display = 'block';
     if (autoDismiss) setTimeout(hideStatus, autoDismiss);
   }
 
-  function hideStatus() {
-    document.getElementById('status-bar').style.display = 'none';
-  }
-
-  // ── INIT ─────────────────────────────────────────────────────────
-  addPin(); // start with one empty pin row
+  function hideStatus() { document.getElementById('status-bar').style.display = 'none'; }
 </script>
 </body>
 </html>
