@@ -156,15 +156,27 @@ canvas{display:block;position:fixed;inset:0;z-index:1;}
 #eta-sub{font-size:11px;color:rgba(255,255,255,0.4);margin-top:2px;}
 #exit-nav{background:rgba(234,67,53,0.85);border:none;border-radius:50px;padding:9px 20px;color:#fff;font-size:13px;font-weight:600;font-family:'Google Sans',sans-serif;cursor:pointer;}
 
-#map-container{width:100%;height:200px;position:relative;overflow:hidden;border-top:1px solid rgba(255,255,255,0.07);}
-#map{width:100%;height:100%;}
-#map-container::after{content:'';position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,0.28) 0%,transparent 35%);pointer-events:none;z-index:500;}
+#map-container{
+  width:100%;height:240px;
+  position:relative;overflow:hidden;
+  border-radius:32px 32px 0 0;          /* curved top like the screenshot */
+  border:1px solid rgba(255,255,255,0.1);
+  border-bottom:none;
+  opacity:0.82;                          /* slight container fade for blending */
+}
+#map{width:100%;height:100%;opacity:0.5;} /* 50% so camera shows through */
+#map-container::after{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(to bottom,rgba(0,0,0,0.18) 0%,transparent 40%);
+  pointer-events:none;z-index:500;
+  border-radius:32px 32px 0 0;
+}
 
 /* Recenter button — floats OUTSIDE map-container, over top-left corner of map */
 #map-recenter{
   position:absolute;
   /* sits 10px from left, 10px above bottom of screen + map height (200px) + route-info (~58px) */
-  bottom:268px;left:12px;
+  bottom:308px;left:12px;
   z-index:600;
   background:rgba(10,10,22,0.88);
   backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
@@ -642,7 +654,8 @@ function initMap(){
     const dx = panStartX - e.clientX;
     const dy = panStartY - e.clientY;
     if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
-      map.panBy([dx, dy], { animate: false });
+      // Multiply by 1.5 to make panning feel 1:1 with finger on high-DPI screens
+      map.panBy([dx * 1.5, dy * 1.5], { animate: false, duration: 0 });
       panStartX = e.clientX;
       panStartY = e.clientY;
       // User is panning — stop auto-follow and show recenter
