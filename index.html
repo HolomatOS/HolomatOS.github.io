@@ -3,556 +3,654 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Crystal Garden AR</title>
+<title>AR Navigation</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Raleway:wght@300;400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@300;400;500&display=swap');
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #000; overflow: hidden; font-family: 'Raleway', sans-serif; }
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+body{background:#000;overflow:hidden;font-family:'Roboto',sans-serif;}
+canvas{display:block;position:fixed;inset:0;z-index:1;}
 
-  canvas { display: block; }
+/* ── START SCREEN ─────────────────────────────────── */
+#start-screen{
+  position:fixed;inset:0;z-index:300;
+  background:linear-gradient(180deg,#1a1a2e 0%,#0f0f1a 100%);
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  gap:16px;padding:32px;
+}
+.maps-logo{display:flex;align-items:center;gap:10px;margin-bottom:4px;}
+.maps-logo svg{width:38px;height:38px;}
+.maps-logo span{font-family:'Google Sans',sans-serif;font-size:20px;font-weight:500;color:rgba(255,255,255,0.75);}
+#start-screen h1{font-family:'Google Sans',sans-serif;font-size:30px;font-weight:700;color:#fff;text-align:center;}
+#start-screen h1 span{color:#4285f4;}
+#start-screen>p.sub{color:rgba(255,255,255,0.4);font-size:13px;text-align:center;line-height:1.7;max-width:300px;}
 
-  /* ── START SCREEN ─────────────────────────────────────────── */
-  #overlay {
-    position: fixed; inset: 0; z-index: 200;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 24px;
-    background: radial-gradient(ellipse at 60% 40%, #1a0533 0%, #080112 60%, #000 100%);
-  }
+.input-wrap{
+  width:100%;max-width:340px;
+  background:rgba(255,255,255,0.07);
+  border:1px solid rgba(255,255,255,0.13);
+  border-radius:14px;padding:13px 16px;
+  display:flex;align-items:center;gap:10px;
+  transition:border-color 0.2s;
+}
+.input-wrap:focus-within{border-color:rgba(66,133,244,0.55);}
+.input-wrap input{flex:1;background:none;border:none;outline:none;color:#fff;font-size:15px;font-family:'Roboto',sans-serif;}
+.input-wrap input::placeholder{color:rgba(255,255,255,0.28);}
 
-  #overlay::before {
-    content: '';
-    position: absolute; inset: 0;
-    background-image:
-      radial-gradient(1px 1px at 20% 30%, rgba(255,255,255,0.6) 0%, transparent 100%),
-      radial-gradient(1px 1px at 80% 15%, rgba(255,255,255,0.5) 0%, transparent 100%),
-      radial-gradient(1px 1px at 50% 70%, rgba(255,255,255,0.4) 0%, transparent 100%),
-      radial-gradient(1px 1px at 10% 85%, rgba(255,255,255,0.5) 0%, transparent 100%),
-      radial-gradient(1px 1px at 90% 65%, rgba(255,255,255,0.4) 0%, transparent 100%),
-      radial-gradient(2px 2px at 35% 55%, rgba(160,100,255,0.7) 0%, transparent 100%),
-      radial-gradient(2px 2px at 70% 45%, rgba(100,200,255,0.7) 0%, transparent 100%),
-      radial-gradient(2px 2px at 15% 45%, rgba(255,150,200,0.6) 0%, transparent 100%);
-    pointer-events: none;
-  }
+#suggestions{
+  width:100%;max-width:340px;
+  background:rgba(22,22,36,0.97);
+  border:1px solid rgba(255,255,255,0.09);
+  border-radius:12px;overflow:hidden;
+  display:none;max-height:220px;overflow-y:auto;
+}
+.sug-item{
+  padding:11px 16px;color:rgba(255,255,255,0.78);
+  font-size:13px;cursor:pointer;
+  border-bottom:1px solid rgba(255,255,255,0.05);
+  display:flex;align-items:flex-start;gap:10px;line-height:1.4;
+}
+.sug-item:hover{background:rgba(66,133,244,0.14);}
+.sug-item:last-child{border-bottom:none;}
+.sug-icon{flex-shrink:0;margin-top:1px;}
+.sug-name{font-weight:500;color:#fff;}
+.sug-addr{font-size:11px;color:rgba(255,255,255,0.4);margin-top:2px;}
 
-  .gem-icon {
-    font-size: 72px;
-    animation: float 3s ease-in-out infinite;
-    filter: drop-shadow(0 0 20px rgba(150, 80, 255, 0.8));
-  }
+#loading-route{display:none;align-items:center;gap:10px;color:rgba(255,255,255,0.55);font-size:13px;}
+#loading-route.active{display:flex;}
+.mini-spin{width:18px;height:18px;border:2px solid rgba(255,255,255,0.12);border-top-color:#4285f4;border-radius:50%;animation:spin 0.8s linear infinite;}
 
-  @keyframes float {
-    0%, 100% { transform: translateY(0px) rotate(-5deg); }
-    50% { transform: translateY(-12px) rotate(5deg); }
-  }
+#route-card{
+  width:100%;max-width:340px;
+  background:rgba(66,133,244,0.1);border:1px solid rgba(66,133,244,0.28);
+  border-radius:14px;padding:14px 16px;
+  display:none;align-items:center;gap:12px;
+}
+#route-card.visible{display:flex;}
+.rc-icon{font-size:26px;}
+.rc-name{font-size:14px;font-weight:600;color:#fff;margin-bottom:3px;}
+.rc-meta{font-size:12px;color:rgba(255,255,255,0.45);}
 
-  #overlay h1 {
-    font-family: 'Cinzel', serif;
-    font-size: clamp(28px, 8vw, 42px);
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    background: linear-gradient(135deg, #e8b4ff, #90d0ff, #ffb3e6);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    text-align: center;
-  }
+#ar-btn{
+  width:100%;max-width:340px;
+  background:linear-gradient(135deg,#4285f4,#34a853);
+  border:none;border-radius:14px;padding:17px;
+  color:#fff;font-size:16px;font-weight:700;
+  font-family:'Google Sans',sans-serif;letter-spacing:0.02em;
+  cursor:pointer;box-shadow:0 8px 32px rgba(66,133,244,0.3);
+  transition:transform 0.15s,box-shadow 0.15s;
+  opacity:0.38;pointer-events:none;
+}
+#ar-btn.ready{opacity:1;pointer-events:all;}
+#ar-btn:active{transform:scale(0.97);}
 
-  #overlay p {
-    color: rgba(200, 180, 255, 0.75);
-    font-size: 15px;
-    font-weight: 300;
-    letter-spacing: 0.06em;
-    text-align: center;
-    max-width: 280px;
-    line-height: 1.7;
-  }
+#err-msg{
+  display:none;color:#ff6b6b;font-size:12px;text-align:center;
+  line-height:1.6;background:rgba(255,50,50,0.08);
+  border:1px solid rgba(255,50,50,0.2);border-radius:10px;
+  padding:10px 14px;max-width:320px;
+}
 
-  #req-list {
-    list-style: none;
-    display: flex; flex-direction: column; gap: 8px;
-    font-size: 13px; color: rgba(180,160,220,0.65);
-    letter-spacing: 0.04em;
-  }
-  #req-list li::before { content: '✦ '; color: #a070ff; }
+/* ── AR UI ─────────────────────────────────────────── */
+#ui{position:fixed;inset:0;z-index:100;pointer-events:none;display:none;}
+#ui.active{display:block;}
 
-  #start-btn {
-    margin-top: 8px;
-    padding: 16px 48px;
-    font-family: 'Cinzel', serif;
-    font-size: 16px;
-    letter-spacing: 0.18em;
-    color: #fff;
-    background: linear-gradient(135deg, rgba(120, 50, 200, 0.8), rgba(60, 120, 220, 0.8));
-    border: 1px solid rgba(180, 130, 255, 0.5);
-    border-radius: 50px;
-    cursor: pointer;
-    position: relative;
-    overflow: hidden;
-    transition: transform 0.2s, box-shadow 0.2s;
-    box-shadow: 0 0 30px rgba(120, 60, 220, 0.4), 0 0 60px rgba(80, 100, 255, 0.2);
-  }
+#calibrating{
+  position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:16px;
+  background:rgba(0,0,0,0.48);z-index:200;transition:opacity 0.8s;
+}
+#calibrating.hidden{opacity:0;pointer-events:none;}
+.cal-ring{width:76px;height:76px;border:3px solid rgba(255,255,255,0.1);border-top:3px solid #4285f4;border-radius:50%;animation:spin 1s linear infinite;}
+#calibrating p{color:rgba(255,255,255,0.8);font-size:14px;font-weight:500;letter-spacing:0.04em;}
+@keyframes spin{to{transform:rotate(360deg);}}
 
-  #start-btn::before {
-    content: '';
-    position: absolute; inset: 0;
-    background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent);
-    pointer-events: none;
-  }
+/* Turn banner */
+#turn-banner{position:absolute;top:0;left:0;right:0;padding:44px 14px 0;pointer-events:none;}
+#turn-card{
+  background:rgba(8,8,18,0.74);
+  backdrop-filter:blur(28px) saturate(160%);-webkit-backdrop-filter:blur(28px) saturate(160%);
+  border:1px solid rgba(255,255,255,0.16);border-radius:20px;
+  padding:14px 16px;display:flex;align-items:center;gap:14px;
+  box-shadow:0 8px 32px rgba(0,0,0,0.55);
+}
+#arrow-icon{width:50px;height:50px;flex-shrink:0;background:rgba(66,133,244,0.2);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;}
+#turn-text{flex:1;}
+#turn-action{font-size:11px;font-weight:500;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px;}
+#turn-street{font-family:'Google Sans',sans-serif;font-size:20px;font-weight:700;color:#fff;line-height:1.15;}
+#turn-dist{font-size:12px;color:rgba(255,255,255,0.45);margin-top:3px;}
 
-  #start-btn:hover { transform: scale(1.05); box-shadow: 0 0 50px rgba(150, 80, 255, 0.6); }
-  #start-btn:active { transform: scale(0.97); }
+#then-pill{
+  position:absolute;top:150px;left:18px;
+  background:rgba(0,0,0,0.5);backdrop-filter:blur(8px);
+  border:1px solid rgba(255,255,255,0.1);border-radius:20px;
+  padding:5px 12px;font-size:11px;color:rgba(255,255,255,0.6);
+  letter-spacing:0.03em;display:none;
+}
 
-  #error-msg {
-    display: none;
-    color: #ff6b8a;
-    font-size: 13px;
-    text-align: center;
-    max-width: 280px;
-    line-height: 1.6;
-    background: rgba(255, 50, 80, 0.1);
-    border: 1px solid rgba(255, 50, 80, 0.3);
-    border-radius: 10px;
-    padding: 12px 16px;
-  }
+/* Status */
+#status-row{position:absolute;top:44px;right:14px;display:flex;flex-direction:column;gap:7px;align-items:flex-end;}
+.pill{background:rgba(8,8,18,0.65);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);border-radius:50px;padding:5px 12px;font-size:11px;color:rgba(255,255,255,0.75);font-weight:500;letter-spacing:0.03em;white-space:nowrap;}
+.pill b{color:#fff;font-weight:700;}
 
-  /* ── AR OVERLAY UI ────────────────────────────────────────── */
-  #ar-ui {
-    position: fixed; inset: 0; z-index: 50;
-    pointer-events: none;
-    display: none;
-  }
+/* Step bar */
+#step-bar{position:absolute;top:158px;left:14px;right:14px;display:flex;gap:3px;}
+.step-dot{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,0.1);transition:background 0.4s;}
+.step-dot.done{background:#4285f4;}
+.step-dot.active{background:#34a853;}
 
-  #ar-ui.active { display: block; }
+/* Rerouting */
+#rerouting{position:absolute;top:170px;left:50%;transform:translateX(-50%);background:rgba(251,188,4,0.9);border-radius:20px;padding:7px 18px;font-size:12px;font-weight:600;color:#000;display:none;white-space:nowrap;}
+#rerouting.show{display:block;}
 
-  #hint-bar {
-    position: absolute; bottom: 100px; left: 50%;
-    transform: translateX(-50%);
-    background: rgba(10, 0, 30, 0.65);
-    backdrop-filter: blur(16px);
-    border: 1px solid rgba(180, 130, 255, 0.3);
-    border-radius: 30px;
-    padding: 10px 22px;
-    color: rgba(220, 200, 255, 0.9);
-    font-size: 13px;
-    letter-spacing: 0.08em;
-    white-space: nowrap;
-    transition: opacity 0.5s;
-  }
+/* Bottom */
+#bottom-panel{position:absolute;bottom:0;left:0;right:0;pointer-events:all;}
+#route-info{
+  background:rgba(10,10,20,0.82);backdrop-filter:blur(20px);
+  border-top:1px solid rgba(255,255,255,0.07);
+  padding:12px 18px;display:flex;align-items:center;justify-content:space-between;
+}
+#eta-time{font-family:'Google Sans',sans-serif;font-size:26px;font-weight:700;color:#fff;}
+#eta-sub{font-size:11px;color:rgba(255,255,255,0.4);margin-top:2px;}
+#exit-nav{background:rgba(234,67,53,0.85);border:none;border-radius:50px;padding:9px 20px;color:#fff;font-size:13px;font-weight:600;font-family:'Google Sans',sans-serif;cursor:pointer;}
 
-  #crystal-count {
-    position: absolute; top: 48px; left: 50%;
-    transform: translateX(-50%);
-    font-family: 'Cinzel', serif;
-    font-size: 13px;
-    letter-spacing: 0.14em;
-    color: rgba(200, 170, 255, 0.85);
-    background: rgba(10, 0, 30, 0.55);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(160, 110, 255, 0.25);
-    border-radius: 20px;
-    padding: 8px 20px;
-  }
+#map-container{width:100%;height:200px;position:relative;overflow:hidden;border-top:1px solid rgba(255,255,255,0.07);}
+#map{width:100%;height:100%;}
+#map-container::after{content:'';position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,0.28) 0%,transparent 35%);pointer-events:none;z-index:500;}
 
-  #exit-btn {
-    position: absolute; bottom: 44px; left: 50%;
-    transform: translateX(-50%);
-    pointer-events: all;
-    padding: 12px 32px;
-    font-family: 'Raleway', sans-serif;
-    font-size: 13px;
-    letter-spacing: 0.12em;
-    color: rgba(220, 200, 255, 0.8);
-    background: rgba(10, 0, 30, 0.6);
-    backdrop-filter: blur(16px);
-    border: 1px solid rgba(160, 110, 255, 0.3);
-    border-radius: 30px;
-    cursor: pointer;
-    transition: background 0.2s, color 0.2s;
-  }
-  #exit-btn:active { background: rgba(120, 60, 200, 0.5); color: #fff; }
+#badges{position:absolute;bottom:216px;right:14px;display:flex;flex-direction:column;gap:7px;align-items:flex-end;}
+.badge{width:40px;height:40px;background:rgba(8,8,18,0.65);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;}
 
-  #clear-btn {
-    position: absolute; top: 48px; right: 24px;
-    pointer-events: all;
-    padding: 8px 16px;
-    font-family: 'Raleway', sans-serif;
-    font-size: 12px;
-    letter-spacing: 0.1em;
-    color: rgba(200, 170, 255, 0.7);
-    background: rgba(10, 0, 30, 0.55);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(160, 110, 255, 0.2);
-    border-radius: 20px;
-    cursor: pointer;
-  }
-  #clear-btn:active { background: rgba(100, 50, 180, 0.5); }
+#recenter-btn{position:absolute;bottom:216px;left:14px;background:rgba(8,8,18,0.65);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);border-radius:50px;padding:8px 14px;font-size:11px;color:rgba(255,255,255,0.7);pointer-events:all;cursor:pointer;display:flex;align-items:center;gap:6px;}
 </style>
 </head>
 <body>
 
-<!-- ── START SCREEN ─────────────────────────────────────── -->
-<div id="overlay">
-  <div class="gem-icon">💎</div>
-  <h1>CRYSTAL GARDEN</h1>
-  <p>Grow glowing crystals anchored in your real world</p>
-  <ul id="req-list">
-    <li>Android Chrome browser</li>
-    <li>ARCore installed</li>
-    <li>Point at a flat surface</li>
-    <li>Tap to summon crystals</li>
-  </ul>
-  <button id="start-btn">ENTER AR</button>
-  <p id="error-msg"></p>
+<!-- ══ START ══ -->
+<div id="start-screen">
+  <div class="maps-logo">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#EA4335"/>
+      <circle cx="12" cy="9" r="2.5" fill="#fff"/>
+    </svg>
+    <span>Live View</span>
+  </div>
+  <h1>AR <span>Navigation</span></h1>
+  <p class="sub">Real turn-by-turn directions overlaid in AR — free, no API key</p>
+
+  <div class="input-wrap">
+    <span style="font-size:16px">📍</span>
+    <input id="dest-input" type="text" placeholder="Search any destination…" autocomplete="off"/>
+  </div>
+  <div id="suggestions"></div>
+
+  <div id="loading-route"><div class="mini-spin"></div><span>Finding route…</span></div>
+
+  <div id="route-card">
+    <div class="rc-icon">🗺️</div>
+    <div>
+      <div class="rc-name" id="rc-name">—</div>
+      <div class="rc-meta" id="rc-meta">— min · — mi</div>
+    </div>
+  </div>
+
+  <button id="ar-btn">🧭 START AR NAVIGATION</button>
+  <p id="err-msg"></p>
+  <p style="font-size:11px;color:rgba(255,255,255,0.18);text-align:center">Requires Android Chrome + ARCore</p>
 </div>
 
-<!-- ── AR OVERLAY ──────────────────────────────────────── -->
-<div id="ar-ui">
-  <div id="crystal-count">✦ 0 CRYSTALS</div>
-  <button id="clear-btn">CLEAR ALL</button>
-  <div id="hint-bar">Point at a surface · Tap to place</div>
-  <button id="exit-btn">EXIT AR</button>
+<!-- ══ AR UI ══ -->
+<div id="ui">
+  <div id="calibrating">
+    <div class="cal-ring"></div>
+    <p>Move phone slowly to calibrate…</p>
+  </div>
+
+  <div id="turn-banner">
+    <div id="turn-card">
+      <div id="arrow-icon">↑</div>
+      <div id="turn-text">
+        <div id="turn-action">Loading…</div>
+        <div id="turn-street">Getting route</div>
+        <div id="turn-dist"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="then-pill"></div>
+  <div id="rerouting">⚠️ Recalculating…</div>
+
+  <div id="status-row">
+    <div class="pill" id="gps-pill">📶 Locating…</div>
+    <div class="pill"><b id="speed-val">0</b> mph</div>
+    <div class="pill">Step <b id="step-num">1</b>/<b id="step-total">—</b></div>
+  </div>
+  <div id="step-bar"></div>
+
+  <div id="badges">
+    <div class="badge">🧭</div>
+    <div class="badge">📡</div>
+  </div>
+  <div id="recenter-btn">⊙ Recenter</div>
+
+  <div id="bottom-panel">
+    <div id="route-info">
+      <div>
+        <div id="eta-time">— min</div>
+        <div id="eta-sub">Calculating…</div>
+      </div>
+      <button id="exit-nav">✕ End</button>
+    </div>
+    <div id="map-container"><div id="map"></div></div>
+  </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
-/* ═══════════════════════════════════════════════════════════
-   CRYSTAL GARDEN AR — WebXR + Three.js
-   World-locked crystal placement with surface hit testing
-═══════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════
+   AR NAVIGATION  —  WebXR + Three.js
+   Routing: OSRM (free, no key)
+   Geocoding: Nominatim (free, no key)
+   World-locked arrows via WebXR hit-test
+═══════════════════════════════════════════════════════ */
 
-let scene, camera, renderer, reticle;
-let xrSession     = null;
-let hitTestSource = null;
-let hitTestSourceRequested = false;
-let crystals      = [];
-let crystalCount  = 0;
-let clock;
+let scene, camera, renderer, clock;
+let xrSession=null, hitTestSource=null;
+let arrowGroup=null, calibrated=false;
+let map, userMarker, routePolyline, destMarker;
+let userLat=null, userLng=null;
+let routeSteps=[], stepIndex=0, routeCoords=[];
+let destLat=null, destLng=null, destName='';
+let sugTimer=null;
 
-const countEl = document.getElementById('crystal-count');
-const hintEl  = document.getElementById('hint-bar');
+// ── GEOCODE / SUGGEST (Nominatim) ─────────────────────
+const destInput = document.getElementById('dest-input');
+const sugBox    = document.getElementById('suggestions');
 
-// ── INIT THREE.JS ─────────────────────────────────────────
-function init() {
-  clock = new THREE.Clock();
+destInput.addEventListener('input', () => {
+  clearTimeout(sugTimer);
+  const q = destInput.value.trim();
+  if (q.length < 3) { sugBox.style.display='none'; return; }
+  sugTimer = setTimeout(() => geocodeSuggest(q), 420);
+});
 
-  scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 30);
-
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.xr.enabled = true;
-  renderer.shadowMap.enabled = true;
-  document.body.appendChild(renderer.domElement);
-
-  // Lights
-  const ambient = new THREE.AmbientLight(0x8060ff, 1.5);
-  scene.add(ambient);
-  const fill = new THREE.DirectionalLight(0x60a0ff, 1);
-  fill.position.set(-2, 4, 2);
-  scene.add(fill);
-
-  // Reticle — pulsing ring on detected surface
-  const ringGeo = new THREE.RingGeometry(0.07, 0.10, 32).rotateX(-Math.PI / 2);
-  const ringMat = new THREE.MeshBasicMaterial({
-    color: 0x88aaff,
-    side: THREE.DoubleSide,
-    transparent: true,
-    opacity: 0.85,
-  });
-  reticle = new THREE.Mesh(ringGeo, ringMat);
-  reticle.matrixAutoUpdate = false;
-  reticle.visible = false;
-  scene.add(reticle);
-
-  // Inner dot
-  const dotGeo = new THREE.CircleGeometry(0.015, 16).rotateX(-Math.PI / 2);
-  const dot    = new THREE.Mesh(dotGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 }));
-  reticle.add(dot);
-
-  // XR controller (tap = select event)
-  const controller = renderer.xr.getController(0);
-  controller.addEventListener('select', onTap);
-  scene.add(controller);
-
-  // Session lifecycle — request hit test source immediately on start
-  renderer.xr.addEventListener('sessionstart', async () => {
-    xrSession = renderer.xr.getSession();
-    xrSession.addEventListener('end', onSessionEnd);
-
-    try {
-      // Must request 'viewer' space INSIDE the session, right at start
-      const viewerSpace = await xrSession.requestReferenceSpace('viewer');
-      hitTestSource = await xrSession.requestHitTestSource({ space: viewerSpace });
-      hintEl.textContent = 'Point at a surface · Tap to place';
-    } catch (e) {
-      hintEl.textContent = 'Surface detection unavailable: ' + e.message;
-      console.error('Hit test source error:', e);
-    }
-  });
-
-  renderer.setAnimationLoop(render);
-  window.addEventListener('resize', onResize);
-}
-
-// ── TAP → PLACE CRYSTAL ───────────────────────────────────
-function onTap() {
-  if (!reticle.visible) return;
-  placeCrystalCluster();
-}
-
-function placeCrystalCluster() {
-  const group = new THREE.Group();
-
-  // Pick a random crystalline color palette
-  const palettes = [
-    { h: 0.75, name: 'amethyst' },   // purple
-    { h: 0.55, name: 'aquamarine' }, // cyan
-    { h: 0.92, name: 'rose' },       // pink
-    { h: 0.13, name: 'citrine' },    // gold
-    { h: 0.35, name: 'emerald' },    // green
-    { h: 0.60, name: 'sapphire' },   // blue
-  ];
-  const palette = palettes[Math.floor(Math.random() * palettes.length)];
-  const hue = palette.h + (Math.random() - 0.5) * 0.05;
-
-  const shardCount = 4 + Math.floor(Math.random() * 4); // 4–7 shards
-
-  for (let i = 0; i < shardCount; i++) {
-    const shard = makeCrystalShard(hue, i, shardCount);
-    group.add(shard);
-  }
-
-  // Glowing point light at base
-  const lightColor = new THREE.Color().setHSL(hue, 1.0, 0.65);
-  const light = new THREE.PointLight(lightColor, 3, 0.6);
-  light.position.y = 0.05;
-  group.add(light);
-
-  // Tiny sparkle particles
-  const sparks = makeSparkles(hue);
-  group.add(sparks);
-
-  // Place at reticle world position
-  group.position.setFromMatrixPosition(reticle.matrix);
-  group.userData = {
-    birthTime: clock.getElapsedTime(),
-    lightRef: light,
-    sparks,
-    hue,
-  };
-  group.scale.setScalar(0.001); // start near zero → grow in
-
-  scene.add(group);
-  crystals.push(group);
-  crystalCount++;
-  countEl.textContent = `✦ ${crystalCount} CRYSTAL${crystalCount !== 1 ? 'S' : ''}`;
-}
-
-function makeCrystalShard(hue, index, total) {
-  // Tall hexagonal prism crystal
-  const height  = 0.06 + Math.random() * 0.12;
-  const radius  = 0.012 + Math.random() * 0.014;
-  const geo = new THREE.ConeGeometry(radius, height, 6, 1);
-
-  const color    = new THREE.Color().setHSL(hue, 0.9, 0.65);
-  const emissive = new THREE.Color().setHSL(hue, 1.0, 0.25);
-
-  const mat = new THREE.MeshStandardMaterial({
-    color,
-    emissive,
-    emissiveIntensity: 0.6,
-    metalness: 0.1,
-    roughness: 0.05,
-    transparent: true,
-    opacity: 0.78,
-    side: THREE.DoubleSide,
-  });
-
-  const mesh = new THREE.Mesh(geo, mat);
-
-  // Position in cluster circle
-  const angle  = (index / total) * Math.PI * 2 + Math.random() * 0.5;
-  const dist   = 0.02 + Math.random() * 0.04;
-  mesh.position.set(
-    Math.cos(angle) * dist,
-    height * 0.5,
-    Math.sin(angle) * dist
-  );
-  mesh.rotation.y = Math.random() * Math.PI;
-  mesh.rotation.z = (Math.random() - 0.5) * 0.25;
-
-  return mesh;
-}
-
-function makeSparkles(hue) {
-  const geo = new THREE.BufferGeometry();
-  const count = 20;
-  const positions = new Float32Array(count * 3);
-  for (let i = 0; i < count; i++) {
-    const r = 0.02 + Math.random() * 0.08;
-    const theta = Math.random() * Math.PI * 2;
-    const phi   = Math.random() * Math.PI;
-    positions[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
-    positions[i * 3 + 1] = Math.random() * 0.18;
-    positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
-  }
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  const mat = new THREE.PointsMaterial({
-    color: new THREE.Color().setHSL(hue, 1.0, 0.9),
-    size: 0.006,
-    transparent: true,
-    opacity: 0.8,
-  });
-  return new THREE.Points(geo, mat);
-}
-
-// ── MAIN RENDER LOOP ──────────────────────────────────────
-function render(timestamp, frame) {
-  const t = clock.getElapsedTime();
-
-  if (frame && xrSession) {
-    const refSpace = renderer.xr.getReferenceSpace();
-
-    // Update reticle position
-    if (hitTestSource) {
-      const results = frame.getHitTestResults(hitTestSource);
-      if (results.length > 0) {
-        const pose = results[0].getPose(refSpace);
-        reticle.visible = true;
-        reticle.matrix.fromArray(pose.transform.matrix);
-        hintEl.style.opacity = '1';
-      } else {
-        reticle.visible = false;
-        hintEl.style.opacity = '0.4';
-      }
-    }
-  }
-
-  // Animate reticle pulse
-  if (reticle.visible) {
-    const pulse = 0.85 + Math.sin(t * 4) * 0.15;
-    reticle.material.opacity = pulse;
-    const rs = 0.9 + Math.sin(t * 3) * 0.12;
-    reticle.scale.set(rs, 1, rs);
-  }
-
-  // Animate all crystals
-  crystals.forEach((group, gi) => {
-    const age = t - group.userData.birthTime;
-
-    // Grow-in spring animation
-    const targetScale = 1.0;
-    const growT = Math.min(age / 0.6, 1.0);
-    const eased = easeOutBack(growT);
-    group.scale.setScalar(Math.max(0.001, eased));
-
-    // Gentle float (only after grown in)
-    if (age > 0.6) {
-      group.position.y = group.position.y +
-        Math.sin(t * 1.2 + gi * 1.3) * 0.00008;
-    }
-
-    // Slow rotation
-    group.rotation.y = t * 0.25 + gi * 1.1;
-
-    // Light flicker
-    if (group.userData.lightRef) {
-      group.userData.lightRef.intensity = 2.5 + Math.sin(t * 5 + gi) * 0.5;
-    }
-
-    // Sparkle opacity shimmer
-    if (group.userData.sparks) {
-      group.userData.sparks.material.opacity = 0.4 + Math.sin(t * 3 + gi * 2) * 0.35;
-    }
-  });
-
-  renderer.render(scene, camera);
-}
-
-function easeOutBack(x) {
-  const c1 = 1.70158, c3 = c1 + 1;
-  return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
-}
-
-// ── SESSION END ───────────────────────────────────────────
-function onSessionEnd() {
-  hitTestSource           = null;
-  hitTestSourceRequested  = false;
-  xrSession               = null;
-
-  crystals.forEach(c => scene.remove(c));
-  crystals    = [];
-  crystalCount = 0;
-
-  document.getElementById('ar-ui').classList.remove('active');
-  document.getElementById('overlay').style.display = 'flex';
-  countEl.textContent = '✦ 0 CRYSTALS';
-}
-
-function onResize() {
-  if (!renderer.xr.isPresenting) {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  }
-}
-
-// ── BUTTON HANDLERS ───────────────────────────────────────
-document.getElementById('start-btn').addEventListener('click', async () => {
-  const errEl = document.getElementById('error-msg');
-  errEl.style.display = 'none';
-
-  if (!navigator.xr) {
-    showError('WebXR not found. Open this page in Chrome on your Android phone.');
-    return;
-  }
-
-  let supported = false;
-  try { supported = await navigator.xr.isSessionSupported('immersive-ar'); }
-  catch(e) { showError('Error checking AR support: ' + e.message); return; }
-
-  if (!supported) {
-    showError('AR not supported on this device. Make sure ARCore is installed from the Play Store and you are using Chrome.');
-    return;
-  }
-
+async function geocodeSuggest(q) {
   try {
-    const session = await navigator.xr.requestSession('immersive-ar', {
-      requiredFeatures: ['hit-test', 'local'],
-      optionalFeatures: ['dom-overlay', 'local-floor'],
-      domOverlay: { root: document.getElementById('ar-ui') },
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&addressdetails=1`,
+      { headers:{'Accept-Language':'en'} }
+    );
+    const data = await r.json();
+    sugBox.innerHTML='';
+    if (!data.length){sugBox.style.display='none';return;}
+    data.forEach(item => {
+      const div = document.createElement('div');
+      div.className='sug-item';
+      const parts = item.display_name.split(',');
+      const name  = parts[0].trim();
+      const addr  = parts.slice(1,3).join(',').trim();
+      div.innerHTML=`<span class="sug-icon">${placeIcon(item.type||item.class)}</span>
+        <div><div class="sug-name">${name}</div><div class="sug-addr">${addr}</div></div>`;
+      div.addEventListener('click',()=>{
+        destInput.value  = name;
+        destLat          = parseFloat(item.lat);
+        destLng          = parseFloat(item.lon);
+        destName         = name;
+        sugBox.style.display='none';
+        fetchRoute();
+      });
+      sugBox.appendChild(div);
     });
-
-    await renderer.xr.setSession(session);
-
-    document.getElementById('overlay').style.display = 'none';
-    document.getElementById('ar-ui').classList.add('active');
-    hintEl.textContent = 'Initializing surface detection…';
-  } catch(e) {
-    showError('Could not start AR session: ' + e.message);
-  }
-});
-
-document.getElementById('exit-btn').addEventListener('click', () => {
-  if (xrSession) xrSession.end();
-});
-
-document.getElementById('clear-btn').addEventListener('click', () => {
-  crystals.forEach(c => scene.remove(c));
-  crystals     = [];
-  crystalCount = 0;
-  countEl.textContent = '✦ 0 CRYSTALS';
-});
-
-function showError(msg) {
-  const el = document.getElementById('error-msg');
-  el.textContent = msg;
-  el.style.display = 'block';
+    sugBox.style.display='block';
+  } catch(e){ sugBox.style.display='none'; }
 }
 
-// ── GO ────────────────────────────────────────────────────
+function placeIcon(t){
+  return {restaurant:'🍽️',cafe:'☕',hospital:'🏥',school:'🏫',park:'🌳',
+          hotel:'🏨',bank:'🏦',shop:'🛍️',station:'🚉',airport:'✈️',
+          bar:'🍺',museum:'🏛️',pharmacy:'💊',supermarket:'🛒'}[t]||'📍';
+}
+
+// ── ROUTE (OSRM) ───────────────────────────────────────
+async function fetchRoute() {
+  if (!destLat||!destLng){ showErr('Pick a destination first.'); return; }
+  if (!userLat||!userLng){ showErr('Waiting for GPS… try again in a moment.'); return; }
+  document.getElementById('loading-route').classList.add('active');
+  document.getElementById('route-card').classList.remove('visible');
+  document.getElementById('ar-btn').classList.remove('ready');
+  clearErr();
+  try {
+    const url=`https://router.project-osrm.org/route/v1/foot/${userLng},${userLat};${destLng},${destLat}?steps=true&geometries=geojson&overview=full`;
+    const res  = await fetch(url);
+    const data = await res.json();
+    if (data.code!=='Ok'||!data.routes.length) throw new Error('No route found');
+
+    const route  = data.routes[0];
+    const leg    = route.legs[0];
+    const distMi = (route.distance/1609.34).toFixed(1);
+    const durMin = Math.round(route.duration/60);
+
+    routeSteps  = leg.steps.map(parseStep);
+    routeCoords = route.geometry.coordinates.map(c=>[c[1],c[0]]);
+    stepIndex   = 0;
+
+    document.getElementById('rc-name').textContent  = destName;
+    document.getElementById('rc-meta').textContent  = `${durMin} min · ${distMi} mi`;
+    document.getElementById('route-card').classList.add('visible');
+    document.getElementById('ar-btn').classList.add('ready');
+    document.getElementById('step-total').textContent = routeSteps.length;
+    buildStepBar();
+    updateETA(durMin);
+  } catch(e){ showErr('Route error: '+e.message); }
+  finally { document.getElementById('loading-route').classList.remove('active'); }
+}
+
+function parseStep(s){
+  const m=s.maneuver||{}, type=m.type||'', mod=m.modifier||'';
+  let action='Continue', icon='↑', rotY=0, color=0x4285f4;
+  if (type==='turn'){
+    if (mod.includes('left'))  { action=mod.includes('sharp')?'Sharp left':mod.includes('slight')?'Slight left':'Turn left'; icon='↰'; rotY=Math.PI*0.4; }
+    else if (mod.includes('right')){ action=mod.includes('sharp')?'Sharp right':mod.includes('slight')?'Slight right':'Turn right'; icon='↱'; rotY=-Math.PI*0.4; color=0x34a853; }
+  } else if (type==='depart')    { action='Head'; icon='↑'; }
+  else if (type==='arrive')      { action='Arrive'; icon='📍'; color=0xfbbc04; }
+  else if (type==='roundabout'||type==='rotary'){ action='Roundabout'; icon='🔄'; rotY=-Math.PI*0.3; }
+  else if (type==='fork')        { action=mod.includes('left')?'Keep left':'Keep right'; icon=mod.includes('left')?'↖':'↗'; rotY=mod.includes('left')?Math.PI*0.2:-Math.PI*0.2; }
+  else if (type==='merge')       { action='Merge'; icon='↗'; rotY=-Math.PI*0.15; }
+  else if (type==='new name')    { action='Continue'; icon='↑'; }
+  const distM  = Math.round(s.distance);
+  const street = s.name||(s.ref?`Rd ${s.ref}`:'Unnamed road');
+  return { action, icon, street, distM, rotY, color };
+}
+
+// ── THREE.JS ───────────────────────────────────────────
+function init(){
+  clock=new THREE.Clock();
+  scene=new THREE.Scene();
+  camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,0.01,50);
+  renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.setSize(innerWidth,innerHeight);
+  renderer.xr.enabled=true;
+  document.body.insertBefore(renderer.domElement,document.getElementById('ui'));
+  scene.add(new THREE.AmbientLight(0xffffff,2.2));
+  const d=new THREE.DirectionalLight(0xffffff,1.5); d.position.set(0,5,3); scene.add(d);
+  const ctrl=renderer.xr.getController(0);
+  ctrl.addEventListener('select',onTap); scene.add(ctrl);
+  renderer.xr.addEventListener('sessionstart',onSessionStart);
+  renderer.setAnimationLoop(render);
+  window.addEventListener('resize',onResize);
+  buildArrowGroup();
+  startGPS();
+}
+
+function buildArrowGroup(){
+  arrowGroup=new THREE.Group();
+  for(let i=0;i<3;i++){
+    const ch=makeChevron(0x4285f4);
+    ch.position.set(0,-0.3,-(1.0+i*1.1));
+    ch.userData.idx=i;
+    arrowGroup.add(ch);
+  }
+  const disc=new THREE.Mesh(
+    new THREE.CircleGeometry(0.28,32).rotateX(-Math.PI/2),
+    new THREE.MeshBasicMaterial({color:0x4285f4,transparent:true,opacity:0.1,side:THREE.DoubleSide})
+  );
+  disc.position.set(0,-0.7,-1); disc.userData.isDisc=true;
+  arrowGroup.add(disc);
+  const lbl=makeLabel('—');
+  lbl.position.set(0,0.12,-1); lbl.userData.isLabel=true;
+  arrowGroup.add(lbl);
+  arrowGroup.visible=false;
+  scene.add(arrowGroup);
+}
+
+function makeChevron(col){
+  const g=new THREE.Group(), w=0.38,t=0.07,d=0.04,a=Math.PI/5;
+  const mat=new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:0.3,metalness:0.1,roughness:0.35,transparent:true,opacity:0.92});
+  const geo=new THREE.BoxGeometry(w,t,d);
+  const L=new THREE.Mesh(geo,mat.clone()); L.rotation.z=a;  L.position.set(-w*0.38,0,0);
+  const R=new THREE.Mesh(geo,mat.clone()); R.rotation.z=-a; R.position.set(w*0.38,0,0);
+  g.add(L,R);
+  const gm=new THREE.MeshBasicMaterial({color:0xaaccff,transparent:true,opacity:0.14,side:THREE.BackSide});
+  const gg=new THREE.BoxGeometry(w+0.05,t+0.05,d+0.01);
+  const gL=new THREE.Mesh(gg,gm); gL.rotation.z=a;  gL.position.copy(L.position);
+  const gR=new THREE.Mesh(gg,gm); gR.rotation.z=-a; gR.position.copy(R.position);
+  g.add(gL,gR);
+  return g;
+}
+
+function makeLabel(txt){
+  const cv=document.createElement('canvas'); cv.width=320; cv.height=72;
+  const ctx=cv.getContext('2d');
+  drawLabel(ctx,txt);
+  const tex=new THREE.CanvasTexture(cv);
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(0.62,0.138),new THREE.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false}));
+  m.userData={cv,ctx,tex};
+  return m;
+}
+
+function drawLabel(ctx,txt){
+  ctx.clearRect(0,0,320,72);
+  ctx.fillStyle='rgba(0,0,0,0.62)';
+  rrect(ctx,4,4,312,64,32); ctx.fill();
+  ctx.fillStyle='#fff'; ctx.font='bold 30px Roboto,Arial';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(txt,160,36);
+}
+
+function updateLabel(txt){
+  const lbl=arrowGroup.children.find(c=>c.userData.isLabel);
+  if(!lbl)return;
+  drawLabel(lbl.userData.ctx,txt);
+  lbl.userData.tex.needsUpdate=true;
+}
+
+function rrect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y);
+  ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);
+  ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r);
+  ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
+}
+
+// ── APPLY STEP ────────────────────────────────────────
+function applyStep(idx){
+  if(!routeSteps.length)return;
+  idx=Math.max(0,Math.min(idx,routeSteps.length-1));
+  stepIndex=idx;
+  const s=routeSteps[idx];
+
+  arrowGroup.rotation.y=s.rotY;
+  arrowGroup.traverse(o=>{
+    if(o.isMesh&&o.material.color&&!o.userData.isDisc){
+      o.material.color.setHex(s.color);
+      if(o.material.emissive) o.material.emissive.setHex(s.color);
+    }
+    if(o.userData.isDisc) o.material.color.setHex(s.color);
+  });
+  const dt=s.distM>0?(s.distM>=1000?`${(s.distM/1000).toFixed(1)} km`:`${s.distM} m`):'Arrived!';
+  updateLabel(dt);
+
+  document.getElementById('arrow-icon').textContent  = s.icon;
+  document.getElementById('turn-action').textContent = s.action;
+  document.getElementById('turn-street').textContent = s.street;
+  document.getElementById('turn-dist').textContent   = s.distM>0?`in ${dt}`:'';
+
+  const next=routeSteps[idx+1];
+  const tp=document.getElementById('then-pill');
+  if(next){tp.textContent=`Then ${next.icon} ${next.street}`;tp.style.display='block';}
+  else tp.style.display='none';
+
+  document.getElementById('step-num').textContent=idx+1;
+  updateStepBar(idx);
+}
+
+function buildStepBar(){
+  const bar=document.getElementById('step-bar'); bar.innerHTML='';
+  routeSteps.forEach((_,i)=>{ const d=document.createElement('div'); d.className='step-dot'; bar.appendChild(d); });
+  updateStepBar(0);
+}
+function updateStepBar(a){
+  document.querySelectorAll('.step-dot').forEach((d,i)=>{
+    d.className='step-dot'+(i<a?' done':i===a?' active':'');
+  });
+}
+
+// ── TAP → NEXT STEP ───────────────────────────────────
+function onTap(){
+  if(!calibrated||!routeSteps.length)return;
+  if(stepIndex+1<routeSteps.length){
+    applyStep(stepIndex+1);
+    arrowGroup.children.forEach(c=>{ if(c.userData.idx!==undefined) c.userData.flash=1.2; });
+  }
+}
+
+// ── SESSION START ──────────────────────────────────────
+async function onSessionStart(){
+  xrSession=renderer.xr.getSession();
+  xrSession.addEventListener('end',onSessionEnd);
+  try {
+    const viewer=await xrSession.requestReferenceSpace('viewer');
+    hitTestSource=await xrSession.requestHitTestSource({space:viewer});
+  } catch(e){console.error('hit-test:',e);}
+  setTimeout(placeArrowsAhead,2500);
+}
+
+function placeArrowsAhead(){
+  const dir=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+  dir.y=0; dir.normalize();
+  const pos=new THREE.Vector3().copy(camera.position).addScaledVector(dir,2);
+  pos.y=camera.position.y-0.4;
+  arrowGroup.position.copy(pos);
+  arrowGroup.visible=true;
+  calibrated=true;
+  const cal=document.getElementById('calibrating');
+  cal.classList.add('hidden');
+  setTimeout(()=>cal.style.display='none',900);
+  if(routeSteps.length) applyStep(0);
+  else document.getElementById('turn-street').textContent='Tap to advance steps';
+}
+
+// ── GPS ────────────────────────────────────────────────
+function startGPS(){
+  if(!navigator.geolocation)return;
+  navigator.geolocation.getCurrentPosition(p=>{
+    userLat=p.coords.latitude; userLng=p.coords.longitude;
+  },null,{enableHighAccuracy:true,timeout:8000});
+  navigator.geolocation.watchPosition(p=>{
+    userLat=p.coords.latitude; userLng=p.coords.longitude;
+    document.getElementById('speed-val').textContent=Math.round((p.coords.speed||0)*2.237);
+    document.getElementById('gps-pill').textContent='📶 GPS ✓';
+    if(map&&userMarker) updateMapPos();
+  },null,{enableHighAccuracy:true,maximumAge:500});
+}
+
+// ── MAP ────────────────────────────────────────────────
+function initMap(){
+  const lat=userLat||40.758, lng=userLng||-73.985;
+  map=L.map('map',{zoomControl:false,attributionControl:false,dragging:false,scrollWheelZoom:false}).setView([lat,lng],16);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(map);
+  if(routeCoords.length){
+    routePolyline=L.polyline(routeCoords,{color:'#4285f4',weight:5,opacity:0.85,lineCap:'round',lineJoin:'round'}).addTo(map);
+    destMarker=L.circleMarker(routeCoords[routeCoords.length-1],{radius:7,fillColor:'#EA4335',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
+  }
+  if(userLat){
+    userMarker=L.circleMarker([userLat,userLng],{radius:8,fillColor:'#4285f4',color:'#fff',weight:2.5,fillOpacity:1}).addTo(map);
+  }
+}
+
+function updateMapPos(){
+  if(!map||!userLat)return;
+  if(userMarker) userMarker.setLatLng([userLat,userLng]);
+  map.setView([userLat,userLng],16,{animate:true,duration:0.4});
+}
+
+// ── ETA ────────────────────────────────────────────────
+function updateETA(min){
+  document.getElementById('eta-time').textContent=`${min} min`;
+  const a=new Date(Date.now()+min*60000);
+  const h=a.getHours(),mm=a.getMinutes().toString().padStart(2,'0'),ap=h>=12?'PM':'AM',h12=(h+11)%12+1;
+  const mi=(routeSteps.reduce((acc,s)=>acc+s.distM,0)/1609.34).toFixed(1);
+  document.getElementById('eta-sub').textContent=`${mi} mi · Arrive ${h12}:${mm} ${ap}`;
+}
+
+// ── RENDER ─────────────────────────────────────────────
+function render(ts,frame){
+  const t=clock.getElapsedTime();
+  if(arrowGroup&&arrowGroup.visible){
+    arrowGroup.children.forEach(c=>{
+      if(c.userData.idx!==undefined){
+        const i=c.userData.idx;
+        c.position.z=-(1.0+i*1.1)+Math.sin(t*2.4-i*0.9)*0.07;
+        const sc=(1-i*0.08)+Math.abs(Math.sin(t*1.6-i*0.7))*0.06;
+        c.scale.setScalar(sc);
+        c.traverse(m=>{ if(m.isMesh&&m.material.opacity!==undefined) m.material.opacity=0.95-i*0.22; });
+        if(c.userData.flash>0){
+          c.userData.flash-=0.06;
+          c.traverse(m=>{ if(m.isMesh&&m.material.emissiveIntensity!==undefined) m.material.emissiveIntensity=0.3+c.userData.flash*1.8; });
+        }
+      }
+      if(c.userData.isDisc) c.material.opacity=0.07+Math.sin(t*2)*0.04;
+      if(c.userData.isLabel) c.lookAt(camera.position);
+    });
+    arrowGroup.position.y+=Math.sin(t*1.1)*0.00015;
+  }
+  renderer.render(scene,camera);
+}
+
+// ── SESSION END ────────────────────────────────────────
+function onSessionEnd(){
+  hitTestSource=null; xrSession=null; calibrated=false;
+  arrowGroup.visible=false; stepIndex=0;
+  document.getElementById('ui').classList.remove('active');
+  document.getElementById('start-screen').style.display='flex';
+  document.getElementById('calibrating').classList.remove('hidden');
+  document.getElementById('calibrating').style.display='flex';
+}
+
+function onResize(){
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+  if(map) setTimeout(()=>map.invalidateSize(),100);
+}
+
+// ── BUTTONS ────────────────────────────────────────────
+document.getElementById('ar-btn').addEventListener('click',async()=>{
+  clearErr();
+  if(!navigator.xr){showErr('WebXR unavailable — use Chrome on Android.');return;}
+  let ok=false;
+  try{ok=await navigator.xr.isSessionSupported('immersive-ar');}catch(e){}
+  if(!ok){showErr('AR not supported. Install ARCore from Play Store then retry in Chrome.');return;}
+  try{
+    const session=await navigator.xr.requestSession('immersive-ar',{
+      requiredFeatures:['hit-test','local'],
+      optionalFeatures:['dom-overlay','local-floor'],
+      domOverlay:{root:document.getElementById('ui')},
+    });
+    await renderer.xr.setSession(session);
+    document.getElementById('start-screen').style.display='none';
+    document.getElementById('ui').classList.add('active');
+    setTimeout(()=>initMap(),300);
+  }catch(e){showErr('Could not start AR: '+e.message);}
+});
+
+document.getElementById('exit-nav').addEventListener('click',()=>{if(xrSession)xrSession.end();});
+document.getElementById('recenter-btn').addEventListener('click',()=>{if(map&&userLat)map.setView([userLat,userLng],16,{animate:true});});
+
+document.addEventListener('click',e=>{if(!sugBox.contains(e.target)&&e.target!==destInput)sugBox.style.display='none';});
+destInput.addEventListener('keydown',e=>{if(e.key==='Enter'){const f=sugBox.querySelector('.sug-item');if(f)f.click();}});
+
+function showErr(m){const e=document.getElementById('err-msg');e.textContent=m;e.style.display='block';}
+function clearErr(){document.getElementById('err-msg').style.display='none';}
+
 init();
 </script>
 </body>
