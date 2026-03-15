@@ -607,10 +607,11 @@ function initMap(){
   map=L.map('map',{
     zoomControl:false,
     attributionControl:false,
-    dragging:true,          // ENABLED — finger drag
+    dragging:false,        // Disabled — we handle touch manually (WebXR eats touchmove)
     scrollWheelZoom:false,
-    touchZoom:true,
-    tap:true,
+    touchZoom:false,
+    tap:false,
+    keyboard:false,
   }).setView([lat,lng],16);
 
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(map);
@@ -623,20 +624,46 @@ function initMap(){
     userMarker=L.circleMarker([userLat,userLng],{radius:8,fillColor:'#4285f4',color:'#fff',weight:2.5,fillOpacity:1}).addTo(map);
   }
 
-  // Stop WebXR from swallowing touch events on the map
-  // Without this, WebXR DOM overlay eats all touches before Leaflet sees them
+  // ── MANUAL PAN (WebXR eats touchmove so Leaflet drag never fires) ──
+  // We use pointer events which WebXR DOES pass through to DOM overlay elements
   const mapEl = document.getElementById('map-container');
-  ['touchstart','touchmove','touchend','pointerdown','pointermove','pointerup'].forEach(evtName => {
-    mapEl.addEventListener(evtName, e => e.stopPropagation(), { passive: true });
+  let panStartX=0, panStartY=0, isPanning=false;
+
+  mapEl.addEventListener('pointerdown', e => {
+    isPanning = true;
+    panStartX = e.clientX;
+    panStartY = e.clientY;
+    mapEl.setPointerCapture(e.pointerId);
+    e.stopPropagation();
+  }, { passive: false });
+
+  mapEl.addEventListener('pointermove', e => {
+    if (!isPanning) return;
+    const dx = panStartX - e.clientX;
+    const dy = panStartY - e.clientY;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+      map.panBy([dx, dy], { animate: false });
+      panStartX = e.clientX;
+      panStartY = e.clientY;
+      // User is panning — stop auto-follow and show recenter
+      if (mapFollowing) {
+        mapFollowing = false;
+        document.getElementById('map-recenter').classList.add('visible');
+      }
+    }
+    e.stopPropagation();
+  }, { passive: false });
+
+  mapEl.addEventListener('pointerup', e => {
+    isPanning = false;
+    e.stopPropagation();
+  }, { passive: false });
+
+  mapEl.addEventListener('pointercancel', e => {
+    isPanning = false;
   });
 
-  // When user drags the map, stop auto-follow and show recenter button
-  map.on('dragstart', () => {
-    mapFollowing = false;
-    document.getElementById('map-recenter').classList.add('visible');
-  });
-
-  // Recenter button — now lives outside map-container
+  // Recenter button
   document.getElementById('map-recenter').addEventListener('click', () => {
     if(!userLat) return;
     mapFollowing = true;
