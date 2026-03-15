@@ -276,10 +276,20 @@ function init() {
   controller.addEventListener('select', onTap);
   scene.add(controller);
 
-  // Session lifecycle
-  renderer.xr.addEventListener('sessionstart', () => {
+  // Session lifecycle — request hit test source immediately on start
+  renderer.xr.addEventListener('sessionstart', async () => {
     xrSession = renderer.xr.getSession();
     xrSession.addEventListener('end', onSessionEnd);
+
+    try {
+      // Must request 'viewer' space INSIDE the session, right at start
+      const viewerSpace = await xrSession.requestReferenceSpace('viewer');
+      hitTestSource = await xrSession.requestHitTestSource({ space: viewerSpace });
+      hintEl.textContent = 'Point at a surface · Tap to place';
+    } catch (e) {
+      hintEl.textContent = 'Surface detection unavailable: ' + e.message;
+      console.error('Hit test source error:', e);
+    }
   });
 
   renderer.setAnimationLoop(render);
@@ -405,17 +415,6 @@ function render(timestamp, frame) {
   if (frame && xrSession) {
     const refSpace = renderer.xr.getReferenceSpace();
 
-    // One-time: request hit test source
-    if (!hitTestSourceRequested) {
-      hitTestSourceRequested = true;
-      xrSession.requestReferenceSpace('viewer').then(viewerSpace => {
-        xrSession.requestHitTestSource({ space: viewerSpace }).then(src => {
-          hitTestSource = src;
-          hintEl.textContent = 'Point at a surface · Tap to place';
-        });
-      });
-    }
-
     // Update reticle position
     if (hitTestSource) {
       const results = frame.getHitTestResults(hitTestSource);
@@ -521,8 +520,8 @@ document.getElementById('start-btn').addEventListener('click', async () => {
 
   try {
     const session = await navigator.xr.requestSession('immersive-ar', {
-      requiredFeatures: ['hit-test'],
-      optionalFeatures: ['dom-overlay'],
+      requiredFeatures: ['hit-test', 'local'],
+      optionalFeatures: ['dom-overlay', 'local-floor'],
       domOverlay: { root: document.getElementById('ar-ui') },
     });
 
