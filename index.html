@@ -160,24 +160,27 @@ canvas{display:block;position:fixed;inset:0;z-index:1;}
 #map{width:100%;height:100%;}
 #map-container::after{content:'';position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,0.28) 0%,transparent 35%);pointer-events:none;z-index:500;}
 
-/* In-map recenter button — sits inside the map, top-left, only visible when panned */
+/* Recenter button — floats OUTSIDE map-container, over top-left corner of map */
 #map-recenter{
-  position:absolute;top:10px;left:10px;z-index:1000;
-  background:rgba(10,10,22,0.82);
-  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
-  border:1px solid rgba(255,255,255,0.18);
+  position:absolute;
+  /* sits 10px from left, 10px above bottom of screen + map height (200px) + route-info (~58px) */
+  bottom:268px;left:12px;
+  z-index:600;
+  background:rgba(10,10,22,0.88);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  border:1px solid rgba(66,133,244,0.45);
   border-radius:50px;
-  padding:7px 13px;
-  font-size:12px;font-weight:600;
+  padding:8px 14px;
+  font-size:12px;font-weight:700;
   color:#4285f4;
   display:none;align-items:center;gap:6px;
   cursor:pointer;pointer-events:all;
-  box-shadow:0 2px 12px rgba(0,0,0,0.5);
-  transition:opacity 0.25s,transform 0.25s;
-  white-space:nowrap;
+  box-shadow:0 4px 16px rgba(0,0,0,0.6);
+  transition:opacity 0.25s,transform 0.2s;
+  white-space:nowrap;letter-spacing:0.03em;
 }
 #map-recenter.visible{display:flex;}
-#map-recenter:active{transform:scale(0.95);}
+#map-recenter:active{transform:scale(0.94);}
 
 #badges{position:absolute;bottom:216px;right:14px;display:flex;flex-direction:column;gap:7px;align-items:flex-end;}
 .badge{width:40px;height:40px;background:rgba(8,8,18,0.65);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;}
@@ -254,6 +257,7 @@ canvas{display:block;position:fixed;inset:0;z-index:1;}
   </div>
   <div id="recenter-btn">⊙ Recenter</div>
 
+  <button id="map-recenter">⊙ Recenter</button>
   <div id="bottom-panel">
     <div id="route-info">
       <div>
@@ -264,7 +268,6 @@ canvas{display:block;position:fixed;inset:0;z-index:1;}
     </div>
     <div id="map-container">
       <div id="map"></div>
-      <button id="map-recenter">⊙ Recenter</button>
     </div>
   </div>
 </div>
@@ -620,13 +623,20 @@ function initMap(){
     userMarker=L.circleMarker([userLat,userLng],{radius:8,fillColor:'#4285f4',color:'#fff',weight:2.5,fillOpacity:1}).addTo(map);
   }
 
+  // Stop WebXR from swallowing touch events on the map
+  // Without this, WebXR DOM overlay eats all touches before Leaflet sees them
+  const mapEl = document.getElementById('map-container');
+  ['touchstart','touchmove','touchend','pointerdown','pointermove','pointerup'].forEach(evtName => {
+    mapEl.addEventListener(evtName, e => e.stopPropagation(), { passive: true });
+  });
+
   // When user drags the map, stop auto-follow and show recenter button
   map.on('dragstart', () => {
     mapFollowing = false;
     document.getElementById('map-recenter').classList.add('visible');
   });
 
-  // Recenter button inside map
+  // Recenter button — now lives outside map-container
   document.getElementById('map-recenter').addEventListener('click', () => {
     if(!userLat) return;
     mapFollowing = true;
