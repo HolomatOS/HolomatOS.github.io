@@ -160,10 +160,29 @@ canvas{display:block;position:fixed;inset:0;z-index:1;}
 #map{width:100%;height:100%;}
 #map-container::after{content:'';position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,0.28) 0%,transparent 35%);pointer-events:none;z-index:500;}
 
+/* In-map recenter button — sits inside the map, top-left, only visible when panned */
+#map-recenter{
+  position:absolute;top:10px;left:10px;z-index:1000;
+  background:rgba(10,10,22,0.82);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border:1px solid rgba(255,255,255,0.18);
+  border-radius:50px;
+  padding:7px 13px;
+  font-size:12px;font-weight:600;
+  color:#4285f4;
+  display:none;align-items:center;gap:6px;
+  cursor:pointer;pointer-events:all;
+  box-shadow:0 2px 12px rgba(0,0,0,0.5);
+  transition:opacity 0.25s,transform 0.25s;
+  white-space:nowrap;
+}
+#map-recenter.visible{display:flex;}
+#map-recenter:active{transform:scale(0.95);}
+
 #badges{position:absolute;bottom:216px;right:14px;display:flex;flex-direction:column;gap:7px;align-items:flex-end;}
 .badge{width:40px;height:40px;background:rgba(8,8,18,0.65);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;}
 
-#recenter-btn{position:absolute;bottom:216px;left:14px;background:rgba(8,8,18,0.65);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);border-radius:50px;padding:8px 14px;font-size:11px;color:rgba(255,255,255,0.7);pointer-events:all;cursor:pointer;display:flex;align-items:center;gap:6px;}
+#recenter-btn{display:none;}
 </style>
 </head>
 <body>
@@ -243,7 +262,10 @@ canvas{display:block;position:fixed;inset:0;z-index:1;}
       </div>
       <button id="exit-nav">✕ End</button>
     </div>
-    <div id="map-container"><div id="map"></div></div>
+    <div id="map-container">
+      <div id="map"></div>
+      <button id="map-recenter">⊙ Recenter</button>
+    </div>
   </div>
 </div>
 
@@ -279,34 +301,55 @@ destInput.addEventListener('input', () => {
 
 async function geocodeSuggest(q) {
   try {
-    const r = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&addressdetails=1`,
-      { headers:{'Accept-Language':'en'} }
-    );
-    const data = await r.json();
+    let data = [];
+    if (userLat && userLng) {
+      // 1st: tight 10 km box, only nearby
+      const d1 = 0.09;
+      const vb1 = `${userLng-d1},${userLat+d1},${userLng+d1},${userLat-d1}`;
+      data = await (await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=8&addressdetails=1&viewbox=${vb1}&bounded=1`,
+        {headers:{'Accept-Language':'en'}})).json();
+      // 2nd: widen to 50 km if nothing close
+      if (!data.length) {
+        const d2 = 0.45;
+        const vb2 = `${userLng-d2},${userLat+d2},${userLng+d2},${userLat-d2}`;
+        data = await (await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=8&addressdetails=1&viewbox=${vb2}&bounded=1`,
+          {headers:{'Accept-Language':'en'}})).json();
+      }
+      // Sort closest first
+      data.sort((a,b)=>haverDist(userLat,userLng,+a.lat,+a.lon)-haverDist(userLat,userLng,+b.lat,+b.lon));
+    } else {
+      data = await (await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=6&addressdetails=1`,
+        {headers:{'Accept-Language':'en'}})).json();
+    }
     sugBox.innerHTML='';
     if (!data.length){sugBox.style.display='none';return;}
-    data.forEach(item => {
-      const div = document.createElement('div');
-      div.className='sug-item';
-      const parts = item.display_name.split(',');
-      const name  = parts[0].trim();
-      const addr  = parts.slice(1,3).join(',').trim();
+    data.slice(0,6).forEach(item => {
+      const div=document.createElement('div'); div.className='sug-item';
+      const parts=item.display_name.split(',');
+      const name=parts[0].trim(), addr=parts.slice(1,3).join(',').trim();
+      const distM=(userLat&&userLng)?haverDist(userLat,userLng,+item.lat,+item.lon):null;
+      const distStr=distM!==null?` · ${fmtDist(distM)}`:'';
       div.innerHTML=`<span class="sug-icon">${placeIcon(item.type||item.class)}</span>
-        <div><div class="sug-name">${name}</div><div class="sug-addr">${addr}</div></div>`;
+        <div><div class="sug-name">${name}</div><div class="sug-addr">${addr}${distStr}</div></div>`;
       div.addEventListener('click',()=>{
-        destInput.value  = name;
-        destLat          = parseFloat(item.lat);
-        destLng          = parseFloat(item.lon);
-        destName         = name;
-        sugBox.style.display='none';
-        fetchRoute();
+        destInput.value=name; destLat=+item.lat; destLng=+item.lon; destName=name;
+        sugBox.style.display='none'; fetchRoute();
       });
       sugBox.appendChild(div);
     });
     sugBox.style.display='block';
-  } catch(e){ sugBox.style.display='none'; }
+  } catch(e){sugBox.style.display='none';}
 }
+
+function haverDist(lat1,lng1,lat2,lng2){
+  const R=6371000,r=Math.PI/180,dLat=(lat2-lat1)*r,dLng=(lng2-lng1)*r;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*r)*Math.cos(lat2*r)*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function fmtDist(m){return m>=1000?`${(m/1609.34).toFixed(1)} mi`:`${Math.round(m)} m`;}
 
 function placeIcon(t){
   return {restaurant:'🍽️',cafe:'☕',hospital:'🏥',school:'🏫',park:'🌳',
@@ -554,10 +597,21 @@ function startGPS(){
 }
 
 // ── MAP ────────────────────────────────────────────────
+let mapFollowing = true; // tracks whether map auto-follows user
+
 function initMap(){
   const lat=userLat||40.758, lng=userLng||-73.985;
-  map=L.map('map',{zoomControl:false,attributionControl:false,dragging:false,scrollWheelZoom:false}).setView([lat,lng],16);
+  map=L.map('map',{
+    zoomControl:false,
+    attributionControl:false,
+    dragging:true,          // ENABLED — finger drag
+    scrollWheelZoom:false,
+    touchZoom:true,
+    tap:true,
+  }).setView([lat,lng],16);
+
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(map);
+
   if(routeCoords.length){
     routePolyline=L.polyline(routeCoords,{color:'#4285f4',weight:5,opacity:0.85,lineCap:'round',lineJoin:'round'}).addTo(map);
     destMarker=L.circleMarker(routeCoords[routeCoords.length-1],{radius:7,fillColor:'#EA4335',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
@@ -565,12 +619,30 @@ function initMap(){
   if(userLat){
     userMarker=L.circleMarker([userLat,userLng],{radius:8,fillColor:'#4285f4',color:'#fff',weight:2.5,fillOpacity:1}).addTo(map);
   }
+
+  // When user drags the map, stop auto-follow and show recenter button
+  map.on('dragstart', () => {
+    mapFollowing = false;
+    document.getElementById('map-recenter').classList.add('visible');
+  });
+
+  // Recenter button inside map
+  document.getElementById('map-recenter').addEventListener('click', () => {
+    if(!userLat) return;
+    mapFollowing = true;
+    map.setView([userLat, userLng], 16, {animate:true, duration:0.5});
+    document.getElementById('map-recenter').classList.remove('visible');
+  });
 }
 
 function updateMapPos(){
   if(!map||!userLat)return;
   if(userMarker) userMarker.setLatLng([userLat,userLng]);
-  map.setView([userLat,userLng],16,{animate:true,duration:0.4});
+  else userMarker=L.circleMarker([userLat,userLng],{radius:8,fillColor:'#4285f4',color:'#fff',weight:2.5,fillOpacity:1}).addTo(map);
+  // Only auto-pan when user hasn't manually moved the map
+  if(mapFollowing){
+    map.setView([userLat,userLng],16,{animate:true,duration:0.4});
+  }
 }
 
 // ── ETA ────────────────────────────────────────────────
@@ -643,7 +715,6 @@ document.getElementById('ar-btn').addEventListener('click',async()=>{
 });
 
 document.getElementById('exit-nav').addEventListener('click',()=>{if(xrSession)xrSession.end();});
-document.getElementById('recenter-btn').addEventListener('click',()=>{if(map&&userLat)map.setView([userLat,userLng],16,{animate:true});});
 
 document.addEventListener('click',e=>{if(!sugBox.contains(e.target)&&e.target!==destInput)sugBox.style.display='none';});
 destInput.addEventListener('keydown',e=>{if(e.key==='Enter'){const f=sugBox.querySelector('.sug-item');if(f)f.click();}});
