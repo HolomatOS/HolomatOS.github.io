@@ -1,741 +1,705 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
-<title>MARK XLV — AR Suit Assembly</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>AR WORLD LOCK</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+body{background:#000;overflow:hidden;width:100vw;height:100vh;font-family:'Courier New',monospace;color:#00e5ff;user-select:none;-webkit-user-select:none;}
+#video{position:fixed;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:1;}
+#main-canvas{position:fixed;top:0;left:0;width:100%;height:100%;z-index:5;pointer-events:none;}
 
-*{margin:0;padding:0;box-sizing:border-box;}
-body{background:#000;overflow:hidden;width:100vw;height:100vh;touch-action:none;}
-#video{display:none;}
-
-#bg-canvas,#three-canvas{
-  position:fixed;top:0;left:0;
-  width:100vw;height:100vh;
+/* ── 3D MODEL PANEL (top-right) ── */
+#model-panel{
+  position:fixed;top:18px;right:18px;z-index:20;
+  width:160px;height:190px;
+  background:rgba(0,8,20,0.75);
+  border:1px solid rgba(0,229,255,0.25);
+  display:none;flex-direction:column;align-items:center;
+  backdrop-filter:blur(4px);
+  clip-path:polygon(0 10px,10px 0,calc(100% - 10px) 0,100% 10px,100% calc(100% - 10px),calc(100% - 10px) 100%,10px 100%,0 calc(100% - 10px));
 }
-#bg-canvas{z-index:1;}
-#three-canvas{z-index:2;pointer-events:none;}
-
-/* ─── HUD ─── */
-#hud{
-  position:fixed;inset:0;z-index:20;
-  pointer-events:none;
-  font-family:'Share Tech Mono',monospace;
+#model-panel::before{
+  content:'';position:absolute;inset:0;
+  background-image:linear-gradient(rgba(0,229,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,0.03) 1px,transparent 1px);
+  background-size:16px 16px;pointer-events:none;
 }
-
-/* Corner brackets */
-.corner{
-  position:absolute;width:48px;height:48px;
-  border-color:rgba(0,212,255,0.7);border-style:solid;
+/* corner brackets */
+#model-panel::after{
+  content:'';position:absolute;
+  top:0;left:0;right:0;bottom:0;pointer-events:none;
+  border:0;
+  box-shadow:inset 12px 12px 0 -10px rgba(0,229,255,0.6),
+             inset -12px 12px 0 -10px rgba(0,229,255,0.6),
+             inset 12px -12px 0 -10px rgba(0,229,255,0.6),
+             inset -12px -12px 0 -10px rgba(0,229,255,0.6);
 }
-.corner.tl{top:14px;left:14px;border-width:2px 0 0 2px;}
-.corner.tr{top:14px;right:14px;border-width:2px 2px 0 0;}
-.corner.bl{bottom:14px;left:14px;border-width:0 0 2px 2px;}
-.corner.br{bottom:14px;right:14px;border-width:0 2px 2px 0;}
-
-/* Scanline */
-@keyframes scan{0%{top:-4px;}100%{top:101%;}}
-#scanline{
-  position:absolute;left:0;right:0;height:3px;
-  background:linear-gradient(90deg,transparent,rgba(0,212,255,0.5),transparent);
-  box-shadow:0 0 10px rgba(0,212,255,0.4);
-  animation:scan 4s linear infinite;
-  pointer-events:none;
-}
-
-/* Title bar */
-#title-bar{
-  position:absolute;top:18px;left:50%;
-  transform:translateX(-50%);
-  font-family:'Orbitron',monospace;
-  font-size:0.7rem;font-weight:700;
-  color:#00d4ff;letter-spacing:0.3em;
-  text-shadow:0 0 14px #00d4ff;
-  white-space:nowrap;
+#three-canvas{width:150px;height:150px;display:block;}
+#model-label{
+  font-size:9px;letter-spacing:2px;color:rgba(0,229,255,0.7);
+  text-transform:uppercase;padding:0 0 8px 0;
+  text-shadow:0 0 8px rgba(0,229,255,0.5);
+  position:relative;z-index:1;
+  max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;
 }
 
-/* Side panels */
-.side-panel{
-  position:absolute;top:80px;
-  font-size:0.58rem;
-  color:rgba(0,212,255,0.6);
-  line-height:2;letter-spacing:0.06em;
-  text-transform:uppercase;
-}
-#panel-l{left:18px;}
-#panel-r{right:18px;text-align:right;}
-
-/* Big percentage */
-#big-pct{
-  position:absolute;top:50%;left:18px;
-  transform:translateY(-50%);
-  font-family:'Orbitron',monospace;
-  font-size:3rem;font-weight:900;
-  color:#00d4ff;
-  text-shadow:0 0 30px #00d4ff,0 0 60px rgba(0,212,255,0.3);
-  line-height:1;
+/* ── HUD DESCRIPTION PANEL (bottom, image-3 style) ── */
+#hud-panel{
+  position:fixed;bottom:14px;left:50%;transform:translateX(-50%);
+  z-index:20;width:min(370px,94vw);
+  background:rgba(0,5,18,0.82);
+  border:1.5px solid rgba(0,180,220,0.35);
+  padding:11px 15px 11px;
   display:none;
+  backdrop-filter:blur(6px);
+  clip-path:polygon(
+    0 12px,12px 0,calc(100% - 40px) 0,calc(100% - 30px) 10px,100% 10px,
+    100% calc(100% - 10px),calc(100% - 30px) calc(100% - 0px),
+    calc(100% - 40px) 100%,40px 100%,30px calc(100% - 0px),
+    0 calc(100% - 0px));
+  box-shadow:0 0 24px rgba(0,200,255,0.12),inset 0 0 40px rgba(0,80,160,0.08);
 }
-#big-pct small{
-  display:block;font-size:0.5rem;
-  letter-spacing:0.25em;opacity:0.6;
-  margin-top:4px;
+#hud-panel::before{
+  content:'';position:absolute;inset:0;
+  background-image:linear-gradient(rgba(0,229,255,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,0.025) 1px,transparent 1px);
+  background-size:18px 18px;pointer-events:none;
 }
+/* glow top edge */
+#hud-panel::after{
+  content:'';position:absolute;top:0;left:10%;right:10%;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,229,255,0.6),transparent);
+}
+#hud-tag{font-size:9px;letter-spacing:3px;color:rgba(0,229,255,0.5);margin-bottom:3px;position:relative;}
+#hud-title{font-size:17px;font-weight:bold;color:#fff;letter-spacing:3px;text-transform:uppercase;margin-bottom:7px;text-shadow:0 0 12px rgba(0,229,255,0.7);position:relative;}
+#hud-desc{font-size:10.5px;color:rgba(140,215,235,0.82);line-height:1.65;max-height:70px;overflow:hidden;position:relative;}
+#hud-desc::after{content:'';position:absolute;bottom:0;left:0;right:0;height:18px;background:linear-gradient(transparent,rgba(0,5,18,0.82));}
+#hud-row{display:flex;gap:14px;margin-top:8px;position:relative;}
+.h-stat{display:flex;flex-direction:column;}
+.h-stat-lbl{font-size:8px;letter-spacing:1.5px;color:rgba(0,229,255,0.4);text-transform:uppercase;}
+.h-stat-val{font-size:12px;color:#00e5ff;text-shadow:0 0 6px rgba(0,229,255,0.5);}
+/* bottom corner decorators */
+.hud-corner-tl,.hud-corner-br{position:absolute;width:10px;height:10px;border-color:rgba(0,229,255,0.7);border-style:solid;}
+.hud-corner-tl{top:4px;left:4px;border-width:1px 0 0 1px;}
+.hud-corner-br{bottom:4px;right:4px;border-width:0 1px 1px 0;}
 
-/* Status bar */
-#status-wrap{
-  position:absolute;bottom:100px;left:50%;
-  transform:translateX(-50%);
-  text-align:center;
-}
-#status{
-  font-size:0.72rem;color:#00d4ff;
-  letter-spacing:0.12em;
-  text-shadow:0 0 10px #00d4ff;
-  white-space:nowrap;
-}
-
-/* Progress bar */
-#prog-wrap{
-  width:220px;height:3px;
-  background:rgba(0,212,255,0.1);
-  border:1px solid rgba(0,212,255,0.25);
-  border-radius:2px;overflow:hidden;
-  margin:8px auto 0;
-}
-#prog-bar{
-  height:100%;width:0%;
-  background:linear-gradient(90deg,#00d4ff,#ffaa00);
-  box-shadow:0 0 8px #00d4ff;
-  transition:width 0.2s ease;
-}
-
-/* Start button */
-#start-btn{
-  position:absolute;bottom:32px;left:50%;
-  transform:translateX(-50%);
-  background:transparent;
-  border:2px solid #00d4ff;
-  color:#00d4ff;
-  font-family:'Orbitron',monospace;
-  font-size:0.75rem;font-weight:700;
-  letter-spacing:0.2em;
-  padding:14px 36px;
-  cursor:pointer;pointer-events:auto;
-  text-shadow:0 0 10px #00d4ff;
-  box-shadow:0 0 20px rgba(0,212,255,0.2),inset 0 0 20px rgba(0,212,255,0.04);
-  clip-path:polygon(10px 0%,calc(100% - 10px) 0%,100% 10px,100% calc(100% - 10px),calc(100% - 10px) 100%,10px 100%,0% calc(100% - 10px),0% 10px);
-  transition:all 0.25s;
-  white-space:nowrap;
-}
-#start-btn:active{
-  background:rgba(0,212,255,0.12);
-  box-shadow:0 0 36px rgba(0,212,255,0.6);
-}
-#start-btn:disabled{
-  opacity:0.3;cursor:not-allowed;
-}
-
-/* Piece counter */
-#piece-list{
-  position:absolute;bottom:100px;right:18px;
-  font-size:0.52rem;
-  color:rgba(0,212,255,0.4);
-  line-height:2;letter-spacing:0.06em;
-  text-align:right;
+/* ── SCAN STATUS (top-left) ── */
+#scan-status{
+  position:fixed;top:18px;left:18px;z-index:20;
+  font-size:10px;letter-spacing:2.5px;color:rgba(0,229,255,0.65);
   text-transform:uppercase;
+  text-shadow:0 0 8px rgba(0,229,255,0.4);
+  pointer-events:none;
+}
+#scan-count{
+  position:fixed;top:36px;left:18px;z-index:20;
+  font-size:9px;letter-spacing:2px;color:rgba(0,229,255,0.35);pointer-events:none;
 }
 
-/* Repulsor glow overlay */
-#repulsor-flash{
-  position:fixed;inset:0;
-  background:radial-gradient(circle at 50% 50%, rgba(255,60,0,0.25), transparent 60%);
-  pointer-events:none;z-index:30;
-  opacity:0;
-  transition:opacity 0.1s;
+/* ── API KEY / LOADING SCREENS ── */
+#api-overlay,#loading-screen{
+  position:fixed;inset:0;z-index:100;
+  background:rgba(0,4,14,0.96);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:32px;
 }
-
-/* HUD flicker */
-@keyframes flicker{
-  0%,95%,100%{opacity:1;}
-  96%{opacity:0.85;}
-  97%{opacity:1;}
-  98%{opacity:0.7;}
-  99%{opacity:1;}
+#loading-screen{display:none;}
+.screen-logo{
+  font-size:22px;letter-spacing:6px;color:#00e5ff;
+  text-shadow:0 0 24px rgba(0,229,255,0.8);margin-bottom:6px;
 }
-#hud{animation:flicker 10s infinite;}
-
-/* Assembled: pulse border */
-@keyframes borderPulse{
-  0%,100%{opacity:0.7;}50%{opacity:1;}
+.screen-sub{font-size:10px;letter-spacing:2px;color:rgba(0,229,255,0.4);text-transform:uppercase;}
+.screen-p{font-size:12px;color:rgba(0,229,255,0.55);text-align:center;line-height:1.7;max-width:290px;}
+#api-key-input{
+  width:100%;max-width:300px;
+  background:rgba(0,229,255,0.04);
+  border:1px solid rgba(0,229,255,0.25);
+  color:#00e5ff;padding:11px 14px;
+  font-family:'Courier New',monospace;font-size:12px;outline:none;
+  clip-path:polygon(0 5px,5px 0,calc(100% - 5px) 0,100% 5px,100% calc(100% - 5px),calc(100% - 5px) 100%,5px 100%,0 calc(100% - 5px));
+  caret-color:#00e5ff;
 }
-body.assembled .corner{animation:borderPulse 1.5s ease-in-out infinite;}
+#api-key-input::placeholder{color:rgba(0,229,255,0.25);}
+#start-btn{
+  background:rgba(0,229,255,0.07);
+  border:1px solid rgba(0,229,255,0.4);
+  color:#00e5ff;padding:11px 36px;
+  font-family:'Courier New',monospace;font-size:13px;letter-spacing:4px;
+  cursor:pointer;text-transform:uppercase;
+  clip-path:polygon(0 5px,5px 0,calc(100% - 5px) 0,100% 5px,100% calc(100% - 5px),calc(100% - 5px) 100%,5px 100%,0 calc(100% - 5px));
+  transition:background .2s;
+}
+#start-btn:hover{background:rgba(0,229,255,0.18);}
+#start-btn:active{background:rgba(0,229,255,0.3);}
+.screen-note{font-size:9px;color:rgba(0,229,255,0.25);letter-spacing:1px;text-align:center;}
+/* loading bar */
+.lb-wrap{width:220px;height:3px;background:rgba(0,229,255,0.08);border:1px solid rgba(0,229,255,0.2);}
+#loading-bar{height:100%;width:0%;background:#00e5ff;transition:width .35s;box-shadow:0 0 6px #00e5ff;}
+#loading-text{font-size:10px;color:rgba(0,229,255,0.45);letter-spacing:2px;}
 </style>
 </head>
 <body>
 
-<video id="video" playsinline autoplay muted></video>
-<canvas id="bg-canvas"></canvas>
-<canvas id="three-canvas"></canvas>
-
-<div id="hud">
-  <div id="scanline"></div>
-  <div class="corner tl"></div>
-  <div class="corner tr"></div>
-  <div class="corner bl"></div>
-  <div class="corner br"></div>
-
-  <div id="title-bar">◈ STARK INDUSTRIES &nbsp;·&nbsp; MARK XLV &nbsp;·&nbsp; ASSEMBLY PROTOCOL ◈</div>
-
-  <div class="side-panel" id="panel-l">
-    SYSTEM: ONLINE<br>
-    POWER: 100%<br>
-    ARMOR: STANDBY<br>
-    AI CORE: JARVIS<br>
-    THREAT: NONE<br>
-    ALTITUDE: 0M
-  </div>
-
-  <div class="side-panel" id="panel-r">
-    MARK XLV<br>
-    REV 4.5.1<br>
-    AU/TI ALLOY<br>
-    WEIGHT: 25KG<br>
-    REPULSOR: ARM<br>
-    DEPTH: ████
-  </div>
-
-  <div id="big-pct"><span id="pct-num">0</span>%<small>ASSEMBLY</small></div>
-
-  <div id="piece-list"></div>
-
-  <div id="status-wrap">
-    <div id="status">TAP INITIALIZE TO BEGIN</div>
-    <div id="prog-wrap"><div id="prog-bar"></div></div>
-  </div>
-
-  <button id="start-btn">⬡ INITIALIZE JARVIS</button>
+<!-- ── API KEY SCREEN ── -->
+<div id="api-overlay">
+  <div class="screen-logo">◈ AR WORLD LOCK</div>
+  <div class="screen-sub">v1.0 — Neural Vision System</div>
+  <p class="screen-p">Enter your Anthropic API key for live AI object descriptions. Key stays on your device only.</p>
+  <input id="api-key-input" type="password" placeholder="sk-ant-api03-..." autocomplete="off" spellcheck="false">
+  <p class="screen-note">Leave blank for offline mode (built-in descriptions)</p>
+  <button id="start-btn" onclick="startApp()">◉ INITIALIZE SYSTEM</button>
 </div>
 
-<div id="repulsor-flash"></div>
+<!-- ── LOADING SCREEN ── -->
+<div id="loading-screen">
+  <div class="screen-logo">◈ AR WORLD LOCK</div>
+  <div class="lb-wrap"><div id="loading-bar"></div></div>
+  <div id="loading-text">BOOTING...</div>
+</div>
 
-<!-- Three.js -->
+<!-- ── CAMERA ── -->
+<video id="video" autoplay playsinline muted></video>
+
+<!-- ── AR OVERLAY CANVAS ── -->
+<canvas id="main-canvas"></canvas>
+
+<!-- ── 3D MODEL PANEL ── -->
+<div id="model-panel">
+  <canvas id="three-canvas" width="150" height="150"></canvas>
+  <div id="model-label">ANALYZING…</div>
+</div>
+
+<!-- ── HUD DESCRIPTION PANEL ── -->
+<div id="hud-panel">
+  <div class="hud-corner-tl"></div>
+  <div class="hud-corner-br"></div>
+  <div id="hud-tag">◉ OBJECT IDENTIFIED</div>
+  <div id="hud-title">SCANNING</div>
+  <div id="hud-desc">Initializing neural scan…</div>
+  <div id="hud-row">
+    <div class="h-stat"><span class="h-stat-lbl">Confidence</span><span class="h-stat-val" id="s-conf">—</span></div>
+    <div class="h-stat"><span class="h-stat-lbl">Objects</span><span class="h-stat-val" id="s-count">—</span></div>
+    <div class="h-stat"><span class="h-stat-lbl">Status</span><span class="h-stat-val" id="s-status">SCAN</span></div>
+    <div class="h-stat"><span class="h-stat-lbl">Frame</span><span class="h-stat-val" id="s-frame">0</span></div>
+  </div>
+</div>
+
+<!-- ── STATUS BADGE ── -->
+<div id="scan-status">◌ SCANNING</div>
+<div id="scan-count">OBJECTS: 0</div>
+
+<!-- ── THREE.JS ── -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<!-- MediaPipe Hands -->
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
 <script>
-// ══════════════════════════════════════════════════════
-//  CONFIG
-// ══════════════════════════════════════════════════════
-const BLUE   = 0x00d4ff;
-const GOLD   = 0xffaa00;
-const RED    = 0xff2200;
-const DARK   = 0x001a33;
+// ============================================================
+//  AR WORLD LOCK — Main Application
+// ============================================================
+'use strict';
 
-// Thickness of armor segments (px in orthographic space)
-const T_THICK = 15; // width
-const T_DEPTH = 10; // depth
+let apiKey = '';
+let tfModel  = null;
+let video, mainCanvas, ctx;
+let threeScene, threeCamera, threeRenderer, rootMesh, wireMesh;
+let detections     = [];
+let primaryObj     = null;
+let lastDetectTime = 0;
+let frameCount     = 0;
+let descCache      = {};
+let currentDesc    = '';
+let typeTimer      = null;
 
-// Assembly sequence — defines order pieces appear
-const ASSEMBLY_ORDER = [
-  { name:'wrist',    label:'WRIST GUARD',    color: GOLD  },
-  { name:'forearm',  label:'FOREARM SHELL',  color: GOLD  },
-  { name:'palm',     label:'PALM PLATE',     color: BLUE  },
-  { name:'thumb0',   label:'THUMB PROX',     color: BLUE  },
-  { name:'thumb1',   label:'THUMB DIST',     color: BLUE  },
-  { name:'index0',   label:'INDEX PROX',     color: BLUE  },
-  { name:'index1',   label:'INDEX MID',      color: BLUE  },
-  { name:'index2',   label:'INDEX DIST',     color: BLUE  },
-  { name:'middle0',  label:'MIDDLE PROX',    color: BLUE  },
-  { name:'middle1',  label:'MIDDLE MID',     color: BLUE  },
-  { name:'middle2',  label:'MIDDLE DIST',    color: BLUE  },
-  { name:'ring0',    label:'RING PROX',      color: BLUE  },
-  { name:'ring1',    label:'RING MID',       color: BLUE  },
-  { name:'ring2',    label:'RING DIST',      color: BLUE  },
-  { name:'pinky0',   label:'PINKY PROX',     color: BLUE  },
-  { name:'pinky1',   label:'PINKY DIST',     color: BLUE  },
-  { name:'repulsor', label:'REPULSOR CORE',  color: RED   },
-];
+// ── Fallback descriptions ──────────────────────────────────
+const LOCAL_DESCS = {
+  person       :"Homo sapiens — bipedal primate with advanced cognition. Height avg 1.7m, mass 62–80kg. Neural processing ~86 billion neurons operating at 120 m/s signal velocity.",
+  car          :"Four-wheeled motor vehicle. Internal combustion or EV powertrain. 0–100 km/h in 4–8s typical. Gross vehicle mass 1,200–2,500kg.",
+  truck        :"Heavy goods vehicle. Diesel powertrain, 6–18 wheels. Payload capacity 1–30 metric tons. Essential freight logistics unit.",
+  bus          :"Mass transit vehicle. Diesel or electric drive. Capacity 30–80 passengers. Wheelbase 5–9 metres.",
+  bicycle      :"Human-powered two-wheeled vehicle. Mechanical efficiency ~95%. Mass 7–15kg. Speed range 15–50 km/h typical.",
+  motorcycle   :"Single-track motorised vehicle. Engine 125cc–2000cc. Lean-angle cornering, 45° typical. Mass 150–300kg.",
+  bottle       :"Container for liquids. Material: glass or PET polymer. Volume 250ml–2L. Engineered for hermetic sealing.",
+  cup          :"Open-top drinking vessel. Ceramic, glass, or polymer. Thermal retention 20–90min. Capacity 200–600ml.",
+  wine_glass   :"Stemmed drinking vessel engineered for aromatic concentration. Borosilicate glass, 0.7–1.5mm wall thickness.",
+  bowl         :"Hemispherical open container. Diameter 10–35cm. Used for food storage, serving, and mixing.",
+  banana       :"Tropical monocot fruit. Musa genus. Curved form factor, length 10–25cm. High potassium content — 358mg per 100g.",
+  apple        :"Pome fruit, Malus domestica. Diameter 5–9cm. Skin contains 82% water by mass. Fibre content 2.4g/100g.",
+  orange       :"Citrus sinensis. Spheroid, diameter 6–9cm. Vitamin C content 53mg/100g. Rind contains essential oils.",
+  sandwich     :"Portable food unit. Two bread slices enclosing filling. Caloric density 200–600 kcal. First documented 18th century.",
+  chair        :"Single-occupant seating furniture. Four-leg or pedestal base. Load capacity 100–150kg typical.",
+  couch        :"Multi-person upholstered seating. Width 150–240cm. Steel or hardwood frame. Foam density 28–40 kg/m³.",
+  laptop       :"Portable personal computer. CPU 1–5 GHz, RAM 8–64GB. Display 13–17 inch IPS/OLED. Li-ion battery 50–100Wh.",
+  tv           :"Flat-panel display. LCD or OLED panel. Resolution 4K UHD typical. Refresh rate 60–144Hz.",
+  cell_phone   :"Handheld smartphone. SoC 3–4 GHz, RAM 6–16GB. Cameras 12–200MP. Connectivity: 5G, Wi-Fi 6, Bluetooth 5.",
+  keyboard     :"Input device. 104-key QWERTY layout. Switch travel 2–4mm. Polling rate 125–1000Hz.",
+  mouse        :"Pointing input device. Optical or laser sensor 400–25600 DPI. Polling rate up to 1000Hz.",
+  book         :"Bound printed pages. Paper 60–90 gsm. Spines glued or sewn. Information density ~500,000 chars/volume.",
+  clock        :"Timekeeping instrument. Quartz oscillator ±15 sec/month accuracy. Display: analog or digital.",
+  vase         :"Decorative vessel. Ceramic, glass, or metal. Height 10–60cm. Used for floral display.",
+  scissors     :"Compound cutting tool. Two crossing blades. Pivot joint. Stainless steel, hardness 52–58 HRC.",
+  toothbrush   :"Oral hygiene implement. Nylon bristle filaments. 20,000–40,000 bristle tips. Replacement cycle 90 days.",
+  fork         :"Pronged eating utensil. 3–4 tines. Stainless steel 18/10. Length 18–21cm.",
+  knife        :"Single-edged cutting utensil. Stainless steel blade. Edge angle 15–25°. Length 20–35cm.",
+  spoon        :"Scoop-bowled eating utensil. Oval bowl diameter 3–4cm. Stainless steel 18/10. Length 17–21cm.",
+  tie          :"Textile neckwear. Silk or polyester. Width 5–9cm. Functional or decorative use.",
+  backpack     :"Soft-shell carrying system. Nylon or polyester. Capacity 10–50L. Shoulder-mounted load transfer.",
+  umbrella     :"Collapsible rain shield. Nylon canopy 190T. Diameter 90–110cm. Ribs: 6–10 fibreglass struts.",
+  suitcase     :"Hard or soft luggage. Polycarbonate or nylon. Capacity 30–130L. 360° spinner wheels, TSA lock.",
+  cat          :"Felis catus — domestic felid. Average mass 3.5–5kg. Vision 6× better than human in low light. 32 ear muscles.",
+  dog          :"Canis lupus familiaris — domesticated canid. 300+ breeds. Olfactory receptor cells ~300 million vs 6M human.",
+  bird         :"Class Aves. Hollow bones for flight efficiency. Body temperature 41–44°C. Vision 4 colour receptors vs human 3.",
+  horse        :"Equus ferus caballus. Mass 380–1000kg. Speed up to 88 km/h. Monocular vision 350° field.",
+  default      :"Unclassified object detected by neural vision system. Analysing geometric contours, surface texture, and spectral signature for environmental cataloguing."
+};
 
-// ══════════════════════════════════════════════════════
-//  GLOBALS
-// ══════════════════════════════════════════════════════
-let W, H;
-let scene, camera, renderer;
-let armorGroup;
-let armorMeshes = {};         // name → THREE.Group
-let handLandmarks = null;
-let assemblyState = 'idle';   // idle | scanning | assembling | assembled
-let assemblyStep  = 0;
-let assemblyTimer = 0;
-const STEP_DUR    = 0.14;     // seconds per piece
-let time = 0;
-let lastTime = 0;
-let noHandFrames = 0;
-let gridOffset   = 0;
+// ── 3D shape map ──────────────────────────────────────────
+const SHAPE_MAP = {
+  person:'humanoid', car:'car', truck:'truck', bus:'truck', bicycle:'torus',
+  motorcycle:'torus', bottle:'cylinder', cup:'cylinder', wine_glass:'cylinder',
+  bowl:'sphere', banana:'torus', apple:'sphere', orange:'sphere',
+  sandwich:'flatbox', chair:'box', couch:'wideBox', laptop:'flatbox',
+  tv:'flatbox', cell_phone:'flatbox', keyboard:'flatbox', mouse:'sphere',
+  book:'flatbox', clock:'torus', vase:'cylinder', scissors:'cross',
+  toothbrush:'cylinder', fork:'cylinder', knife:'cylinder', spoon:'cylinder',
+  cat:'sphere', dog:'sphere', bird:'sphere', horse:'box',
+  default:'icosahedron'
+};
 
-const video       = document.getElementById('video');
-const bgCanvas    = document.getElementById('bg-canvas');
-const threeCanvas = document.getElementById('three-canvas');
-const bgCtx       = bgCanvas.getContext('2d');
-const statusEl    = document.getElementById('status');
-const progBar     = document.getElementById('prog-bar');
-const startBtn    = document.getElementById('start-btn');
-const bigPct      = document.getElementById('big-pct');
-const pctNum      = document.getElementById('pct-num');
-const pieceList   = document.getElementById('piece-list');
-const repFlash    = document.getElementById('repulsor-flash');
+// ============================================================
+//  BOOT
+// ============================================================
+function startApp(){
+  apiKey = document.getElementById('api-key-input').value.trim();
+  document.getElementById('api-overlay').style.display  = 'none';
+  document.getElementById('loading-screen').style.display = 'flex';
+  _boot();
+}
 
-// ══════════════════════════════════════════════════════
-//  RESIZE
-// ══════════════════════════════════════════════════════
-function resize() {
-  W = window.innerWidth;
-  H = window.innerHeight;
-  bgCanvas.width  = W; bgCanvas.height  = H;
-  threeCanvas.width = W; threeCanvas.height = H;
-  if (renderer) {
-    renderer.setSize(W, H);
-    camera.left = -W/2; camera.right  = W/2;
-    camera.top  =  H/2; camera.bottom = -H/2;
-    camera.updateProjectionMatrix();
+async function _boot(){
+  try{
+    setLoading(8,'REQUESTING CAMERA ACCESS…');
+    video = document.getElementById('video');
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}},audio:false});
+    video.srcObject = stream;
+    await new Promise(r=>{ video.onloadedmetadata=r; });
+
+    setLoading(25,'LOADING TENSORFLOW CORE…');
+    await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js');
+
+    setLoading(50,'LOADING COCO-SSD MODEL…');
+    await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js');
+
+    setLoading(78,'COMPILING NEURAL NET…');
+    tfModel = await cocoSsd.load({base:'mobilenet_v2'});
+
+    setLoading(90,'INIT THREE.JS RENDERER…');
+    initThree();
+
+    setLoading(97,'CALIBRATING OVERLAY…');
+    mainCanvas = document.getElementById('main-canvas');
+    ctx        = mainCanvas.getContext('2d');
+    resizeCanvas();
+    window.addEventListener('resize',resizeCanvas);
+
+    setLoading(100,'SYSTEM READY');
+    setTimeout(()=>{
+      document.getElementById('loading-screen').style.display='none';
+      document.getElementById('model-panel').style.display='flex';
+      document.getElementById('hud-panel').style.display='block';
+      requestAnimationFrame(renderLoop);
+    },600);
+  } catch(e){
+    console.error(e);
+    document.getElementById('loading-text').textContent = '✖ ERROR: '+e.message;
   }
 }
-window.addEventListener('resize', resize);
 
-// ══════════════════════════════════════════════════════
-//  THREE SETUP
-// ══════════════════════════════════════════════════════
-function initThree() {
-  resize();
-  scene = new THREE.Scene();
-  camera = new THREE.OrthographicCamera(-W/2, W/2, H/2, -H/2, -2000, 2000);
-  camera.position.z = 1000;
+function loadScript(src){
+  return new Promise((ok,fail)=>{
+    if(document.querySelector(`script[src="${src}"]`)){ok();return;}
+    const s=document.createElement('script');
+    s.src=src; s.onload=ok; s.onerror=fail;
+    document.head.appendChild(s);
+  });
+}
+function setLoading(pct,msg){
+  document.getElementById('loading-bar').style.width=pct+'%';
+  document.getElementById('loading-text').textContent=msg;
+}
+function resizeCanvas(){
+  mainCanvas.width=window.innerWidth;
+  mainCanvas.height=window.innerHeight;
+}
 
-  renderer = new THREE.WebGLRenderer({ canvas: threeCanvas, antialias: true, alpha: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(W, H);
-  renderer.setClearColor(0x000000, 0);
+// ============================================================
+//  THREE.JS  3D MODEL
+// ============================================================
+function initThree(){
+  const c = document.getElementById('three-canvas');
+  threeRenderer = new THREE.WebGLRenderer({canvas:c,alpha:true,antialias:true});
+  threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  threeRenderer.setSize(150,150);
+  threeRenderer.setClearColor(0x000000,0);
+
+  threeScene  = new THREE.Scene();
+  threeCamera = new THREE.PerspectiveCamera(58,1,0.1,100);
+  threeCamera.position.set(0,0.4,3);
+  threeCamera.lookAt(0,0,0);
 
   // Lights
-  scene.add(new THREE.AmbientLight(0xffffff, 0.4));
-  const dl = new THREE.DirectionalLight(BLUE, 2);
-  dl.position.set(0, 0, 500); scene.add(dl);
-  const dl2 = new THREE.DirectionalLight(GOLD, 1.2);
-  dl2.position.set(300, -200, 200); scene.add(dl2);
+  threeScene.add(new THREE.AmbientLight(0x003355,4));
+  const d1=new THREE.DirectionalLight(0x00e5ff,5); d1.position.set(2,3,2); threeScene.add(d1);
+  const d2=new THREE.DirectionalLight(0xff3300,1.5); d2.position.set(-2,-1,-1); threeScene.add(d2);
+  const pt=new THREE.PointLight(0x00aaff,3,6); pt.position.set(0,2,1); threeScene.add(pt);
 
-  armorGroup = new THREE.Group();
-  scene.add(armorGroup);
-
-  buildArmorMeshes();
+  _buildMesh('icosahedron');
 }
 
-// ══════════════════════════════════════════════════════
-//  ARMOR MESH BUILDER
-// ══════════════════════════════════════════════════════
-function makeMat(color, opacity = 0.82) {
-  return new THREE.MeshPhongMaterial({
-    color, emissive: color, emissiveIntensity: 0.25,
-    transparent: true, opacity,
-    shininess: 180, specular: 0xffffff,
+function _buildMesh(shapeKey){
+  if(rootMesh){ threeScene.remove(rootMesh); }
+  let geo;
+  switch(shapeKey){
+    case 'humanoid': geo=new THREE.CylinderGeometry(0.28,0.38,1.7,10); break;
+    case 'car':      geo=new THREE.BoxGeometry(1.8,0.75,0.95); break;
+    case 'truck':    geo=new THREE.BoxGeometry(2.0,1.0,0.9); break;
+    case 'cylinder': geo=new THREE.CylinderGeometry(0.38,0.38,1.3,14); break;
+    case 'sphere':   geo=new THREE.SphereGeometry(0.72,16,12); break;
+    case 'torus':    geo=new THREE.TorusGeometry(0.58,0.24,10,22); break;
+    case 'flatbox':  geo=new THREE.BoxGeometry(1.5,0.1,1.0); break;
+    case 'wideBox':  geo=new THREE.BoxGeometry(1.9,0.6,0.9); break;
+    case 'box':      geo=new THREE.BoxGeometry(1.1,1.1,1.1); break;
+    case 'icosahedron':
+    default:         geo=new THREE.IcosahedronGeometry(0.78,1); break;
+  }
+
+  // Solid mesh
+  const solidMat = new THREE.MeshPhongMaterial({
+    color:0x0088cc, transparent:true, opacity:0.80,
+    shininess:160, specular:0x00ffff, emissive:0x002244
   });
-}
-function makeWire(color) {
-  return new THREE.MeshBasicMaterial({
-    color, wireframe: true, transparent: true, opacity: 0.55,
-  });
-}
+  rootMesh = new THREE.Mesh(geo,solidMat);
 
-function createPiece(name, color) {
-  const geo  = new THREE.BoxGeometry(1, 1, 1);
-  const grp  = new THREE.Group();
-  const solid = new THREE.Mesh(geo,           makeMat(color));
-  const wire  = new THREE.Mesh(geo.clone(),   makeWire(color));
-  grp.add(solid, wire);
-  grp.visible = false;
-  grp.userData = { flyIn: 0, color, targetOpacity: name === 'repulsor' ? 0.9 : 0.82 };
-  armorGroup.add(grp);
-  armorMeshes[name] = grp;
+  // Wireframe overlay
+  const wireMat = new THREE.MeshBasicMaterial({color:0x00e5ff,wireframe:true,transparent:true,opacity:0.35});
+  wireMesh = new THREE.Mesh(geo,wireMat);
+  rootMesh.add(wireMesh);
+
+  threeScene.add(rootMesh);
 }
 
-function createRing(name, color) {
-  const geo  = new THREE.TorusGeometry(1, 0.18, 8, 32);
-  const grp  = new THREE.Group();
-  grp.add(new THREE.Mesh(geo,         makeMat(color, 0.8)));
-  grp.add(new THREE.Mesh(geo.clone(), makeWire(color)));
-  grp.visible = false;
-  grp.userData = { flyIn: 0, color, isRing: true, targetOpacity: 0.8 };
-  armorGroup.add(grp);
-  armorMeshes[name] = grp;
+function setThreeObject(cls){
+  const key = (SHAPE_MAP[cls]||SHAPE_MAP.default);
+  if(rootMesh && rootMesh._shapeKey===key) return;
+  _buildMesh(key);
+  if(rootMesh) rootMesh._shapeKey=key;
 }
 
-function buildArmorMeshes() {
-  createRing('wrist',   GOLD);
-  createPiece('forearm',GOLD);
-  createPiece('palm',   BLUE);
-  // Thumb
-  createPiece('thumb0', BLUE);
-  createPiece('thumb1', BLUE);
-  // Index
-  createPiece('index0', BLUE);
-  createPiece('index1', BLUE);
-  createPiece('index2', BLUE);
-  // Middle
-  createPiece('middle0',BLUE);
-  createPiece('middle1',BLUE);
-  createPiece('middle2',BLUE);
-  // Ring
-  createPiece('ring0',  BLUE);
-  createPiece('ring1',  BLUE);
-  createPiece('ring2',  BLUE);
-  // Pinky
-  createPiece('pinky0', BLUE);
-  createPiece('pinky1', BLUE);
-  // Repulsor
-  createRing('repulsor', RED);
+function animateThree(t){
+  if(!rootMesh) return;
+  rootMesh.rotation.y = t*0.00085;
+  rootMesh.rotation.x = Math.sin(t*0.0006)*0.35;
+  if(wireMesh) wireMesh.rotation.z = -t*0.0005;
+  threeRenderer.render(threeScene,threeCamera);
 }
 
-// ══════════════════════════════════════════════════════
-//  LANDMARK HELPERS
-// ══════════════════════════════════════════════════════
-function lmVec(i) {
-  const p = handLandmarks[i];
-  // Mirror X for front-facing camera
-  return new THREE.Vector3(
-    (1 - p.x - 0.5) * W,
-    -(p.y - 0.5) * H,
-    p.z * -250
-  );
-}
+// ============================================================
+//  OBJECT DETECTION
+// ============================================================
+async function runDetection(){
+  if(!tfModel||!video||video.readyState<2) return;
+  try{
+    detections = await tfModel.detect(video);
+    if(detections.length>0){
+      primaryObj = detections.reduce((a,b)=>a.score>b.score?a:b);
+      const cls  = primaryObj.class.replace(/ /g,'_');
+      setThreeObject(cls);
+      fetchDescription(primaryObj.class);
 
-function midVec(...ids) {
-  const v = new THREE.Vector3();
-  for (const i of ids) v.add(lmVec(i));
-  return v.divideScalar(ids.length);
-}
-
-const _up = new THREE.Vector3(0, 1, 0);
-const _q  = new THREE.Quaternion();
-
-function positionSeg(mesh, a, b, tw = T_THICK, td = T_DEPTH) {
-  const len = a.distanceTo(b);
-  if (len < 0.5) return;
-  mesh.position.copy(a).add(b).multiplyScalar(0.5);
-  mesh.scale.set(tw, len, td);
-  const dir = b.clone().sub(a).normalize();
-  _q.setFromUnitVectors(_up, dir);
-  mesh.quaternion.copy(_q);
-}
-
-// ══════════════════════════════════════════════════════
-//  UPDATE ARMOR TO HAND
-// ══════════════════════════════════════════════════════
-function updateArmor() {
-  if (!handLandmarks) return;
-
-  const handLen = lmVec(0).distanceTo(lmVec(9));
-
-  // Wrist ring
-  const wM = armorMeshes['wrist'];
-  if (wM?.visible) {
-    wM.position.copy(lmVec(0));
-    wM.scale.setScalar(handLen * 0.28);
-    wM.rotation.x = Math.PI / 2;
-  }
-
-  // Forearm — extends from wrist away from palm
-  const forearmEnd = lmVec(0).clone().add(
-    lmVec(0).clone().sub(lmVec(9)).normalize().multiplyScalar(handLen * 1.3)
-  );
-  const fM = armorMeshes['forearm'];
-  if (fM?.visible) positionSeg(fM, lmVec(0), forearmEnd, 24, 16);
-
-  // Palm plate
-  const palmW = lmVec(5).distanceTo(lmVec(17)) * 0.95;
-  const pM = armorMeshes['palm'];
-  if (pM?.visible) positionSeg(pM, lmVec(0), lmVec(9), palmW, 12);
-
-  // Thumb
-  if (armorMeshes['thumb0']?.visible) positionSeg(armorMeshes['thumb0'], lmVec(1), lmVec(2), 12, 9);
-  if (armorMeshes['thumb1']?.visible) positionSeg(armorMeshes['thumb1'], lmVec(2), lmVec(4), 11, 8);
-
-  // Index
-  if (armorMeshes['index0']?.visible) positionSeg(armorMeshes['index0'], lmVec(5),  lmVec(6),  12, 9);
-  if (armorMeshes['index1']?.visible) positionSeg(armorMeshes['index1'], lmVec(6),  lmVec(7),  11, 8);
-  if (armorMeshes['index2']?.visible) positionSeg(armorMeshes['index2'], lmVec(7),  lmVec(8),  10, 7);
-
-  // Middle
-  if (armorMeshes['middle0']?.visible) positionSeg(armorMeshes['middle0'], lmVec(9),  lmVec(10), 12, 9);
-  if (armorMeshes['middle1']?.visible) positionSeg(armorMeshes['middle1'], lmVec(10), lmVec(11), 11, 8);
-  if (armorMeshes['middle2']?.visible) positionSeg(armorMeshes['middle2'], lmVec(11), lmVec(12), 10, 7);
-
-  // Ring
-  if (armorMeshes['ring0']?.visible) positionSeg(armorMeshes['ring0'], lmVec(13), lmVec(14), 11, 8);
-  if (armorMeshes['ring1']?.visible) positionSeg(armorMeshes['ring1'], lmVec(14), lmVec(15), 10, 7);
-  if (armorMeshes['ring2']?.visible) positionSeg(armorMeshes['ring2'], lmVec(15), lmVec(16),  9, 7);
-
-  // Pinky
-  if (armorMeshes['pinky0']?.visible) positionSeg(armorMeshes['pinky0'], lmVec(17), lmVec(18), 10, 7);
-  if (armorMeshes['pinky1']?.visible) positionSeg(armorMeshes['pinky1'], lmVec(19), lmVec(20),  9, 6);
-
-  // Repulsor
-  const rM = armorMeshes['repulsor'];
-  if (rM?.visible) {
-    rM.position.copy(midVec(0, 5, 9, 13, 17));
-    rM.position.z += 8;
-    rM.scale.setScalar(handLen * 0.14);
-    rM.rotation.x = Math.PI / 2;
-    // Pulse emissive
-    rM.children[0].material.emissiveIntensity = 0.4 + Math.sin(time * 5) * 0.35;
-    // Repulsor glow on screen when assembled
-    if (assemblyState === 'assembled') {
-      repFlash.style.opacity = (0.12 + Math.sin(time * 5) * 0.06).toFixed(3);
+      document.getElementById('hud-title').textContent    = primaryObj.class.toUpperCase();
+      document.getElementById('s-conf').textContent       = Math.round(primaryObj.score*100)+'%';
+      document.getElementById('s-count').textContent      = detections.length;
+      document.getElementById('s-status').textContent     = 'LOCKED';
+      document.getElementById('scan-status').textContent  = '◉ LOCKED';
+      document.getElementById('scan-count').textContent   = 'OBJECTS: '+detections.length;
+      document.getElementById('model-label').textContent  = primaryObj.class.toUpperCase();
+      document.getElementById('hud-tag').textContent      = '◉ OBJECT IDENTIFIED';
+    } else {
+      primaryObj = null;
+      document.getElementById('hud-title').textContent    = 'SCANNING…';
+      document.getElementById('s-status').textContent     = 'SCAN';
+      document.getElementById('scan-status').textContent  = '◌ SCANNING';
+      document.getElementById('scan-count').textContent   = 'OBJECTS: 0';
+      document.getElementById('model-label').textContent  = 'ANALYZING…';
+      document.getElementById('hud-tag').textContent      = '◌ ENVIRONMENT SCAN';
     }
-  }
-
-  // Apply fly-in scale ripple
-  for (const { name } of ASSEMBLY_ORDER) {
-    const m = armorMeshes[name];
-    if (!m || !m.visible || !m.userData.flyIn) continue;
-    const s = 1 + m.userData.flyIn * 0.6;
-    m.scale.multiplyScalar(s);
-    // Fade in
-    const op = Math.min(m.userData.targetOpacity, (1 - m.userData.flyIn) * m.userData.targetOpacity);
-    m.children.forEach(c => { if (c.material) c.material.opacity = op; });
-  }
+    document.getElementById('s-frame').textContent = frameCount;
+  } catch(e){ console.warn('det:',e); }
 }
 
-// ══════════════════════════════════════════════════════
-//  ASSEMBLY TICK
-// ══════════════════════════════════════════════════════
-function tickAssembly(dt) {
-  if (assemblyState !== 'assembling') return;
+// ============================================================
+//  DESCRIPTION
+// ============================================================
+async function fetchDescription(cls){
+  const key = cls.replace(/ /g,'_');
+  if(descCache[key]){ setDesc(descCache[key]); return; }
 
-  // Decay fly-in
-  for (const { name } of ASSEMBLY_ORDER) {
-    const m = armorMeshes[name];
-    if (m?.userData.flyIn > 0) {
-      m.userData.flyIn = Math.max(0, m.userData.flyIn - dt * 5);
-    }
-  }
-
-  assemblyTimer += dt;
-  if (assemblyTimer < STEP_DUR) return;
-  assemblyTimer = 0;
-
-  if (assemblyStep < ASSEMBLY_ORDER.length) {
-    const { name, label } = ASSEMBLY_ORDER[assemblyStep];
-    const mesh = armorMeshes[name];
-    if (mesh) {
-      mesh.visible = true;
-      mesh.userData.flyIn = 1.0;
-      // reset opacity to 0 so it fades in
-      mesh.children.forEach(c => { if (c.material) c.material.opacity = 0; });
-    }
-
-    // Update piece list display (last 5)
-    const pct = Math.round(((assemblyStep + 1) / ASSEMBLY_ORDER.length) * 100);
-    pctNum.textContent = pct;
-    progBar.style.width = pct + '%';
-    statusEl.textContent = `INSTALLING: ${label}`;
-
-    const lines = [];
-    for (let i = Math.max(0, assemblyStep - 3); i <= assemblyStep; i++) {
-      const a = ASSEMBLY_ORDER[i];
-      lines.push(`✓ ${a.label}`);
-    }
-    pieceList.textContent = lines.join('\n');
-
-    assemblyStep++;
-  }
-
-  if (assemblyStep >= ASSEMBLY_ORDER.length) {
-    assemblyState = 'assembled';
-    statusEl.textContent = 'MARK XLV ONLINE — ALL SYSTEMS NOMINAL';
-    document.body.classList.add('assembled');
-  }
-}
-
-// ══════════════════════════════════════════════════════
-//  BACKGROUND DRAW (camera + grid)
-// ══════════════════════════════════════════════════════
-function drawBg() {
-  bgCtx.clearRect(0, 0, W, H);
-
-  // Camera feed (mirrored)
-  if (video.readyState >= 2) {
-    bgCtx.save();
-    bgCtx.translate(W, 0);
-    bgCtx.scale(-1, 1);
-    bgCtx.drawImage(video, 0, 0, W, H);
-    bgCtx.restore();
-  } else {
-    bgCtx.fillStyle = '#000';
-    bgCtx.fillRect(0, 0, W, H);
-  }
-
-  // Hand skeleton overlay
-  if (handLandmarks && assemblyState !== 'idle') {
-    const CONNS = [
-      [0,1],[1,2],[2,3],[3,4],
-      [0,5],[5,6],[6,7],[7,8],
-      [0,9],[9,10],[10,11],[11,12],
-      [0,13],[13,14],[14,15],[15,16],
-      [0,17],[17,18],[18,19],[19,20],
-      [5,9],[9,13],[13,17]
-    ];
-    bgCtx.save();
-    bgCtx.strokeStyle = 'rgba(0,212,255,0.22)';
-    bgCtx.lineWidth = 1.2;
-    for (const [a, b] of CONNS) {
-      const pa = handLandmarks[a], pb = handLandmarks[b];
-      bgCtx.beginPath();
-      bgCtx.moveTo((1 - pa.x) * W, pa.y * H);
-      bgCtx.lineTo((1 - pb.x) * W, pb.y * H);
-      bgCtx.stroke();
-    }
-    bgCtx.fillStyle = 'rgba(0,212,255,0.6)';
-    for (const p of handLandmarks) {
-      bgCtx.beginPath();
-      bgCtx.arc((1 - p.x) * W, p.y * H, 2.5, 0, Math.PI * 2);
-      bgCtx.fill();
-    }
-    bgCtx.restore();
-  }
-}
-
-// ══════════════════════════════════════════════════════
-//  MAIN LOOP
-// ══════════════════════════════════════════════════════
-function loop(ts) {
-  requestAnimationFrame(loop);
-  const dt = Math.min((ts - lastTime) / 1000, 0.05);
-  lastTime = ts;
-  time += dt;
-
-  drawBg();
-  if (handLandmarks) {
-    updateArmor();
-    tickAssembly(dt);
-  }
-  renderer.render(scene, camera);
-}
-
-// ══════════════════════════════════════════════════════
-//  MEDIAPIPE
-// ══════════════════════════════════════════════════════
-function initHands() {
-  const hands = new Hands({
-    locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
-  });
-  hands.setOptions({
-    maxNumHands: 1,
-    modelComplexity: 1,
-    minDetectionConfidence: 0.7,
-    minTrackingConfidence: 0.5
-  });
-  hands.onResults(onResults);
-  return hands;
-}
-
-function onResults(results) {
-  if (results.multiHandLandmarks?.length > 0) {
-    handLandmarks = results.multiHandLandmarks[0];
-    noHandFrames = 0;
-
-    if (assemblyState === 'scanning') {
-      assemblyState  = 'assembling';
-      assemblyStep   = 0;
-      assemblyTimer  = 0;
-      bigPct.style.display = 'block';
-      statusEl.textContent = 'HAND LOCKED — INITIATING SUIT ASSEMBLY…';
-    }
-  } else {
-    noHandFrames++;
-    if (noHandFrames > 25) {
-      handLandmarks = null;
-      if (assemblyState === 'assembled' || assemblyState === 'assembling') {
-        // Reset
-        Object.values(armorMeshes).forEach(m => m.visible = false);
-        assemblyState = 'scanning';
-        assemblyStep  = 0;
-        assemblyTimer = 0;
-        progBar.style.width = '0%';
-        pctNum.textContent = '0';
-        pieceList.textContent = '';
-        document.body.classList.remove('assembled');
-        repFlash.style.opacity = 0;
-        statusEl.textContent = 'SCANNING… RAISE YOUR HAND INTO FRAME';
+  if(apiKey){
+    try{
+      const r = await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01'},
+        body:JSON.stringify({
+          model:'claude-haiku-4-5-20251001',
+          max_tokens:100,
+          messages:[{role:'user',content:`Write exactly 2 sentences: a brief technical/scientific description of "${cls}" for an AR HUD display. Keep it factual, precise, and interesting. No bullets.`}]
+        })
+      });
+      const d = await r.json();
+      if(d.content?.[0]?.text){
+        const txt = d.content[0].text.trim();
+        descCache[key]=txt; setDesc(txt); return;
       }
+    } catch(e){ /* fallback */ }
+  }
+
+  const txt = LOCAL_DESCS[key]||LOCAL_DESCS.default;
+  descCache[key]=txt; setDesc(txt);
+}
+
+function setDesc(text){
+  if(currentDesc===text) return;
+  currentDesc=text;
+  if(typeTimer) clearInterval(typeTimer);
+  const el=document.getElementById('hud-desc');
+  el.textContent='';
+  let i=0;
+  typeTimer=setInterval(()=>{
+    if(i>=text.length){ clearInterval(typeTimer); return; }
+    el.textContent+=text[i++];
+  },18);
+}
+
+// ============================================================
+//  CANVAS  AR  OVERLAY
+// ============================================================
+function drawAROverlay(t){
+  ctx.clearRect(0,0,mainCanvas.width,mainCanvas.height);
+  const W=mainCanvas.width, H=mainCanvas.height;
+
+  drawCornerHUD(ctx,W,H,t);
+  drawHorizLine(ctx,W,H,t);
+
+  if(!detections.length) return;
+
+  const scX = W/(video.videoWidth||640);
+  const scY = H/(video.videoHeight||480);
+
+  detections.forEach(det=>{
+    const [bx,by,bw,bh]=det.bbox;
+    const sx=bx*scX, sy=by*scY, sw=bw*scX, sh=bh*scY;
+    const cx=sx+sw/2, cy=sy+sh/2;
+    const isPri=(det===primaryObj);
+    drawDetectionUnit(ctx,sx,sy,sw,sh,cx,cy,det,t,isPri,W,H);
+  });
+}
+
+// ── Corner HUD brackets ──
+function drawCornerHUD(ctx,W,H,t){
+  const sz=28,pd=16;
+  const pulse=0.4+0.2*Math.sin(t*0.003);
+  ctx.strokeStyle=`rgba(0,229,255,${pulse})`;
+  ctx.lineWidth=1.5;
+  [[pd,pd,1,1],[W-pd,pd,-1,1],[pd,H-pd,1,-1],[W-pd,H-pd,-1,-1]].forEach(([x,y,dx,dy])=>{
+    ctx.beginPath();
+    ctx.moveTo(x+dx*sz,y); ctx.lineTo(x,y); ctx.lineTo(x,y+dy*sz);
+    ctx.stroke();
+  });
+
+  // tiny centre crosshair
+  const hx=W/2,hy=H/2;
+  ctx.strokeStyle='rgba(0,229,255,0.15)';
+  ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(hx-14,hy); ctx.lineTo(hx+14,hy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(hx,hy-14); ctx.lineTo(hx,hy+14); ctx.stroke();
+}
+
+// ── Subtle horizon line ──
+function drawHorizLine(ctx,W,H,t){
+  const y=H/2, alpha=0.08+0.04*Math.sin(t*0.002);
+  ctx.strokeStyle=`rgba(0,229,255,${alpha})`;
+  ctx.lineWidth=1;
+  ctx.setLineDash([4,14]);
+  ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+// ── Per-object detection unit ──
+function drawDetectionUnit(ctx,sx,sy,sw,sh,cx,cy,det,t,isPri,W,H){
+  const radius = Math.min(sw,sh)*0.42;
+  const c1 = isPri ? 'rgba(0,229,255,1)'   : 'rgba(0,180,220,0.55)';
+  const c2 = isPri ? 'rgba(0,229,255,0.18)': 'rgba(0,150,200,0.06)';
+
+  ctx.save();
+  ctx.translate(cx,cy);
+
+  // ── Glow outer ring ──
+  ctx.beginPath();
+  ctx.arc(0,0,radius+6,0,Math.PI*2);
+  ctx.strokeStyle=c2; ctx.lineWidth=10; ctx.stroke();
+
+  // ── Partial arc (gap at bottom-right ~60°) ──
+  const gapStart=0.3, gapSize=0.9; // radians
+  ctx.beginPath();
+  ctx.arc(0,0,radius, gapStart+gapSize/2, gapStart+Math.PI*2-gapSize/2);
+  ctx.strokeStyle=c1;
+  ctx.lineWidth=isPri?2:1;
+  ctx.stroke();
+
+  // ── Tick marks on arc ──
+  if(isPri){
+    const ticks=10;
+    for(let i=0;i<=ticks;i++){
+      const a=gapStart+gapSize/2+(i/ticks)*(Math.PI*2-gapSize);
+      const r1=radius-5,r2=radius+(i%5===0?7:4);
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a)*r1,Math.sin(a)*r1);
+      ctx.lineTo(Math.cos(a)*r2,Math.sin(a)*r2);
+      ctx.strokeStyle=i%5===0?'rgba(0,229,255,0.8)':'rgba(0,229,255,0.35)';
+      ctx.lineWidth=i%5===0?1.5:0.8;
+      ctx.stroke();
     }
   }
-}
 
-// ══════════════════════════════════════════════════════
-//  CAMERA
-// ══════════════════════════════════════════════════════
-async function startCamera() {
-  // Try rear camera first, fall back to any
-  const constraints = [
-    { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
-    { video: true }
-  ];
-  for (const c of constraints) {
-    try {
-      const s = await navigator.mediaDevices.getUserMedia(c);
-      video.srcObject = s;
-      await new Promise(r => { video.onloadedmetadata = r; });
-      await video.play();
-      return;
-    } catch (_) {}
-  }
-  throw new Error('Camera unavailable');
-}
+  // ── Wireframe mesh inside circle ──
+  if(isPri) drawMeshInCircle(ctx,radius,t);
 
-// Frame send at ~10fps
-async function sendFrames(hands) {
-  while (true) {
-    if (video.readyState >= 2) await hands.send({ image: video });
-    await new Promise(r => setTimeout(r, 100));
-  }
-}
+  // ── Corner bracket markers (bounding box corners) ──
+  ctx.restore();
+  drawBBoxCorners(ctx,sx,sy,sw,sh,isPri,t);
+  ctx.save(); ctx.translate(cx,cy);
 
-// ══════════════════════════════════════════════════════
-//  INIT
-// ══════════════════════════════════════════════════════
-async function init() {
-  startBtn.disabled = true;
-  statusEl.textContent = 'REQUESTING CAMERA ACCESS…';
+  // ── Callout line from the GAP to 3D panel direction ──
+  if(isPri){
+    const lineAngle=gapStart+0.05; // angle pointing into the gap
+    const r0=radius+4;
+    const lx1=Math.cos(lineAngle)*r0;
+    const ly1=Math.sin(lineAngle)*r0;
 
-  initThree();
+    // determine direction to 3D panel (top-right area)
+    const panelWorldX = W-18-80 - cx; // approx centre of model panel relative to cx
+    const panelWorldY = 18+75   - cy;
+    const totalDist   = Math.hypot(panelWorldX,panelWorldY);
+    const ux=panelWorldX/totalDist, uy=panelWorldY/totalDist;
+    const lx2=lx1+ux*(radius*0.8+40);
+    const ly2=ly1+uy*(radius*0.4+20);
+    const lx3=lx2+ux*30;
+    const ly3=ly2; // horizontal jog
 
-  try {
-    await startCamera();
-  } catch (e) {
-    statusEl.textContent = '✗ CAMERA DENIED — CHECK PERMISSIONS';
-    startBtn.disabled = false;
-    return;
+    ctx.beginPath();
+    ctx.moveTo(lx1,ly1);
+    ctx.lineTo(lx2,ly2);
+    ctx.lineTo(lx3,ly3);
+    ctx.strokeStyle='rgba(0,229,255,0.7)';
+    ctx.lineWidth=1;
+    ctx.stroke();
+
+    // endpoint dot
+    ctx.beginPath(); ctx.arc(lx3,ly3,2,0,Math.PI*2);
+    ctx.fillStyle='#00e5ff'; ctx.fill();
   }
 
-  statusEl.textContent = 'LOADING NEURAL TRACKING…';
-  const hands = initHands();
+  // ── Spinning scan arc ──
+  if(isPri){
+    const sa=t*0.002;
+    ctx.beginPath();
+    ctx.arc(0,0,radius*0.78,sa,sa+0.9);
+    ctx.strokeStyle='rgba(0,229,255,0.35)';
+    ctx.lineWidth=2; ctx.stroke();
+  }
 
-  // Give MediaPipe time to load WASM
-  await new Promise(r => setTimeout(r, 2500));
+  // ── Label ──
+  const labelY=radius+(isPri?24:17);
+  ctx.fillStyle=c1;
+  ctx.font=`${isPri?11:9}px 'Courier New'`;
+  const lbl=det.class.toUpperCase();
+  ctx.fillText(lbl,-ctx.measureText(lbl).width/2,labelY);
 
-  startBtn.style.display = 'none';
-  assemblyState = 'scanning';
-  statusEl.textContent = 'SCANNING… RAISE YOUR HAND INTO FRAME';
+  if(isPri){
+    ctx.font="9px 'Courier New'";
+    ctx.fillStyle='rgba(0,229,255,0.55)';
+    const pctTxt=Math.round(det.score*100)+'%';
+    ctx.fillText(pctTxt,-ctx.measureText(pctTxt).width/2,labelY+13);
+  }
 
-  lastTime = performance.now();
-  requestAnimationFrame(loop);
-  sendFrames(hands);
+  ctx.restore();
 }
 
-startBtn.addEventListener('click', init);
+// ── Bounding-box corner brackets ──
+function drawBBoxCorners(ctx,sx,sy,sw,sh,isPri,t){
+  const cs=isPri?18:10;
+  const alpha=isPri?(0.5+0.2*Math.sin(t*0.004)):0.25;
+  ctx.strokeStyle=`rgba(0,229,255,${alpha})`;
+  ctx.lineWidth=isPri?1.5:1;
+  const corners=[[sx,sy,1,1],[sx+sw,sy,-1,1],[sx,sy+sh,1,-1],[sx+sw,sy+sh,-1,-1]];
+  corners.forEach(([x,y,dx,dy])=>{
+    ctx.beginPath();
+    ctx.moveTo(x+dx*cs,y); ctx.lineTo(x,y); ctx.lineTo(x,y+dy*cs);
+    ctx.stroke();
+  });
+}
+
+// ── Wireframe mesh + scan glow inside the circle ──
+function drawMeshInCircle(ctx,radius,t){
+  ctx.save();
+  ctx.beginPath(); ctx.arc(0,0,radius-3,0,Math.PI*2); ctx.clip();
+
+  // dark fill
+  ctx.fillStyle='rgba(0,25,50,0.45)'; ctx.fill();
+
+  // grid
+  const gs=radius*0.28, mr=radius-3;
+  ctx.strokeStyle='rgba(0,180,230,0.22)'; ctx.lineWidth=0.6;
+  for(let gx=-mr;gx<=mr;gx+=gs){
+    ctx.beginPath(); ctx.moveTo(gx,-mr); ctx.lineTo(gx,mr); ctx.stroke();
+  }
+  for(let gy=-mr;gy<=mr;gy+=gs){
+    ctx.beginPath(); ctx.moveTo(-mr,gy); ctx.lineTo(mr,gy); ctx.stroke();
+  }
+  // diagonal mesh
+  ctx.strokeStyle='rgba(0,150,200,0.1)'; ctx.lineWidth=0.5;
+  for(let gx=-mr*2;gx<=mr*2;gx+=gs){
+    ctx.beginPath(); ctx.moveTo(gx,-mr); ctx.lineTo(gx+mr,mr); ctx.stroke();
+  }
+
+  // scan sweep
+  const scanY=Math.sin(t*0.0025)*mr;
+  const grd=ctx.createLinearGradient(0,scanY-8,0,scanY+8);
+  grd.addColorStop(0,'rgba(0,229,255,0)');
+  grd.addColorStop(0.5,'rgba(0,229,255,0.12)');
+  grd.addColorStop(1,'rgba(0,229,255,0)');
+  ctx.fillStyle=grd; ctx.fillRect(-mr,scanY-8,mr*2,16);
+
+  // centre crosshair
+  ctx.strokeStyle='rgba(0,229,255,0.55)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(-9,0); ctx.lineTo(9,0); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0,-9); ctx.lineTo(0,9); ctx.stroke();
+
+  // centre dot
+  ctx.beginPath(); ctx.arc(0,0,2.5,0,Math.PI*2);
+  ctx.fillStyle='rgba(0,229,255,0.7)'; ctx.fill();
+
+  ctx.restore();
+}
+
+// ============================================================
+//  MAIN LOOP
+// ============================================================
+function renderLoop(t){
+  frameCount++;
+  if(t-lastDetectTime>480){ lastDetectTime=t; runDetection(); }
+  drawAROverlay(t);
+  animateThree(t);
+  requestAnimationFrame(renderLoop);
+}
 </script>
 </body>
 </html>
