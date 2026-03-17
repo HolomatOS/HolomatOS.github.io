@@ -7,705 +7,396 @@
 <title>AR AKSHAT Hologram</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <style>
-  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-  :root{
-    --blue:#00c8ff;
-    --blue2:#0066ff;
-    --glow:rgba(0,200,255,0.6);
-    --dark:#020d1a;
-    --surface:rgba(2,18,40,0.92);
-    --text:#b8e4ff;
-    --muted:rgba(184,228,255,0.45);
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --blue: #00c8ff; --glow: rgba(0,200,255,0.6);
+    --dark: #020d1a; --surface: rgba(2,18,40,0.92);
+    --text: #b8e4ff; --muted: rgba(184,228,255,0.45);
   }
-  html,body{width:100%;height:100%;background:var(--dark);overflow:hidden;
-    font-family:'Courier New',monospace;color:var(--text);
-    -webkit-tap-highlight-color:transparent}
-  canvas{display:block;position:fixed;inset:0}
+  html, body {
+    width: 100%; height: 100%;
+    background: transparent; /* ✅ MUST be transparent for AR camera */
+    overflow: hidden;
+    font-family: 'Courier New', monospace;
+    color: var(--text);
+    -webkit-tap-highlight-color: transparent;
+  }
+  canvas {
+    display: block; position: fixed; inset: 0;
+    background: transparent !important;
+  }
 
   /* ── Launch Screen ── */
-  #launch{
-    position:fixed;inset:0;z-index:50;
-    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;
-    background:radial-gradient(ellipse at 50% 35%,#041428 0%,#020d1a 68%);
-    transition:opacity .7s ease;
+  #launch {
+    position: fixed; inset: 0; z-index: 50;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 22px;
+    background: radial-gradient(ellipse at 50% 35%, #041428 0%, #020d1a 68%);
+    transition: opacity 0.7s ease;
   }
-  #launch.gone{opacity:0;pointer-events:none}
+  #launch.gone { opacity: 0; pointer-events: none; }
 
-  .hex-logo{
-    position:relative;width:100px;height:100px;
-    display:flex;align-items:center;justify-content:center;
-  }
-  .hex-logo svg{position:absolute;inset:0;animation:rotateSlow 12s linear infinite}
-  .hex-logo .icon{font-size:40px;z-index:1;filter:drop-shadow(0 0 12px var(--blue))}
+  .hex-logo { position: relative; width: 92px; height: 92px; display: flex; align-items: center; justify-content: center; }
+  .hex-logo svg { position: absolute; inset: 0; animation: spin 10s linear infinite; }
+  .hex-logo .icon { font-size: 34px; z-index: 1; filter: drop-shadow(0 0 12px var(--blue)); }
+  @keyframes spin { to { transform: rotate(360deg); } }
 
-  @keyframes rotateSlow{to{transform:rotate(360deg)}}
+  .title-block { text-align: center; }
+  .title-block h1 { font-size: 20px; letter-spacing: 6px; text-transform: uppercase; color: var(--blue); text-shadow: 0 0 24px var(--glow); margin-bottom: 5px; }
+  .title-block p { font-size: 10px; color: var(--muted); letter-spacing: 3px; text-transform: uppercase; }
 
-  .title-block{text-align:center}
-  .title-block h1{
-    font-size:22px;letter-spacing:6px;text-transform:uppercase;
-    color:var(--blue);text-shadow:0 0 24px var(--glow);
-    margin-bottom:6px
+  /* HTTPS warning */
+  #httpsWarn {
+    display: none;
+    background: rgba(255,100,0,0.1); border: 1px solid rgba(255,120,0,0.4);
+    border-radius: 8px; padding: 13px 16px;
+    width: min(300px,86vw); font-size: 11px; color: #ffaa55;
+    line-height: 1.8; text-align: center;
   }
-  .title-block p{font-size:10px;color:var(--muted);letter-spacing:3px;text-transform:uppercase}
+  #httpsWarn strong { color: #ffcc88; }
+  #httpsWarn a { color: var(--blue); }
 
-  .chips{display:flex;flex-direction:column;gap:8px;width:min(300px,86vw)}
-  .chip{
-    border:1px solid rgba(0,200,255,0.2);border-radius:6px;
-    padding:9px 14px;background:var(--surface);
-    font-size:11px;color:var(--muted);
-    display:flex;align-items:center;gap:10px
-  }
-  .chip-dot{
-    width:6px;height:6px;border-radius:50%;flex-shrink:0;
-    background:var(--blue);box-shadow:0 0 8px var(--blue)
-  }
+  .chips { display: flex; flex-direction: column; gap: 7px; width: min(300px,86vw); }
+  .chip { border: 1px solid rgba(0,200,255,0.2); border-radius: 6px; padding: 9px 13px; background: var(--surface); font-size: 10px; color: var(--muted); display: flex; align-items: center; gap: 9px; }
+  .chip-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--blue); box-shadow: 0 0 8px var(--blue); }
+  .chip-dot.warn { background: #ff9500; box-shadow: 0 0 8px #ff9500; }
+  .chip-dot.ok   { background: #00ff9d; box-shadow: 0 0 8px #00ff9d; }
 
-  #startBtn{
-    padding:14px 44px;
-    background:transparent;
-    border:1.5px solid var(--blue);
-    border-radius:40px;
-    color:var(--blue);
-    font-size:13px;letter-spacing:3px;text-transform:uppercase;
-    font-family:'Courier New',monospace;
-    cursor:pointer;
-    position:relative;overflow:hidden;
-    transition:color .25s,box-shadow .25s;
+  #startBtn {
+    padding: 14px 44px; background: transparent;
+    border: 1.5px solid var(--blue); border-radius: 40px;
+    color: var(--blue); font-size: 13px; letter-spacing: 3px; text-transform: uppercase;
+    font-family: 'Courier New', monospace; cursor: pointer;
+    position: relative; overflow: hidden; transition: color .25s, box-shadow .25s;
   }
-  #startBtn::after{
-    content:'';position:absolute;inset:0;
-    background:var(--blue);transform:scaleX(0);transform-origin:left;
-    transition:transform .3s ease;z-index:-1
-  }
-  #startBtn:hover::after,#startBtn:active::after{transform:scaleX(1)}
-  #startBtn:hover,#startBtn:active{color:#000;box-shadow:0 0 30px var(--glow)}
-  #startBtn:disabled{opacity:.35;cursor:not-allowed}
-
-  #errMsg{
-    display:none;font-size:12px;color:#ff6b35;
-    text-align:center;max-width:270px;line-height:1.7
-  }
+  #startBtn::after { content: ''; position: absolute; inset: 0; background: var(--blue); transform: scaleX(0); transform-origin: left; transition: transform .3s ease; z-index: -1; }
+  #startBtn:hover::after, #startBtn:active::after { transform: scaleX(1); }
+  #startBtn:hover, #startBtn:active { color: #000; box-shadow: 0 0 30px var(--glow); }
+  #startBtn:disabled { opacity: .35; cursor: not-allowed; }
+  #errMsg { display: none; font-size: 11px; color: #ff6b35; text-align: center; max-width: 270px; line-height: 1.7; }
 
   /* ── AR Overlay ── */
-  #overlay{
-    position:fixed;inset:0;pointer-events:none;
-    z-index:20;display:none;
+  #ar-overlay {
+    position: fixed; inset: 0; pointer-events: none; z-index: 20;
+    background: transparent; display: none;
   }
-  #overlay.active{display:block}
+  #ar-overlay.active { display: block; }
 
-  /* Crosshair reticle */
-  #reticle{
-    position:absolute;top:50%;left:50%;
-    transform:translate(-50%,-50%);
-    width:56px;height:56px;
-    transition:opacity .3s;
-  }
-  #reticle svg{width:100%;height:100%}
+  #reticle-svg { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 60px; height: 60px; }
 
-  /* Status bar */
-  #statusBar{
-    position:absolute;top:20px;left:50%;transform:translateX(-50%);
-    background:var(--surface);border:1px solid rgba(0,200,255,0.2);
-    border-radius:24px;padding:8px 20px;
-    font-size:11px;letter-spacing:2px;text-transform:uppercase;
-    color:var(--blue);text-align:center;
-    white-space:nowrap;
-    animation:pulse 2s ease-in-out infinite;
+  #statusBar {
+    position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+    background: rgba(2,18,40,0.8); border: 1px solid rgba(0,200,255,0.25);
+    border-radius: 24px; padding: 8px 20px;
+    font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--blue); white-space: nowrap; animation: pulse 2s ease-in-out infinite;
   }
-  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
 
-  /* Corner decorations */
-  .corner{position:absolute;width:24px;height:24px}
-  .corner svg{width:100%;height:100%}
-  .corner.tl{top:16px;left:16px}
-  .corner.tr{top:16px;right:16px;transform:scaleX(-1)}
-  .corner.bl{bottom:16px;left:16px;transform:scaleY(-1)}
-  .corner.br{bottom:16px;right:16px;transform:scale(-1,-1)}
+  .corner { position: absolute; width: 22px; height: 22px; }
+  .corner svg { width: 100%; height: 100%; }
+  .corner.tl { top: 14px; left: 14px; }
+  .corner.tr { top: 14px; right: 14px; transform: scaleX(-1); }
+  .corner.bl { bottom: 14px; left: 14px; transform: scaleY(-1); }
+  .corner.br { bottom: 14px; right: 14px; transform: scale(-1,-1); }
 
-  /* Bottom hint */
-  #hint{
-    position:absolute;bottom:40px;left:50%;transform:translateX(-50%);
-    font-size:11px;letter-spacing:2px;text-transform:uppercase;
-    color:var(--muted);text-align:center;pointer-events:auto;
-  }
-  #resetBtn{
-    display:none;margin-top:10px;
-    background:transparent;border:1px solid rgba(0,200,255,0.35);
-    border-radius:20px;padding:7px 20px;
-    color:var(--blue);font-size:11px;letter-spacing:2px;
-    font-family:'Courier New',monospace;text-transform:uppercase;
-    cursor:pointer;
-  }
-  #resetBtn.show{display:block}
+  #hint { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); text-align: center; pointer-events: auto; }
+  #resetBtn { display: none; margin-top: 10px; background: transparent; border: 1px solid rgba(0,200,255,0.35); border-radius: 20px; padding: 7px 20px; color: var(--blue); font-size: 11px; letter-spacing: 2px; font-family: 'Courier New', monospace; text-transform: uppercase; cursor: pointer; }
+  #resetBtn.show { display: block; }
 </style>
 </head>
 <body>
 
-<!-- ─── Launch Screen ─── -->
 <div id="launch">
   <div class="hex-logo">
     <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-      <polygon points="50,4 93,27 93,73 50,96 7,73 7,27"
-        fill="none" stroke="#00c8ff" stroke-width="1.5"
-        stroke-dasharray="8 3" opacity="0.7"/>
-      <polygon points="50,14 83,32 83,68 50,86 17,68 17,32"
-        fill="none" stroke="#0066ff" stroke-width="1" opacity="0.4"/>
+      <polygon points="50,4 93,27 93,73 50,96 7,73 7,27" fill="none" stroke="#00c8ff" stroke-width="1.5" stroke-dasharray="8 3" opacity="0.7"/>
+      <polygon points="50,14 83,32 83,68 50,86 17,68 17,32" fill="none" stroke="#0066ff" stroke-width="1" opacity="0.4"/>
     </svg>
     <span class="icon">◈</span>
   </div>
-
   <div class="title-block">
     <h1>AKSHAT // AR</h1>
     <p>Holographic Projection System v1.0</p>
   </div>
 
-  <div class="chips">
-    <div class="chip"><span class="chip-dot"></span>WebXR Plane Detection + World Anchors</div>
-    <div class="chip"><span class="chip-dot"></span>3D Holographic Platform Projection</div>
-    <div class="chip"><span class="chip-dot"></span>Requires: Chrome Android + ARCore</div>
+  <div id="httpsWarn">
+    ⚠️ <strong>HTTPS Required for Camera</strong><br>
+    WebXR blocks on <code>file://</code> or <code>http://</code>.<br><br>
+    <strong>Fix:</strong> drag this file to<br>
+    <a href="https://app.netlify.com/drop" target="_blank">app.netlify.com/drop</a>
+    → copy the https:// link → open on phone in Chrome.
   </div>
 
-  <button id="startBtn">▶ INITIALIZE AR</button>
+  <div class="chips">
+    <div class="chip"><span class="chip-dot"></span>WebXR Plane Detection + World Anchors</div>
+    <div class="chip"><span class="chip-dot"></span>Tap surface → sci-fi platform deploys</div>
+    <div class="chip">
+      <span class="chip-dot" id="arCoreDot"></span>
+      <span id="arCoreLabel">Checking ARCore…</span>
+    </div>
+  </div>
+
+  <button id="startBtn" disabled>CHECKING…</button>
   <p id="errMsg"></p>
 </div>
 
-<!-- ─── AR DOM Overlay ─── -->
-<div id="overlay">
-  <div id="reticle">
-    <svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
-      <!-- outer ring -->
-      <circle cx="28" cy="28" r="25" fill="none" stroke="#00c8ff" stroke-width="1"
-        stroke-dasharray="10 4" opacity="0.6">
-        <animateTransform attributeName="transform" type="rotate"
-          from="0 28 28" to="360 28 28" dur="6s" repeatCount="indefinite"/>
-      </circle>
-      <!-- inner cross -->
-      <line x1="28" y1="14" x2="28" y2="20" stroke="#00c8ff" stroke-width="1.5"/>
-      <line x1="28" y1="36" x2="28" y2="42" stroke="#00c8ff" stroke-width="1.5"/>
-      <line x1="14" y1="28" x2="20" y2="28" stroke="#00c8ff" stroke-width="1.5"/>
-      <line x1="36" y1="28" x2="42" y2="28" stroke="#00c8ff" stroke-width="1.5"/>
-      <!-- centre dot -->
-      <circle cx="28" cy="28" r="2.5" fill="#00c8ff" opacity="0.9">
-        <animate attributeName="opacity" values="0.9;0.3;0.9" dur="1.2s" repeatCount="indefinite"/>
-      </circle>
-    </svg>
-  </div>
-
+<div id="ar-overlay">
+  <svg id="reticle-svg" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="30" cy="30" r="26" fill="none" stroke="#00c8ff" stroke-width="1" stroke-dasharray="10 5" opacity="0.65">
+      <animateTransform attributeName="transform" type="rotate" from="0 30 30" to="360 30 30" dur="5s" repeatCount="indefinite"/>
+    </circle>
+    <line x1="30" y1="14" x2="30" y2="21" stroke="#00c8ff" stroke-width="1.5"/>
+    <line x1="30" y1="39" x2="30" y2="46" stroke="#00c8ff" stroke-width="1.5"/>
+    <line x1="14" y1="30" x2="21" y2="30" stroke="#00c8ff" stroke-width="1.5"/>
+    <line x1="39" y1="30" x2="46" y2="30" stroke="#00c8ff" stroke-width="1.5"/>
+    <circle cx="30" cy="30" r="2.5" fill="#00c8ff">
+      <animate attributeName="opacity" values="1;0.3;1" dur="1.2s" repeatCount="indefinite"/>
+    </circle>
+  </svg>
   <div id="statusBar">SCANNING SURFACE…</div>
-
-  <!-- corner brackets -->
-  <div class="corner tl">
-    <svg viewBox="0 0 24 24"><path d="M2 12 L2 2 L12 2" fill="none" stroke="#00c8ff" stroke-width="1.5"/></svg>
-  </div>
-  <div class="corner tr">
-    <svg viewBox="0 0 24 24"><path d="M2 12 L2 2 L12 2" fill="none" stroke="#00c8ff" stroke-width="1.5"/></svg>
-  </div>
-  <div class="corner bl">
-    <svg viewBox="0 0 24 24"><path d="M2 12 L2 2 L12 2" fill="none" stroke="#00c8ff" stroke-width="1.5"/></svg>
-  </div>
-  <div class="corner br">
-    <svg viewBox="0 0 24 24"><path d="M2 12 L2 2 L12 2" fill="none" stroke="#00c8ff" stroke-width="1.5"/></svg>
-  </div>
-
+  <div class="corner tl"><svg viewBox="0 0 22 22"><path d="M2 11 L2 2 L11 2" fill="none" stroke="#00c8ff" stroke-width="1.5"/></svg></div>
+  <div class="corner tr"><svg viewBox="0 0 22 22"><path d="M2 11 L2 2 L11 2" fill="none" stroke="#00c8ff" stroke-width="1.5"/></svg></div>
+  <div class="corner bl"><svg viewBox="0 0 22 22"><path d="M2 11 L2 2 L11 2" fill="none" stroke="#00c8ff" stroke-width="1.5"/></svg></div>
+  <div class="corner br"><svg viewBox="0 0 22 22"><path d="M2 11 L2 2 L11 2" fill="none" stroke="#00c8ff" stroke-width="1.5"/></svg></div>
   <div id="hint">
-    <span id="hintText">Point at a flat surface then tap</span>
+    <span id="hintText">Point at a flat surface · then tap</span>
     <button id="resetBtn">⟳ RESET PROJECTION</button>
   </div>
 </div>
 
 <script>
 'use strict';
-// ─────────────────────────────────────────────────────────
-//  State
-// ─────────────────────────────────────────────────────────
 let renderer, scene, camera, clock;
-let xrSession = null, xrRefSpace = null, hitTestSource = null;
-let reticleGroup = null;       // 3D reticle in world
-let hologramGroup = null;      // placed hologram
-let hologramPlaced = false;
-let placedMatrix = new THREE.Matrix4();
+let xrSession=null, xrRefSpace=null, hitTestSource=null;
+let reticleGroup=null, hologramGroup=null, hologramPlaced=false;
+let ringMeshes=[], beamMeshes=[], vertBeam=null;
+let holoCanvas, holoCtx, holoTexture, particleSystem=null;
 
-// animation handles
-let holoCanvas, holoCtx, holoTexture;
-let scanY = 0;
-let ringMeshes = [], beamMeshes = [];
-let particlePositions, particleSystem;
-let vertBeam;
+const $launch=$('#launch'), $overlay=$('#ar-overlay'), $status=$('#statusBar');
+const $hint=$('#hintText'), $reset=$('#resetBtn'), $start=$('#startBtn');
+const $err=$('#errMsg'), $httpsWarn=$('#httpsWarn');
+const $arDot=$('#arCoreDot'), $arLabel=$('#arCoreLabel');
 
-const overlay = document.getElementById('overlay');
-const statusBar = document.getElementById('statusBar');
-const hintText  = document.getElementById('hintText');
-const resetBtn  = document.getElementById('resetBtn');
-const startBtn  = document.getElementById('startBtn');
-const errMsg    = document.getElementById('errMsg');
-const launchEl  = document.getElementById('launch');
+function $(id){ return document.getElementById(id); }
 
-// ─────────────────────────────────────────────────────────
-//  Check WebXR support
-// ─────────────────────────────────────────────────────────
+// HTTPS check
+if (!['https:',''].includes(location.protocol) && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+  $httpsWarn.style.display = 'block';
+}
+
 async function init() {
-  if (!navigator.xr) {
-    showError('WebXR not supported. Use Chrome on an ARCore-compatible Android phone.');
-    return;
+  if (!navigator.xr) { return showErr('WebXR not found. Use Chrome on Android with ARCore.'); }
+  const ok = await navigator.xr.isSessionSupported('immersive-ar').catch(()=>false);
+  if (!ok) {
+    $arDot.className='chip-dot warn'; $arLabel.textContent='ARCore not detected';
+    return showErr('AR not supported. Install "Google Play Services for AR" from Play Store.');
   }
-  const supported = await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
-  if (!supported) {
-    showError('Immersive AR not supported on this device/browser. Requires ARCore + Chrome Android.');
-    return;
-  }
-  startBtn.disabled = false;
-  startBtn.textContent = '▶ INITIALIZE AR';
+  $arDot.className='chip-dot ok'; $arLabel.textContent='ARCore ready ✓';
+  $start.disabled=false; $start.textContent='▶ INITIALIZE AR';
 }
 
-function showError(msg) {
-  errMsg.style.display = 'block';
-  errMsg.textContent = msg;
-  startBtn.disabled = true;
-}
+function showErr(msg){ $err.style.display='block'; $err.textContent=msg; $start.disabled=true; $start.textContent='NOT AVAILABLE'; }
 
-// ─────────────────────────────────────────────────────────
-//  Start AR Session
-// ─────────────────────────────────────────────────────────
-startBtn.addEventListener('click', async () => {
-  startBtn.disabled = true;
-  startBtn.textContent = 'INITIALIZING…';
-
+$start.addEventListener('click', async () => {
+  $start.disabled=true; $start.textContent='INITIALIZING…';
   try {
     xrSession = await navigator.xr.requestSession('immersive-ar', {
-      requiredFeatures: ['hit-test', 'dom-overlay'],
-      optionalFeatures:  ['anchors', 'plane-detection'],
-      domOverlay: { root: overlay }
+      requiredFeatures: ['hit-test','dom-overlay'],
+      optionalFeatures: ['anchors','plane-detection'],
+      domOverlay: { root: $overlay }
     });
-  } catch (e) {
-    showError('Could not start AR session: ' + e.message);
-    startBtn.disabled = false;
-    startBtn.textContent = '▶ INITIALIZE AR';
-    return;
-  }
+  } catch(e) { showErr('Session failed: '+e.message); $start.disabled=false; $start.textContent='▶ INITIALIZE AR'; return; }
 
-  // Hide launch, show overlay
-  launchEl.classList.add('gone');
-  overlay.classList.add('active');
-
+  $launch.classList.add('gone');
+  $overlay.classList.add('active');
   setupThree();
   xrSession.addEventListener('select', onSelect);
-  xrSession.addEventListener('end', onSessionEnd);
-
+  xrSession.addEventListener('end', onEnd);
   xrRefSpace = await xrSession.requestReferenceSpace('local');
-
-  // Hit test source (relative to viewer)
-  const viewerSpace = await xrSession.requestReferenceSpace('viewer');
-  hitTestSource = await xrSession.requestHitTestSource({ space: viewerSpace });
-
+  const vs = await xrSession.requestReferenceSpace('viewer');
+  hitTestSource = await xrSession.requestHitTestSource({ space: vs });
+  renderer.xr.setReferenceSpaceType('local');
   renderer.xr.setSession(xrSession);
   renderer.setAnimationLoop(onFrame);
 });
 
-// ─────────────────────────────────────────────────────────
-//  Three.js Setup
-// ─────────────────────────────────────────────────────────
 function setupThree() {
   clock = new THREE.Clock();
-
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, premultipliedAlpha:false });
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.xr.enabled = true;
   renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.setClearColor(0x000000, 0);  // ✅ fully transparent clear
   document.body.appendChild(renderer.domElement);
 
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+  scene.background = null;  // ✅ no scene background
+  camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 20);
 
-  // Ambient + point light
-  scene.add(new THREE.AmbientLight(0x112244, 1.2));
-  const pt = new THREE.PointLight(0x00c8ff, 2, 4);
-  pt.position.set(0, 1, 0);
-  scene.add(pt);
+  scene.add(new THREE.AmbientLight(0x223355, 1.5));
+  const pt = new THREE.PointLight(0x00c8ff, 2.5, 5);
+  pt.position.set(0,1,0); scene.add(pt);
 
-  // 3D Reticle (ring on ground)
   reticleGroup = new THREE.Group();
-  const rRing = new THREE.TorusGeometry(0.06, 0.003, 8, 48);
-  const rMat  = new THREE.MeshBasicMaterial({ color: 0x00c8ff });
-  reticleGroup.add(new THREE.Mesh(rRing, rMat));
-  const rInner = new THREE.TorusGeometry(0.025, 0.002, 8, 32);
-  reticleGroup.add(new THREE.Mesh(rInner, rMat));
+  const rm = new THREE.MeshBasicMaterial({ color:0x00c8ff });
+  reticleGroup.add(new THREE.Mesh(new THREE.TorusGeometry(0.07,0.004,8,48), rm));
+  reticleGroup.add(new THREE.Mesh(new THREE.TorusGeometry(0.03,0.002,8,32), rm));
   reticleGroup.visible = false;
+  reticleGroup.matrixAutoUpdate = false;
   scene.add(reticleGroup);
 }
 
-// ─────────────────────────────────────────────────────────
-//  Build Platform + Hologram
-// ─────────────────────────────────────────────────────────
-function buildHologram(matrix) {
-  if (hologramGroup) scene.remove(hologramGroup);
-  ringMeshes = []; beamMeshes = [];
+function buildHologram(mat4) {
+  if (hologramGroup) { scene.remove(hologramGroup); hologramGroup=null; }
+  ringMeshes=[]; beamMeshes=[]; particleSystem=null;
 
   hologramGroup = new THREE.Group();
-  hologramGroup.applyMatrix4(matrix);
+  hologramGroup.applyMatrix4(mat4);
 
-  // ── Platform base disc ──
-  const baseGeo = new THREE.CylinderGeometry(0.28, 0.32, 0.025, 48);
-  const baseMat = new THREE.MeshStandardMaterial({
-    color: 0x001133, emissive: 0x002266,
-    emissiveIntensity: 0.8, metalness: 0.95, roughness: 0.05
-  });
-  hologramGroup.add(new THREE.Mesh(baseGeo, baseMat));
+  // Platform
+  hologramGroup.add(new THREE.Mesh(
+    new THREE.CylinderGeometry(0.28,0.32,0.025,48),
+    new THREE.MeshStandardMaterial({ color:0x001133, emissive:0x002266, emissiveIntensity:0.9, metalness:0.95, roughness:0.05 })
+  ));
+  const step = new THREE.Mesh(new THREE.CylinderGeometry(0.20,0.28,0.012,48),
+    new THREE.MeshStandardMaterial({ color:0x001a44, emissive:0x003388, emissiveIntensity:0.6, metalness:0.9, roughness:0.1 }));
+  step.position.y=0.018; hologramGroup.add(step);
 
-  // Step ring
-  const stepGeo = new THREE.CylinderGeometry(0.20, 0.28, 0.012, 48);
-  const stepMat = new THREE.MeshStandardMaterial({
-    color: 0x001a44, emissive: 0x003388,
-    emissiveIntensity: 0.6, metalness: 0.9, roughness: 0.1
-  });
-  const step = new THREE.Mesh(stepGeo, stepMat);
-  step.position.y = 0.018;
-  hologramGroup.add(step);
-
-  // ── Glowing torus rings ──
-  const radii = [0.26, 0.19, 0.12];
-  const colors= [0x00c8ff, 0x0077ff, 0x00ffcc];
-  radii.forEach((r, i) => {
-    const geo = new THREE.TorusGeometry(r, 0.0045, 8, 96);
-    const mat = new THREE.MeshBasicMaterial({ color: colors[i] });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.rotation.x = Math.PI / 2;
-    mesh.position.y = 0.025 + i * 0.004;
-    hologramGroup.add(mesh);
-    ringMeshes.push({ mesh, speed: (i % 2 === 0 ? 1 : -1) * (0.4 + i * 0.15) });
+  // Rings
+  [[0.26,0x00c8ff,0.4],[0.19,0x0077ff,-0.55],[0.12,0x00ffcc,0.7]].forEach(([r,col,spd],i)=>{
+    const m = new THREE.Mesh(new THREE.TorusGeometry(r,0.0045,8,96), new THREE.MeshBasicMaterial({color:col}));
+    m.rotation.x=Math.PI/2; m.position.y=0.027+i*0.004;
+    hologramGroup.add(m); ringMeshes.push({mesh:m,speed:spd});
   });
 
-  // ── Light beam columns (6 beams from outer ring) ──
-  for (let i = 0; i < 8; i++) {
-    const angle = (i / 8) * Math.PI * 2;
-    const h = 0.7 + Math.random() * 0.2;
-    const geo = new THREE.CylinderGeometry(0.002, 0.006, h, 6);
-    const mat = new THREE.MeshBasicMaterial({
-      color: 0x00aaff, transparent: true, opacity: 0.28
-    });
-    const beam = new THREE.Mesh(geo, mat);
-    beam.position.set(
-      Math.cos(angle) * 0.22,
-      h / 2 + 0.025,
-      Math.sin(angle) * 0.22
-    );
-    hologramGroup.add(beam);
-    beamMeshes.push(beam);
+  // Centre beam
+  vertBeam = new THREE.Mesh(new THREE.CylinderGeometry(0.012,0.028,1.1,10),
+    new THREE.MeshBasicMaterial({color:0x00c8ff,transparent:true,opacity:0.15}));
+  vertBeam.position.y=0.025+0.55; hologramGroup.add(vertBeam);
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(0.002,0.002,1.1,6),
+    new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.6}));
+  core.position.y=0.025+0.55; hologramGroup.add(core);
+
+  // Outer beams
+  for(let i=0;i<8;i++){
+    const a=(i/8)*Math.PI*2, h=0.65+Math.random()*0.2;
+    const b=new THREE.Mesh(new THREE.CylinderGeometry(0.002,0.006,h,5),
+      new THREE.MeshBasicMaterial({color:0x0088ff,transparent:true,opacity:0.25}));
+    b.position.set(Math.cos(a)*0.22, h/2+0.025, Math.sin(a)*0.22);
+    hologramGroup.add(b); beamMeshes.push(b);
   }
 
-  // ── Centre vertical beam (platform → hologram) ──
-  const vbGeo = new THREE.CylinderGeometry(0.008, 0.025, 1.1, 12);
-  const vbMat = new THREE.MeshBasicMaterial({
-    color: 0x00c8ff, transparent: true, opacity: 0.18
-  });
-  vertBeam = new THREE.Mesh(vbGeo, vbMat);
-  vertBeam.position.y = 0.025 + 0.55;
-  hologramGroup.add(vertBeam);
+  // AKSHAT text
+  holoCanvas=document.createElement('canvas'); holoCanvas.width=512; holoCanvas.height=220;
+  holoCtx=holoCanvas.getContext('2d'); drawHoloFrame(0);
+  holoTexture=new THREE.CanvasTexture(holoCanvas);
+  const tm=new THREE.Mesh(new THREE.PlaneGeometry(0.55,0.22),
+    new THREE.MeshBasicMaterial({map:holoTexture,transparent:true,opacity:0.95,side:THREE.DoubleSide,depthWrite:false}));
+  tm.position.y=1.05; tm.name='holoText'; hologramGroup.add(tm);
 
-  // Bright core line
-  const coreGeo = new THREE.CylinderGeometry(0.002, 0.002, 1.1, 8);
-  const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55 });
-  const core = new THREE.Mesh(coreGeo, coreMat);
-  core.position.y = 0.025 + 0.55;
-  hologramGroup.add(core);
-
-  // ── Holographic AKSHAT text (canvas texture) ──
-  holoCanvas = document.createElement('canvas');
-  holoCanvas.width  = 512;
-  holoCanvas.height = 220;
-  holoCtx = holoCanvas.getContext('2d');
-  drawHoloFrame(0);
-
-  holoTexture = new THREE.CanvasTexture(holoCanvas);
-  const textGeo = new THREE.PlaneGeometry(0.55, 0.22);
-  const textMat = new THREE.MeshBasicMaterial({
-    map: holoTexture, transparent: true,
-    opacity: 0.92, side: THREE.DoubleSide, depthWrite: false
-  });
-  const textMesh = new THREE.Mesh(textGeo, textMat);
-  textMesh.position.y = 1.06;
-  textMesh.name = 'holoText';
-  hologramGroup.add(textMesh);
-
-  // Secondary mirror (facing other way)
-  const textMesh2 = textMesh.clone();
-  textMesh2.rotation.y = Math.PI;
-  hologramGroup.add(textMesh2);
-
-  // ── Floating particles ──
   buildParticles();
 
-  // ── Top glow disc ──
-  const glowGeo = new THREE.CircleGeometry(0.12, 32);
-  const glowMat = new THREE.MeshBasicMaterial({
-    color: 0x00c8ff, transparent: true, opacity: 0.12,
-    side: THREE.DoubleSide, depthWrite: false
-  });
-  const glow = new THREE.Mesh(glowGeo, glowMat);
-  glow.rotation.x = -Math.PI / 2;
-  glow.position.y = 0.028;
-  hologramGroup.add(glow);
-
+  const gd=new THREE.Mesh(new THREE.CircleGeometry(0.13,32),
+    new THREE.MeshBasicMaterial({color:0x00c8ff,transparent:true,opacity:0.10,side:THREE.DoubleSide,depthWrite:false}));
+  gd.rotation.x=-Math.PI/2; gd.position.y=0.029; hologramGroup.add(gd);
   scene.add(hologramGroup);
 }
 
-// ─────────────────────────────────────────────────────────
-//  Draw Holographic Text Canvas
-// ─────────────────────────────────────────────────────────
-function drawHoloFrame(time) {
-  const W = holoCanvas.width, H = holoCanvas.height;
-  const ctx = holoCtx;
-  ctx.clearRect(0, 0, W, H);
-
-  // Background gradient (faint)
-  const bg = ctx.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0,   'rgba(0,30,80,0.0)');
-  bg.addColorStop(0.5, 'rgba(0,80,160,0.08)');
-  bg.addColorStop(1,   'rgba(0,30,80,0.0)');
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, W, H);
-
-  // Horizontal scan lines (static thin lines)
-  ctx.strokeStyle = 'rgba(0,200,255,0.06)';
-  ctx.lineWidth = 1;
-  for (let y = 0; y < H; y += 4) {
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+function drawHoloFrame(t){
+  const W=512,H=220,ctx=holoCtx;
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle='rgba(0,200,255,0.05)'; ctx.lineWidth=1;
+  for(let y=0;y<H;y+=4){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  const sy=((t*75)%(H+30))-15;
+  const sg=ctx.createLinearGradient(0,sy-12,0,sy+12);
+  sg.addColorStop(0,'rgba(0,200,255,0)'); sg.addColorStop(0.5,'rgba(0,200,255,0.5)'); sg.addColorStop(1,'rgba(0,200,255,0)');
+  ctx.fillStyle=sg; ctx.fillRect(0,sy-12,W,24);
+  ctx.save(); ctx.shadowColor='#00c8ff'; ctx.shadowBlur=30; ctx.fillStyle='rgba(0,170,255,0.2)';
+  ctx.font='bold 88px "Courier New"'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('AKSHAT',W/2,H/2); ctx.restore();
+  ctx.save(); ctx.shadowColor='#00ffdd'; ctx.shadowBlur=14; ctx.fillStyle='#00eeff';
+  ctx.font='bold 84px "Courier New"'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('AKSHAT',W/2,H/2); ctx.restore();
+  if(Math.sin(t*6.7)>0.91){
+    ctx.save(); ctx.globalAlpha=0.3; ctx.fillStyle='#ff2266';
+    ctx.font='bold 84px "Courier New"'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('AKSHAT',W/2+5,H/2); ctx.restore();
   }
-
-  // Moving bright scan line
-  const sy = ((time * 80) % (H + 40)) - 20;
-  const scanGrad = ctx.createLinearGradient(0, sy - 10, 0, sy + 10);
-  scanGrad.addColorStop(0,   'rgba(0,200,255,0)');
-  scanGrad.addColorStop(0.5, 'rgba(0,200,255,0.55)');
-  scanGrad.addColorStop(1,   'rgba(0,200,255,0)');
-  ctx.fillStyle = scanGrad;
-  ctx.fillRect(0, sy - 10, W, 20);
-
-  // Outer glow text
-  ctx.save();
-  ctx.shadowColor   = '#00c8ff';
-  ctx.shadowBlur    = 28;
-  ctx.fillStyle     = 'rgba(0,180,255,0.18)';
-  ctx.font          = 'bold 86px "Courier New"';
-  ctx.textAlign     = 'center';
-  ctx.textBaseline  = 'middle';
-  ctx.fillText('AKSHAT', W / 2, H / 2);
-  ctx.restore();
-
-  // Main crisp text
-  ctx.save();
-  ctx.shadowColor   = '#00ffcc';
-  ctx.shadowBlur    = 16;
-  ctx.fillStyle     = '#00e8ff';
-  ctx.font          = 'bold 82px "Courier New"';
-  ctx.textAlign     = 'center';
-  ctx.textBaseline  = 'middle';
-  ctx.fillText('AKSHAT', W / 2, H / 2);
-  ctx.restore();
-
-  // Glitch offset (occasional)
-  if (Math.sin(time * 7.3) > 0.92) {
-    ctx.save();
-    ctx.globalAlpha   = 0.35;
-    ctx.shadowColor   = '#ff0066';
-    ctx.shadowBlur    = 8;
-    ctx.fillStyle     = '#ff4488';
-    ctx.font          = 'bold 82px "Courier New"';
-    ctx.textAlign     = 'center';
-    ctx.textBaseline  = 'middle';
-    ctx.fillText('AKSHAT', W / 2 + 4, H / 2);
-    ctx.restore();
-  }
-
-  // Data ticker text (bottom)
-  ctx.save();
-  ctx.globalAlpha  = 0.4;
-  ctx.fillStyle    = '#00aaff';
-  ctx.font         = '11px "Courier New"';
-  ctx.textAlign    = 'center';
-  ctx.fillText('◈ HOLOGRAM SYS · WORLD-LOCKED · ARCore ◈', W / 2, H - 14);
-  ctx.restore();
+  ctx.save(); ctx.globalAlpha=0.38; ctx.fillStyle='#00aaff'; ctx.font='10px "Courier New"'; ctx.textAlign='center';
+  ctx.fillText('◈ HOLOGRAM SYS · WORLD-LOCKED · ARCore ◈',W/2,H-12); ctx.restore();
 }
 
-// ─────────────────────────────────────────────────────────
-//  Particle System
-// ─────────────────────────────────────────────────────────
-function buildParticles() {
-  const count = 120;
-  const positions  = new Float32Array(count * 3);
-  const velocities = new Float32Array(count * 3);
-  const baseY      = new Float32Array(count);
-
-  for (let i = 0; i < count; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const r     = 0.08 + Math.random() * 0.22;
-    positions[i*3]   = Math.cos(angle) * r;
-    positions[i*3+1] = 0.3 + Math.random() * 0.85;
-    positions[i*3+2] = Math.sin(angle) * r;
-    velocities[i*3]  = (Math.random() - 0.5) * 0.0008;
-    velocities[i*3+1]= 0.0004 + Math.random() * 0.0006;
-    velocities[i*3+2]= (Math.random() - 0.5) * 0.0008;
-    baseY[i]         = positions[i*3+1];
+function buildParticles(){
+  const N=100, pos=new Float32Array(N*3), vel=new Float32Array(N*3);
+  for(let i=0;i<N;i++){
+    const a=Math.random()*Math.PI*2, r=0.05+Math.random()*0.22;
+    pos[i*3]=Math.cos(a)*r; pos[i*3+1]=0.25+Math.random()*0.85; pos[i*3+2]=Math.sin(a)*r;
+    vel[i*3]=(Math.random()-.5)*.0007; vel[i*3+1]=.0003+Math.random()*.0005; vel[i*3+2]=(Math.random()-.5)*.0007;
   }
-
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-  const mat = new THREE.PointsMaterial({
-    color: 0x00ccff, size: 0.006,
-    transparent: true, opacity: 0.7,
-    depthWrite: false, sizeAttenuation: true
-  });
-
-  particleSystem = new THREE.Points(geo, mat);
-  particleSystem._vel  = velocities;
-  particleSystem._baseY= baseY;
-  hologramGroup.add(particleSystem);
-  particlePositions = positions;
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  particleSystem=new THREE.Points(geo,new THREE.PointsMaterial({color:0x00ccff,size:.006,transparent:true,opacity:.72,depthWrite:false,sizeAttenuation:true}));
+  particleSystem._vel=vel; hologramGroup.add(particleSystem);
 }
 
-function animateParticles() {
-  if (!particleSystem) return;
-  const pos = particleSystem.geometry.attributes.position.array;
-  const vel = particleSystem._vel;
-  const n   = pos.length / 3;
-
-  for (let i = 0; i < n; i++) {
-    pos[i*3]   += vel[i*3];
-    pos[i*3+1] += vel[i*3+1];
-    pos[i*3+2] += vel[i*3+2];
-    // Reset when particle drifts too high
-    if (pos[i*3+1] > 1.25) {
-      const angle = Math.random() * Math.PI * 2;
-      const r     = 0.06 + Math.random() * 0.20;
-      pos[i*3]    = Math.cos(angle) * r;
-      pos[i*3+1]  = 0.25 + Math.random() * 0.1;
-      pos[i*3+2]  = Math.sin(angle) * r;
-    }
+function tickParticles(){
+  if(!particleSystem)return;
+  const pos=particleSystem.geometry.attributes.position.array, vel=particleSystem._vel;
+  for(let i=0,n=pos.length/3;i<n;i++){
+    pos[i*3]+=vel[i*3]; pos[i*3+1]+=vel[i*3+1]; pos[i*3+2]+=vel[i*3+2];
+    if(pos[i*3+1]>1.2){const a=Math.random()*Math.PI*2,r=.05+Math.random()*.2;pos[i*3]=Math.cos(a)*r;pos[i*3+1]=.22;pos[i*3+2]=Math.sin(a)*r;}
   }
-  particleSystem.geometry.attributes.position.needsUpdate = true;
+  particleSystem.geometry.attributes.position.needsUpdate=true;
 }
 
-// ─────────────────────────────────────────────────────────
-//  Select (tap) handler
-// ─────────────────────────────────────────────────────────
-function onSelect() {
-  if (!reticleGroup.visible) return;
-  if (hologramPlaced) return;   // already placed
-
+function onSelect(){
+  if(!reticleGroup.visible||hologramPlaced)return;
   buildHologram(reticleGroup.matrix);
-  hologramPlaced = true;
-  reticleGroup.visible = false;
-
-  statusBar.textContent  = '◈ HOLOGRAM LOCKED TO WORLD';
-  statusBar.style.animation = 'none';
-  hintText.textContent   = 'Walk around to see the hologram';
-  resetBtn.classList.add('show');
+  hologramPlaced=true; reticleGroup.visible=false;
+  $status.textContent='◈ HOLOGRAM WORLD-LOCKED'; $status.style.animation='none';
+  $hint.textContent='Walk around · hologram stays locked'; $reset.classList.add('show');
 }
 
-resetBtn.addEventListener('click', () => {
-  if (hologramGroup) { scene.remove(hologramGroup); hologramGroup = null; }
-  particleSystem = null;
-  hologramPlaced = false;
-  reticleGroup.visible = true;
-  statusBar.textContent = 'SCANNING SURFACE…';
-  statusBar.style.animation = 'pulse 2s ease-in-out infinite';
-  hintText.textContent  = 'Point at a flat surface then tap';
-  resetBtn.classList.remove('show');
+$reset.addEventListener('click',()=>{
+  if(hologramGroup){scene.remove(hologramGroup);hologramGroup=null;}
+  particleSystem=null; hologramPlaced=false; reticleGroup.visible=true;
+  $status.textContent='SCANNING SURFACE…'; $status.style.animation='pulse 2s ease-in-out infinite';
+  $hint.textContent='Point at a flat surface · then tap'; $reset.classList.remove('show');
 });
 
-// ─────────────────────────────────────────────────────────
-//  Main XR frame loop
-// ─────────────────────────────────────────────────────────
-function onFrame(time, xrFrame) {
-  if (!xrFrame) return;
-
-  const t   = time / 1000;
-  const dt  = clock.getDelta();
-  const pose= xrFrame.getViewerPose(xrRefSpace);
-
-  // ── Hit test → reticle ──
-  if (hitTestSource && !hologramPlaced) {
-    const hits = xrFrame.getHitTestResults(hitTestSource);
-    if (hits.length > 0) {
-      const hitPose = hits[0].getPose(xrRefSpace);
-      reticleGroup.visible = true;
-      reticleGroup.matrix.fromArray(hitPose.transform.matrix);
-      reticleGroup.matrix.decompose(
-        reticleGroup.position,
-        reticleGroup.quaternion,
-        reticleGroup.scale
-      );
-      statusBar.textContent = '◉ SURFACE DETECTED — TAP TO DEPLOY';
-    } else {
-      reticleGroup.visible = false;
-      statusBar.textContent = 'SCANNING SURFACE…';
-    }
+function onFrame(time,xrFrame){
+  if(!xrFrame)return;
+  const t=time/1000; clock.getDelta();
+  if(hitTestSource&&!hologramPlaced){
+    const hits=xrFrame.getHitTestResults(hitTestSource);
+    if(hits.length>0){
+      const hp=hits[0].getPose(xrRefSpace);
+      reticleGroup.visible=true;
+      reticleGroup.matrix.fromArray(hp.transform.matrix);
+      $status.textContent='◉ SURFACE FOUND — TAP TO DEPLOY';
+    } else { reticleGroup.visible=false; $status.textContent='SCANNING SURFACE…'; }
   }
-
-  // ── Animate hologram ──
-  if (hologramGroup) {
-    // Rotate rings
-    ringMeshes.forEach(({ mesh, speed }) => {
-      mesh.rotation.z += speed * dt;
-    });
-
-    // Pulse beam opacity
-    if (vertBeam) {
-      vertBeam.material.opacity = 0.12 + Math.sin(t * 2.5) * 0.07;
-    }
-
-    // Pulse outer beams
-    beamMeshes.forEach((b, i) => {
-      b.material.opacity = 0.18 + Math.sin(t * 1.8 + i * 0.7) * 0.12;
-      b.scale.y = 0.92 + Math.sin(t * 2.1 + i * 0.5) * 0.08;
-    });
-
-    // Animate particles
-    animateParticles();
-
-    // Update hologram texture (canvas)
-    if (holoTexture) {
-      drawHoloFrame(t);
-      holoTexture.needsUpdate = true;
-    }
-
-    // Slow hologram rotation (face camera)
-    // Find text mesh and billboard it toward camera
-    hologramGroup.children.forEach(c => {
-      if (c.name === 'holoText' && pose) {
-        // Billboard: keep facing camera
-        const camPos = new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld);
-        const worldPos = new THREE.Vector3();
-        hologramGroup.getWorldPosition(worldPos);
-        worldPos.y = camPos.y; // only rotate on Y
-        c.lookAt(camPos);
-      }
-    });
+  if(hologramGroup){
+    ringMeshes.forEach(({mesh,speed})=>{mesh.rotation.z+=speed*.016;});
+    if(vertBeam) vertBeam.material.opacity=0.12+Math.sin(t*2.4)*.07;
+    beamMeshes.forEach((b,i)=>{b.material.opacity=.18+Math.sin(t*1.8+i*.8)*.11;});
+    tickParticles();
+    if(holoTexture){drawHoloFrame(t);holoTexture.needsUpdate=true;}
+    const tm=hologramGroup.getObjectByName('holoText');
+    if(tm){const cp=new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld);tm.lookAt(cp);}
   }
-
-  renderer.render(scene, camera);
+  renderer.render(scene,camera);
 }
 
-// ─────────────────────────────────────────────────────────
-//  Session end
-// ─────────────────────────────────────────────────────────
-function onSessionEnd() {
-  overlay.classList.remove('active');
-  launchEl.classList.remove('gone');
-  launchEl.style.opacity = '1';
-  startBtn.disabled  = false;
-  startBtn.textContent = '▶ INITIALIZE AR';
-  hologramPlaced = false;
-  if (renderer) renderer.setAnimationLoop(null);
-  resetBtn.classList.remove('show');
+function onEnd(){
+  $overlay.classList.remove('active'); $launch.classList.remove('gone'); $launch.style.opacity='1';
+  $start.disabled=false; $start.textContent='▶ INITIALIZE AR';
+  hologramPlaced=false; particleSystem=null;
+  if(renderer)renderer.setAnimationLoop(null); $reset.classList.remove('show');
 }
 
-// ─────────────────────────────────────────────────────────
-//  Boot
-// ─────────────────────────────────────────────────────────
-startBtn.disabled = true;
-startBtn.textContent = 'CHECKING DEVICE…';
 init();
 </script>
 </body>
