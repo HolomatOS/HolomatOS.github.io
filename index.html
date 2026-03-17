@@ -146,6 +146,7 @@ let cityRoot       = null;
 let rainSystem     = null;
 let vehicles       = [];
 let growQueue      = [];     // buildings waiting to grow in
+let lastHitPos     = null;   // last valid hit test position
 
 const NEON = {
   cyan:    { hex: 0x00ffff, css: '#00ffff' },
@@ -288,6 +289,10 @@ function onFrame(time, frame) {
         const pose = hits[0].getPose(refSpace);
         reticle.visible = true;
         reticle.matrix.fromArray(pose.transform.matrix);
+        // save last valid hit position
+        const hp = new THREE.Vector3(); const hq = new THREE.Quaternion(); const hs = new THREE.Vector3();
+        reticle.matrix.decompose(hp, hq, hs);
+        lastHitPos = hp.clone();
         // Spin crosshair
         const pos = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
         reticle.matrix.decompose(pos, q, s);
@@ -309,14 +314,18 @@ function onFrame(time, frame) {
 //  TAP HANDLER
 // ═══════════════════════════════════════════════════════════════
 function onTap() {
-  if (cityPlaced || !reticle.visible) return;
+  if (cityPlaced) return;
   cityPlaced = true;
   reticle.visible = false;
 
-  const pos = new THREE.Vector3();
-  const q   = new THREE.Quaternion();
-  const s   = new THREE.Vector3();
-  reticle.matrix.decompose(pos, q, s);
+  let pos;
+  if (lastHitPos) {
+    pos = lastHitPos.clone();
+  } else {
+    // Fallback: place 1.5m in front of camera at floor level
+    pos = new THREE.Vector3(0, 0, -1.5).applyMatrix4(camera.matrixWorld);
+    pos.y -= 0.8; // approximate floor offset
+  }
 
   buildCity(pos);
 
@@ -371,7 +380,13 @@ function hexAlpha(hex, a) {
 function makeBuilding(bx, bz, w, d, h, neon) {
   const grp = new THREE.Group();
   grp.position.set(bx, 0, bz);
-  grp.scale.y = 0.001; // starts flat, grows in
+
+  // Inner group holds all geometry — its position.y animates from -h to 0 (rise from floor)
+  const inner = new THREE.Group();
+  inner.position.y = -h; // starts underground
+  grp.add(inner);
+  grp.userData.inner = inner;
+  grp.userData.targetH = h;
 
   const nc = neon.hex, css = neon.css;
 
@@ -384,7 +399,7 @@ function makeBuilding(bx, bz, w, d, h, neon) {
   body.position.y = h/2;
   body.castShadow = true;
   body.receiveShadow = true;
-  grp.add(body);
+  inner.add(body);
 
   // ── Windows (4 faces)
   const cols = Math.max(2, Math.round(w*7));
@@ -405,7 +420,7 @@ function makeBuilding(bx, bz, w, d, h, neon) {
   for (const [fw, fh, fx, fz, ry] of faces) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(fw, fh), winMat);
     m.position.set(fx, h/2, fz); m.rotation.y = ry;
-    grp.add(m);
+    inner.add(m);
   }
 
   // ── Neon horizontal bands
@@ -424,7 +439,7 @@ function makeBuilding(bx, bz, w, d, h, neon) {
     for (const [bw2, bh2, bx2, bz2, bry] of bandData) {
       const s = new THREE.Mesh(new THREE.PlaneGeometry(bw2, bh2), bandMat);
       s.position.set(bx2, by, bz2); s.rotation.y = bry;
-      grp.add(s);
+      inner.add(s);
     }
   }
 
@@ -436,13 +451,13 @@ function makeBuilding(bx, bz, w, d, h, neon) {
       const yOff = (h - eh)/2;
       const edge = new THREE.Mesh(new THREE.BoxGeometry(0.007,eh,0.007), edgeMat);
       edge.position.set(ex, yOff + eh/2, ez);
-      grp.add(edge);
+      inner.add(edge);
     }
   }
 
   // ── Roof slab
   const roofMat = new THREE.MeshStandardMaterial({ color:0x080820, roughness:0.9, metalness:0.6 });
-  grp.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(w+0.01,0.025,d+0.01), roofMat), { position: new THREE.Vector3(0, h+0.012, 0) }));
+  inner.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(w+0.01,0.025,d+0.01), roofMat), { position: new THREE.Vector3(0, h+0.012, 0) }));
 
   // ── Antenna(s)
   if (Math.random() > 0.35) {
@@ -450,13 +465,13 @@ function makeBuilding(bx, bz, w, d, h, neon) {
     const antMat = new THREE.MeshStandardMaterial({ color:0x777788, metalness:0.95, roughness:0.15 });
     const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.004,0.004,ah,6), antMat);
     ant.position.set((Math.random()-0.5)*w*0.35, h+ah/2, (Math.random()-0.5)*d*0.35);
-    grp.add(ant);
+    inner.add(ant);
     // Blinking red tip light
     const blink = new THREE.PointLight(0xff2200, 3, 0.25);
     blink.position.set(ant.position.x, h+ah+0.02, ant.position.z);
     blink.userData.blink = true;
     blink.userData.phase = Math.random()*Math.PI*2;
-    grp.add(blink);
+    inner.add(blink);
   }
 
   // ── Neon roof sign
@@ -473,7 +488,7 @@ function makeBuilding(bx, bz, w, d, h, neon) {
     else if (side===1) { sign.position.set(0, h+sh/2+0.04,-(d/2+sOffset)); sign.rotation.y=Math.PI; }
     else if (side===2) { sign.position.set(w/2+sOffset, h+sh/2+0.04, 0); sign.rotation.y=Math.PI/2; }
     else               { sign.position.set(-(w/2+sOffset), h+sh/2+0.04, 0); sign.rotation.y=-Math.PI/2; }
-    grp.add(sign);
+    inner.add(sign);
   }
 
   // ── Main neon point light (pulsing)
@@ -482,7 +497,7 @@ function makeBuilding(bx, bz, w, d, h, neon) {
   pl.userData.pulse = true;
   pl.userData.base  = 1.5;
   pl.userData.phase = Math.random()*Math.PI*2;
-  grp.add(pl);
+  inner.add(pl);
 
   return grp;
 }
@@ -571,7 +586,9 @@ function buildCity(origin) {
     const neon = NEON_LIST[cfg.ni % NEON_LIST.length];
     const bldg = makeBuilding(cfg.x, cfg.z, cfg.w, cfg.d, cfg.h, neon);
     cityRoot.add(bldg);
-    growQueue.push({ mesh: bldg, delay: i * 100, startTime: null });
+    // Schedule each building to start growing after its stagger delay
+    const startAt = Date.now() + i * 120;
+    growQueue.push({ mesh: bldg, startAt, duration: 800, h: cfg.h });
   });
 
   // Street lights in a ring
@@ -624,15 +641,18 @@ function buildCity(origin) {
 //  ANIMATE THE WORLD
 // ═══════════════════════════════════════════════════════════════
 function animateWorld(t, delta) {
-  // ── Grow in buildings
+  // ── Grow in buildings (Date.now based, per-building stagger)
+  const now = Date.now();
   for (const item of growQueue) {
-    if (item.startTime === null) item.startTime = t;
-    const elapsed = (t - item.startTime)*1000;
-    if (elapsed >= item.delay) {
-      const progress = Math.min(1, (elapsed - item.delay) / 900);
-      const eased = 1 - Math.pow(1-progress, 3); // ease-out cubic
-      item.mesh.scale.y = Math.max(0.001, eased);
-    }
+    const inner = item.mesh.userData.inner;
+    const h     = item.mesh.userData.targetH;
+    if (!inner) continue;
+    if (now < item.startAt) continue; // not yet time
+    const elapsed  = now - item.startAt;
+    const progress = Math.min(1, elapsed / item.duration);
+    // Ease out cubic: fast start, smooth landing
+    const eased = 1 - Math.pow(1 - progress, 3);
+    inner.position.y = -h + (h * eased); // rises from -h to 0
   }
 
   // ── Pulse lights & blink antenna tips
