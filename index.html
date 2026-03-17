@@ -2,402 +2,956 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<meta name="mobile-web-app-capable" content="yes">
-<title>AR AKSHAT Hologram</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IRON MAN — SUIT UP</title>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  :root {
-    --blue: #00c8ff; --glow: rgba(0,200,255,0.6);
-    --dark: #020d1a; --surface: rgba(2,18,40,0.92);
-    --text: #b8e4ff; --muted: rgba(184,228,255,0.45);
-  }
-  html, body {
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; overflow: hidden; }
+
+  #video {
+    position: absolute; top: 0; left: 0;
     width: 100%; height: 100%;
-    background: transparent; /* ✅ MUST be transparent for AR camera */
-    overflow: hidden;
+    object-fit: cover;
+    transform: scaleX(-1);
+    opacity: 0.85;
+  }
+
+  #canvas {
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%;
+  }
+
+  #hud {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none;
     font-family: 'Courier New', monospace;
-    color: var(--text);
-    -webkit-tap-highlight-color: transparent;
-  }
-  canvas {
-    display: block; position: fixed; inset: 0;
-    background: transparent !important;
+    color: #ff7700;
   }
 
-  /* ── Launch Screen ── */
-  #launch {
-    position: fixed; inset: 0; z-index: 50;
+  #jarvis-text {
+    position: absolute; top: 22px; left: 50%;
+    transform: translateX(-50%);
+    font-size: 13px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: #ffcc00;
+    text-shadow: 0 0 12px #ffaa00, 0 0 30px #ff7700;
+    opacity: 0;
+    transition: opacity 0.5s;
+  }
+
+  #status-msg {
+    position: absolute; bottom: 30px; left: 50%;
+    transform: translateX(-50%);
+    font-size: 14px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #ff8800;
+    text-shadow: 0 0 10px #ff6600;
+    opacity: 0;
+    transition: opacity 0.5s;
+  }
+
+  #loading-screen {
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: #000;
     display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 22px;
-    background: radial-gradient(ellipse at 50% 35%, #041428 0%, #020d1a 68%);
-    transition: opacity 0.7s ease;
+    align-items: center; justify-content: center;
+    z-index: 100;
+    transition: opacity 1s;
   }
-  #launch.gone { opacity: 0; pointer-events: none; }
 
-  .hex-logo { position: relative; width: 92px; height: 92px; display: flex; align-items: center; justify-content: center; }
-  .hex-logo svg { position: absolute; inset: 0; animation: spin 10s linear infinite; }
-  .hex-logo .icon { font-size: 34px; z-index: 1; filter: drop-shadow(0 0 12px var(--blue)); }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .title-block { text-align: center; }
-  .title-block h1 { font-size: 20px; letter-spacing: 6px; text-transform: uppercase; color: var(--blue); text-shadow: 0 0 24px var(--glow); margin-bottom: 5px; }
-  .title-block p { font-size: 10px; color: var(--muted); letter-spacing: 3px; text-transform: uppercase; }
-
-  /* HTTPS warning */
-  #httpsWarn {
-    display: none;
-    background: rgba(255,100,0,0.1); border: 1px solid rgba(255,120,0,0.4);
-    border-radius: 8px; padding: 13px 16px;
-    width: min(300px,86vw); font-size: 11px; color: #ffaa55;
-    line-height: 1.8; text-align: center;
+  #loading-screen .logo {
+    font-family: 'Courier New', monospace;
+    font-size: 52px;
+    font-weight: 900;
+    letter-spacing: 12px;
+    color: #ffcc00;
+    text-shadow: 0 0 20px #ff8800, 0 0 60px #ff4400;
+    margin-bottom: 20px;
   }
-  #httpsWarn strong { color: #ffcc88; }
-  #httpsWarn a { color: var(--blue); }
 
-  .chips { display: flex; flex-direction: column; gap: 7px; width: min(300px,86vw); }
-  .chip { border: 1px solid rgba(0,200,255,0.2); border-radius: 6px; padding: 9px 13px; background: var(--surface); font-size: 10px; color: var(--muted); display: flex; align-items: center; gap: 9px; }
-  .chip-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--blue); box-shadow: 0 0 8px var(--blue); }
-  .chip-dot.warn { background: #ff9500; box-shadow: 0 0 8px #ff9500; }
-  .chip-dot.ok   { background: #00ff9d; box-shadow: 0 0 8px #00ff9d; }
-
-  #startBtn {
-    padding: 14px 44px; background: transparent;
-    border: 1.5px solid var(--blue); border-radius: 40px;
-    color: var(--blue); font-size: 13px; letter-spacing: 3px; text-transform: uppercase;
-    font-family: 'Courier New', monospace; cursor: pointer;
-    position: relative; overflow: hidden; transition: color .25s, box-shadow .25s;
+  #loading-screen .sub {
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    letter-spacing: 5px;
+    color: #ff8800;
+    text-shadow: 0 0 10px #ff6600;
+    margin-bottom: 40px;
   }
-  #startBtn::after { content: ''; position: absolute; inset: 0; background: var(--blue); transform: scaleX(0); transform-origin: left; transition: transform .3s ease; z-index: -1; }
-  #startBtn:hover::after, #startBtn:active::after { transform: scaleX(1); }
-  #startBtn:hover, #startBtn:active { color: #000; box-shadow: 0 0 30px var(--glow); }
-  #startBtn:disabled { opacity: .35; cursor: not-allowed; }
-  #errMsg { display: none; font-size: 11px; color: #ff6b35; text-align: center; max-width: 270px; line-height: 1.7; }
 
-  /* ── AR Overlay ── */
-  #ar-overlay {
-    position: fixed; inset: 0; pointer-events: none; z-index: 20;
-    background: transparent; display: none;
+  #loading-bar-bg {
+    width: 300px; height: 3px;
+    background: rgba(255,120,0,0.2);
+    border: 1px solid rgba(255,120,0,0.4);
   }
-  #ar-overlay.active { display: block; }
 
-  #reticle-svg { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 60px; height: 60px; }
-
-  #statusBar {
-    position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
-    background: rgba(2,18,40,0.8); border: 1px solid rgba(0,200,255,0.25);
-    border-radius: 24px; padding: 8px 20px;
-    font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
-    color: var(--blue); white-space: nowrap; animation: pulse 2s ease-in-out infinite;
+  #loading-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #ff8800, #ffcc00);
+    box-shadow: 0 0 10px #ff8800;
+    width: 0%;
+    transition: width 0.3s;
   }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
 
-  .corner { position: absolute; width: 22px; height: 22px; }
-  .corner svg { width: 100%; height: 100%; }
-  .corner.tl { top: 14px; left: 14px; }
-  .corner.tr { top: 14px; right: 14px; transform: scaleX(-1); }
-  .corner.bl { bottom: 14px; left: 14px; transform: scaleY(-1); }
-  .corner.br { bottom: 14px; right: 14px; transform: scale(-1,-1); }
+  #loading-label {
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: #ff6600;
+    margin-top: 12px;
+  }
 
-  #hint { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); text-align: center; pointer-events: auto; }
-  #resetBtn { display: none; margin-top: 10px; background: transparent; border: 1px solid rgba(0,200,255,0.35); border-radius: 20px; padding: 7px 20px; color: var(--blue); font-size: 11px; letter-spacing: 2px; font-family: 'Courier New', monospace; text-transform: uppercase; cursor: pointer; }
-  #resetBtn.show { display: block; }
+  .hud-corner {
+    position: absolute;
+    width: 60px; height: 60px;
+    border-color: rgba(255,140,0,0.4);
+    border-style: solid;
+  }
+  .hud-corner.tl { top: 10px; left: 10px; border-width: 2px 0 0 2px; }
+  .hud-corner.tr { top: 10px; right: 10px; border-width: 2px 2px 0 0; }
+  .hud-corner.bl { bottom: 10px; left: 10px; border-width: 0 0 2px 2px; }
+  .hud-corner.br { bottom: 10px; right: 10px; border-width: 0 2px 2px 0; }
 </style>
 </head>
 <body>
 
-<div id="launch">
-  <div class="hex-logo">
-    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-      <polygon points="50,4 93,27 93,73 50,96 7,73 7,27" fill="none" stroke="#00c8ff" stroke-width="1.5" stroke-dasharray="8 3" opacity="0.7"/>
-      <polygon points="50,14 83,32 83,68 50,86 17,68 17,32" fill="none" stroke="#0066ff" stroke-width="1" opacity="0.4"/>
-    </svg>
-    <span class="icon">◈</span>
-  </div>
-  <div class="title-block">
-    <h1>AKSHAT // AR</h1>
-    <p>Holographic Projection System v1.0</p>
-  </div>
-
-  <div id="httpsWarn">
-    ⚠️ <strong>HTTPS Required for Camera</strong><br>
-    WebXR blocks on <code>file://</code> or <code>http://</code>.<br><br>
-    <strong>Fix:</strong> drag this file to<br>
-    <a href="https://app.netlify.com/drop" target="_blank">app.netlify.com/drop</a>
-    → copy the https:// link → open on phone in Chrome.
-  </div>
-
-  <div class="chips">
-    <div class="chip"><span class="chip-dot"></span>WebXR Plane Detection + World Anchors</div>
-    <div class="chip"><span class="chip-dot"></span>Tap surface → sci-fi platform deploys</div>
-    <div class="chip">
-      <span class="chip-dot" id="arCoreDot"></span>
-      <span id="arCoreLabel">Checking ARCore…</span>
-    </div>
-  </div>
-
-  <button id="startBtn" disabled>CHECKING…</button>
-  <p id="errMsg"></p>
+<div id="loading-screen">
+  <div class="logo">IRON MAN</div>
+  <div class="sub">MARK L — SUIT ASSEMBLY SYSTEM</div>
+  <div id="loading-bar-bg"><div id="loading-bar"></div></div>
+  <div id="loading-label">INITIALIZING JARVIS...</div>
 </div>
 
-<div id="ar-overlay">
-  <svg id="reticle-svg" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="30" cy="30" r="26" fill="none" stroke="#00c8ff" stroke-width="1" stroke-dasharray="10 5" opacity="0.65">
-      <animateTransform attributeName="transform" type="rotate" from="0 30 30" to="360 30 30" dur="5s" repeatCount="indefinite"/>
-    </circle>
-    <line x1="30" y1="14" x2="30" y2="21" stroke="#00c8ff" stroke-width="1.5"/>
-    <line x1="30" y1="39" x2="30" y2="46" stroke="#00c8ff" stroke-width="1.5"/>
-    <line x1="14" y1="30" x2="21" y2="30" stroke="#00c8ff" stroke-width="1.5"/>
-    <line x1="39" y1="30" x2="46" y2="30" stroke="#00c8ff" stroke-width="1.5"/>
-    <circle cx="30" cy="30" r="2.5" fill="#00c8ff">
-      <animate attributeName="opacity" values="1;0.3;1" dur="1.2s" repeatCount="indefinite"/>
-    </circle>
-  </svg>
-  <div id="statusBar">SCANNING SURFACE…</div>
-  <div class="corner tl"><svg viewBox="0 0 22 22"><path d="M2 11 L2 2 L11 2" fill="none" stroke="#00c8ff" stroke-width="1.5"/></svg></div>
-  <div class="corner tr"><svg viewBox="0 0 22 22"><path d="M2 11 L2 2 L11 2" fill="none" stroke="#00c8ff" stroke-width="1.5"/></svg></div>
-  <div class="corner bl"><svg viewBox="0 0 22 22"><path d="M2 11 L2 2 L11 2" fill="none" stroke="#00c8ff" stroke-width="1.5"/></svg></div>
-  <div class="corner br"><svg viewBox="0 0 22 22"><path d="M2 11 L2 2 L11 2" fill="none" stroke="#00c8ff" stroke-width="1.5"/></svg></div>
-  <div id="hint">
-    <span id="hintText">Point at a flat surface · then tap</span>
-    <button id="resetBtn">⟳ RESET PROJECTION</button>
-  </div>
+<video id="video" playsinline autoplay muted></video>
+<canvas id="canvas"></canvas>
+
+<div id="hud">
+  <div class="hud-corner tl"></div>
+  <div class="hud-corner tr"></div>
+  <div class="hud-corner bl"></div>
+  <div class="hud-corner br"></div>
+  <div id="jarvis-text">J.A.R.V.I.S. ONLINE — SUIT READY</div>
+  <div id="status-msg">RAISE HAND TO DEPLOY</div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
 
 <script>
-'use strict';
-let renderer, scene, camera, clock;
-let xrSession=null, xrRefSpace=null, hitTestSource=null;
-let reticleGroup=null, hologramGroup=null, hologramPlaced=false;
-let ringMeshes=[], beamMeshes=[], vertBeam=null;
-let holoCanvas, holoCtx, holoTexture, particleSystem=null;
+// ───────────────────────────────────────────────────────────────
+//  CANVAS & VIDEO SETUP
+// ───────────────────────────────────────────────────────────────
+const canvas = document.getElementById('canvas');
+const ctx    = canvas.getContext('2d');
+const video  = document.getElementById('video');
 
-const $launch=$('#launch'), $overlay=$('#ar-overlay'), $status=$('#statusBar');
-const $hint=$('#hintText'), $reset=$('#resetBtn'), $start=$('#startBtn');
-const $err=$('#errMsg'), $httpsWarn=$('#httpsWarn');
-const $arDot=$('#arCoreDot'), $arLabel=$('#arCoreLabel');
+function resize() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
 
-function $(id){ return document.getElementById(id.replace('#','')); }
+// ───────────────────────────────────────────────────────────────
+//  DRAW ARMOR PIECES (offscreen canvases)
+//  Real Iron Man MK50 metallic armor pieces
+// ───────────────────────────────────────────────────────────────
 
-// HTTPS check
-if (!['https:',''].includes(location.protocol) && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-  $httpsWarn.style.display = 'block';
+function makeCanvas(w, h) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  return c;
 }
 
-async function init() {
-  if (!navigator.xr) { return showErr('WebXR not found. Use Chrome on Android with ARCore.'); }
-  const ok = await navigator.xr.isSessionSupported('immersive-ar').catch(()=>false);
-  if (!ok) {
-    $arDot.className='chip-dot warn'; $arLabel.textContent='ARCore not detected';
-    return showErr('AR not supported. Install "Google Play Services for AR" from Play Store.');
+// ── Helpers ──
+function metalGrad(ctx, x0, y0, x1, y1, light, mid, dark) {
+  const g = ctx.createLinearGradient(x0, y0, x1, y1);
+  g.addColorStop(0,   light);
+  g.addColorStop(0.35, mid);
+  g.addColorStop(0.75, dark);
+  g.addColorStop(1,   '#1a0a00');
+  return g;
+}
+
+function addShine(ctx, w, h) {
+  const s = ctx.createLinearGradient(0, 0, w * 0.7, h * 0.3);
+  s.addColorStop(0,   'rgba(255,255,255,0)');
+  s.addColorStop(0.3, 'rgba(255,255,255,0.32)');
+  s.addColorStop(0.7, 'rgba(255,255,255,0.06)');
+  s.addColorStop(1,   'rgba(255,255,255,0)');
+  ctx.fillStyle = s;
+}
+
+function panelLine(ctx, x1, y1, x2, y2) {
+  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,220,100,0.18)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(x1+0.5,y1+0.5); ctx.lineTo(x2+0.5,y2+0.5); ctx.stroke();
+}
+
+// ── WRIST GUARD (gold) ──
+function drawWristGuard() {
+  const c = makeCanvas(100, 60); const g = c.getContext('2d');
+  const w = 100, h = 60;
+
+  g.beginPath();
+  g.moveTo(12, 0); g.lineTo(w-12, 0);
+  g.lineTo(w, h); g.lineTo(0, h);
+  g.closePath();
+  g.fillStyle = metalGrad(g, 0, 0, 0, h, '#FFE566','#C8960A','#7A5500');
+  g.fill();
+
+  // panel lines
+  for (let i = 1; i < 4; i++) {
+    const px = i/4; const lx1 = w*0.05*px + w*0.03;
+    panelLine(g, lx1, h*i/4, w - lx1, h*i/4);
   }
-  $arDot.className='chip-dot ok'; $arLabel.textContent='ARCore ready ✓';
-  $start.disabled=false; $start.textContent='▶ INITIALIZE AR';
+  panelLine(g, w*0.35, 0, w*0.35, h);
+  panelLine(g, w*0.65, 0, w*0.65, h);
+
+  // Center rivet pattern
+  for (let rx of [w*0.22, w*0.5, w*0.78]) {
+    for (let ry of [h*0.25, h*0.75]) {
+      const rg = g.createRadialGradient(rx, ry, 0, rx, ry, 4);
+      rg.addColorStop(0, '#fff8cc'); rg.addColorStop(1, '#8B6914');
+      g.fillStyle = rg; g.beginPath(); g.arc(rx, ry, 3.5, 0, Math.PI*2); g.fill();
+    }
+  }
+
+  // Shine
+  g.beginPath(); g.moveTo(12,0); g.lineTo(w-12,0); g.lineTo(w,h); g.lineTo(0,h); g.closePath();
+  addShine(g, w, h); g.fill();
+
+  // Edge
+  g.strokeStyle = 'rgba(255,240,120,0.7)'; g.lineWidth = 1.5;
+  g.beginPath(); g.moveTo(12,0.8); g.lineTo(w-12,0.8); g.stroke();
+  g.strokeStyle = 'rgba(0,0,0,0.6)'; g.lineWidth = 1.5;
+  g.beginPath(); g.moveTo(12,0); g.lineTo(w-12,0); g.lineTo(w,h); g.lineTo(0,h); g.closePath(); g.stroke();
+  return c;
 }
 
-function showErr(msg){ $err.style.display='block'; $err.textContent=msg; $start.disabled=true; $start.textContent='NOT AVAILABLE'; }
+// ── HAND PLATE (gold, back of hand) ──
+function drawHandPlate() {
+  const c = makeCanvas(120, 75); const g = c.getContext('2d');
+  const w = 120, h = 75;
 
-$start.addEventListener('click', async () => {
-  $start.disabled=true; $start.textContent='INITIALIZING…';
-  try {
-    xrSession = await navigator.xr.requestSession('immersive-ar', {
-      requiredFeatures: ['hit-test','dom-overlay'],
-      optionalFeatures: ['anchors','plane-detection'],
-      domOverlay: { root: $overlay }
+  // Hexagonal-ish shape
+  g.beginPath();
+  g.moveTo(w*0.1, 0); g.lineTo(w*0.9, 0);
+  g.lineTo(w, h*0.15); g.lineTo(w*0.95, h);
+  g.lineTo(w*0.05, h); g.lineTo(0, h*0.15);
+  g.closePath();
+  g.fillStyle = metalGrad(g, 0, 0, 0, h, '#FFE566','#C8960A','#7A5500');
+  g.fill();
+
+  // Radiating panel lines from center
+  const cx = w*0.5, cy = h*0.55;
+  const rays = 6;
+  for (let i = 0; i < rays; i++) {
+    const a = (i / rays) * Math.PI * 2;
+    panelLine(g, cx, cy, cx + Math.cos(a)*w*0.5, cy + Math.sin(a)*h*0.55);
+  }
+  // Horizontal divider
+  panelLine(g, w*0.05, h*0.4, w*0.95, h*0.4);
+
+  // Center hex
+  g.save(); g.translate(cx, h*0.35);
+  g.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = (i/6)*Math.PI*2 - Math.PI/6;
+    i===0 ? g.moveTo(Math.cos(a)*10,Math.sin(a)*10) : g.lineTo(Math.cos(a)*10,Math.sin(a)*10);
+  }
+  g.closePath();
+  const hg = g.createRadialGradient(0,0,0,0,0,10);
+  hg.addColorStop(0,'#FFF5AA'); hg.addColorStop(1,'#B8860B');
+  g.fillStyle = hg; g.fill();
+  g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth=1; g.stroke();
+  g.restore();
+
+  // Shine
+  g.beginPath(); g.moveTo(w*0.1,0); g.lineTo(w*0.9,0); g.lineTo(w,h*0.15); g.lineTo(w*0.95,h); g.lineTo(w*0.05,h); g.lineTo(0,h*0.15); g.closePath();
+  addShine(g, w, h); g.fill();
+
+  g.strokeStyle='rgba(0,0,0,0.6)'; g.lineWidth=1.5;
+  g.beginPath(); g.moveTo(w*0.1,0); g.lineTo(w*0.9,0); g.lineTo(w,h*0.15); g.lineTo(w*0.95,h); g.lineTo(w*0.05,h); g.lineTo(0,h*0.15); g.closePath(); g.stroke();
+  return c;
+}
+
+// ── REPULSOR (gold ring + blue glow) ──
+function drawRepulsor() {
+  const c = makeCanvas(52, 52); const g = c.getContext('2d');
+  const cx = 26, cy = 26, r = 24;
+
+  // Outer ring body
+  g.beginPath(); g.arc(cx, cy, r, 0, Math.PI*2);
+  const og = g.createRadialGradient(cx-5,cy-5, 2, cx,cy, r);
+  og.addColorStop(0,'#FFE566'); og.addColorStop(0.6,'#B8860B'); og.addColorStop(1,'#5C4000');
+  g.fillStyle = og; g.fill();
+
+  // Inner dark ring
+  g.beginPath(); g.arc(cx,cy,r*0.62,0,Math.PI*2);
+  g.fillStyle='#0a0500'; g.fill();
+
+  // Glowing blue repulsor core
+  const bg = g.createRadialGradient(cx,cy,0,cx,cy,r*0.58);
+  bg.addColorStop(0,'rgba(220,240,255,1)');
+  bg.addColorStop(0.3,'rgba(100,180,255,0.95)');
+  bg.addColorStop(0.7,'rgba(30,100,220,0.8)');
+  bg.addColorStop(1,'rgba(0,40,120,0)');
+  g.beginPath(); g.arc(cx,cy,r*0.58,0,Math.PI*2);
+  g.fillStyle=bg; g.fill();
+
+  // Concentric detail rings on outer
+  for (const fr of [0.75, 0.88]) {
+    g.beginPath(); g.arc(cx,cy,r*fr,0,Math.PI*2);
+    g.strokeStyle='rgba(0,0,0,0.5)'; g.lineWidth=1; g.stroke();
+    g.strokeStyle='rgba(255,220,80,0.2)'; g.lineWidth=0.5; g.stroke();
+  }
+
+  // Radial notches
+  for (let i=0; i<8; i++) {
+    const a = (i/8)*Math.PI*2;
+    g.strokeStyle='rgba(0,0,0,0.4)'; g.lineWidth=1.5;
+    g.beginPath(); g.moveTo(cx+Math.cos(a)*r*0.7, cy+Math.sin(a)*r*0.7);
+    g.lineTo(cx+Math.cos(a)*r*0.95, cy+Math.sin(a)*r*0.95); g.stroke();
+  }
+
+  // Blue glow bloom (outer)
+  const glow = g.createRadialGradient(cx,cy,r*0.2,cx,cy,r*0.62);
+  glow.addColorStop(0,'rgba(120,200,255,0.5)');
+  glow.addColorStop(1,'rgba(50,120,255,0)');
+  g.beginPath(); g.arc(cx,cy,r*0.62,0,Math.PI*2);
+  g.fillStyle=glow; g.fill();
+
+  // Shine
+  const sh = g.createRadialGradient(cx-6,cy-6,0,cx,cy,r);
+  sh.addColorStop(0,'rgba(255,255,200,0.45)'); sh.addColorStop(1,'rgba(255,255,200,0)');
+  g.beginPath(); g.arc(cx,cy,r,0,Math.PI*2);
+  g.fillStyle=sh; g.fill();
+
+  return c;
+}
+
+// ── FINGER ARMOR (red, reused for all 5 fingers) ──
+function drawFingerArmor(label) {
+  const c = makeCanvas(34, 65); const g = c.getContext('2d');
+  const w = 34, h = 65;
+
+  // Upper segment (tip)
+  g.beginPath();
+  g.moveTo(w*0.2, 0); g.lineTo(w*0.8, 0);
+  g.quadraticCurveTo(w, 0, w, w*0.25);
+  g.lineTo(w, h*0.42); g.lineTo(0, h*0.42);
+  g.lineTo(0, w*0.25);
+  g.quadraticCurveTo(0, 0, w*0.2, 0);
+  g.closePath();
+  g.fillStyle = metalGrad(g,0,0,w,h*0.4,'#FF5555','#CC0000','#700000');
+  g.fill();
+  panelLine(g, w*0.15, h*0.18, w*0.85, h*0.18);
+  addShine(g, w, h*0.4); g.fill();
+
+  // Joint gap
+  g.fillStyle='rgba(0,0,0,0.7)';
+  g.fillRect(2, h*0.42, w-4, h*0.07);
+
+  // Lower segment (knuckle)
+  g.beginPath();
+  g.moveTo(0, h*0.49); g.lineTo(w, h*0.49);
+  g.lineTo(w*0.95, h); g.lineTo(w*0.05, h);
+  g.closePath();
+  g.fillStyle = metalGrad(g,0,h*0.49,w,h,'#FF4444','#BB0000','#5C0000');
+  g.fill();
+  panelLine(g, w*0.1, h*0.68, w*0.9, h*0.68);
+  g.beginPath();
+  g.moveTo(0, h*0.49); g.lineTo(w, h*0.49); g.lineTo(w*0.95, h); g.lineTo(w*0.05, h); g.closePath();
+  addShine(g, w, h); g.fill();
+
+  // Outline
+  g.strokeStyle='rgba(0,0,0,0.6)'; g.lineWidth=1.2;
+  g.beginPath(); g.moveTo(w*0.2,0); g.lineTo(w*0.8,0); g.quadraticCurveTo(w,0,w,w*0.25);
+  g.lineTo(w,h*0.42); g.lineTo(0,h*0.42); g.lineTo(0,w*0.25); g.quadraticCurveTo(0,0,w*0.2,0); g.closePath(); g.stroke();
+  g.beginPath(); g.moveTo(0,h*0.49); g.lineTo(w,h*0.49); g.lineTo(w*0.95,h); g.lineTo(w*0.05,h); g.closePath(); g.stroke();
+
+  // Small label indicator dot
+  const dg = g.createRadialGradient(w/2,h*0.28,0,w/2,h*0.28,4);
+  dg.addColorStop(0,'rgba(255,200,200,0.9)'); dg.addColorStop(1,'rgba(200,0,0,0)');
+  g.fillStyle=dg; g.beginPath(); g.arc(w/2,h*0.28,3.5,0,Math.PI*2); g.fill();
+
+  return c;
+}
+
+// ── THUMB ARMOR (wider, angled) ──
+function drawThumbArmor() {
+  const c = makeCanvas(40, 58); const g = c.getContext('2d');
+  const w = 40, h = 58;
+
+  // Main body
+  g.beginPath();
+  g.moveTo(w*0.1, 0); g.lineTo(w*0.9, 0);
+  g.lineTo(w, h*0.5); g.lineTo(w*0.9, h);
+  g.lineTo(w*0.1, h); g.lineTo(0, h*0.5);
+  g.closePath();
+  g.fillStyle = metalGrad(g,0,0,w,h,'#FF5555','#CC0000','#700000');
+  g.fill();
+
+  panelLine(g, w*0.1, h*0.42, w*0.9, h*0.42);
+  panelLine(g, w*0.3, 0, w*0.3, h);
+  panelLine(g, w*0.7, 0, w*0.7, h);
+
+  g.beginPath();
+  g.moveTo(w*0.1,0); g.lineTo(w*0.9,0); g.lineTo(w,h*0.5); g.lineTo(w*0.9,h); g.lineTo(w*0.1,h); g.lineTo(0,h*0.5); g.closePath();
+  addShine(g, w, h); g.fill();
+
+  g.strokeStyle='rgba(0,0,0,0.6)'; g.lineWidth=1.2;
+  g.beginPath();
+  g.moveTo(w*0.1,0); g.lineTo(w*0.9,0); g.lineTo(w,h*0.5); g.lineTo(w*0.9,h); g.lineTo(w*0.1,h); g.lineTo(0,h*0.5); g.closePath(); g.stroke();
+  return c;
+}
+
+// Pre-render all armor pieces
+const ARMOR_IMGS = {
+  wrist:     drawWristGuard(),
+  backplate: drawHandPlate(),
+  repulsor:  drawRepulsor(),
+  thumb:     drawThumbArmor(),
+  index:     drawFingerArmor('I'),
+  middle:    drawFingerArmor('M'),
+  ring:      drawFingerArmor('R'),
+  pinky:     drawFingerArmor('P'),
+};
+
+// ───────────────────────────────────────────────────────────────
+//  PART DEFINITIONS
+// ───────────────────────────────────────────────────────────────
+function avgLandmarks(lms, indices) {
+  let sx = 0, sy = 0;
+  for (const i of indices) { sx += lms[i].x; sy += lms[i].y; }
+  return { x: sx/indices.length, y: sy/indices.length };
+}
+
+function lmScreen(lm) {
+  // Flip X because video is mirrored
+  return { x: (1 - lm.x) * canvas.width, y: lm.y * canvas.height };
+}
+
+function avgScreen(lms, indices) {
+  const avg = avgLandmarks(lms, indices);
+  return { x: (1 - avg.x) * canvas.width, y: avg.y * canvas.height };
+}
+
+const PARTS = [
+  {
+    id: 'wrist', name: 'WRIST GUARD', img: ARMOR_IMGS.wrist,
+    w: 100, h: 60,
+    getTarget: (lms) => lmScreen(lms[0]),
+    delay: 0, state: 'floor',
+    x: 0, y: 0, vx: 0, vy: 0, rot: 0, vrot: 0, scale: 1, attachScale: 1,
+    floorX: 0, floorY: 0, floorRot: 0, bobPhase: 0,
+  },
+  {
+    id: 'backplate', name: 'HAND PLATE', img: ARMOR_IMGS.backplate,
+    w: 120, h: 75,
+    getTarget: (lms) => avgScreen(lms, [5,9,13,17]),
+    delay: 80, state: 'floor',
+    x: 0, y: 0, vx: 0, vy: 0, rot: 0, vrot: 0, scale: 1, attachScale: 1,
+    floorX: 0, floorY: 0, floorRot: 0, bobPhase: 0,
+  },
+  {
+    id: 'repulsor', name: 'REPULSOR', img: ARMOR_IMGS.repulsor,
+    w: 52, h: 52,
+    getTarget: (lms) => avgScreen(lms, [0,5,9,13,17]),
+    delay: 160, state: 'floor',
+    x: 0, y: 0, vx: 0, vy: 0, rot: 0, vrot: 0, scale: 1, attachScale: 1,
+    floorX: 0, floorY: 0, floorRot: 0, bobPhase: 0,
+  },
+  {
+    id: 'thumb', name: 'THUMB', img: ARMOR_IMGS.thumb,
+    w: 40, h: 58,
+    getTarget: (lms) => avgScreen(lms, [2,3,4]),
+    delay: 240, state: 'floor',
+    x: 0, y: 0, vx: 0, vy: 0, rot: 0, vrot: 0, scale: 1, attachScale: 1,
+    floorX: 0, floorY: 0, floorRot: 0, bobPhase: 0,
+  },
+  {
+    id: 'index', name: 'INDEX', img: ARMOR_IMGS.index,
+    w: 34, h: 65,
+    getTarget: (lms) => avgScreen(lms, [6,7,8]),
+    delay: 300, state: 'floor',
+    x: 0, y: 0, vx: 0, vy: 0, rot: 0, vrot: 0, scale: 1, attachScale: 1,
+    floorX: 0, floorY: 0, floorRot: 0, bobPhase: 0,
+  },
+  {
+    id: 'middle', name: 'MIDDLE', img: ARMOR_IMGS.middle,
+    w: 34, h: 65,
+    getTarget: (lms) => avgScreen(lms, [10,11,12]),
+    delay: 360, state: 'floor',
+    x: 0, y: 0, vx: 0, vy: 0, rot: 0, vrot: 0, scale: 1, attachScale: 1,
+    floorX: 0, floorY: 0, floorRot: 0, bobPhase: 0,
+  },
+  {
+    id: 'ring', name: 'RING', img: ARMOR_IMGS.ring,
+    w: 34, h: 65,
+    getTarget: (lms) => avgScreen(lms, [14,15,16]),
+    delay: 420, state: 'floor',
+    x: 0, y: 0, vx: 0, vy: 0, rot: 0, vrot: 0, scale: 1, attachScale: 1,
+    floorX: 0, floorY: 0, floorRot: 0, bobPhase: 0,
+  },
+  {
+    id: 'pinky', name: 'PINKY', img: ARMOR_IMGS.pinky,
+    w: 34, h: 65,
+    getTarget: (lms) => avgScreen(lms, [18,19,20]),
+    delay: 480, state: 'floor',
+    x: 0, y: 0, vx: 0, vy: 0, rot: 0, vrot: 0, scale: 1, attachScale: 1,
+    floorX: 0, floorY: 0, floorRot: 0, bobPhase: 0,
+  },
+];
+
+// Scatter on floor
+function scatterParts() {
+  const floorY = canvas.height - 30;
+  const spread = canvas.width * 0.85;
+  const startX = canvas.width * 0.075;
+  PARTS.forEach((p, i) => {
+    const t = i / (PARTS.length - 1);
+    p.floorX = startX + spread * t + (Math.random()-0.5)*50;
+    p.floorY = floorY - Math.random()*30;
+    p.floorRot = (Math.random()-0.5)*0.5;
+    p.bobPhase = Math.random() * Math.PI * 2;
+    p.x = p.floorX;
+    p.y = p.floorY;
+    p.rot = p.floorRot;
+  });
+}
+scatterParts();
+
+// ───────────────────────────────────────────────────────────────
+//  PARTICLE SYSTEM  (sparks on attach)
+// ───────────────────────────────────────────────────────────────
+const particles = [];
+
+function spawnSparks(x, y, color) {
+  for (let i = 0; i < 18; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const spd = 2 + Math.random() * 6;
+    particles.push({
+      x, y,
+      vx: Math.cos(a)*spd, vy: Math.sin(a)*spd,
+      life: 1, decay: 0.04 + Math.random()*0.04,
+      r: 2 + Math.random()*3,
+      color
     });
-  } catch(e) { showErr('Session failed: '+e.message); $start.disabled=false; $start.textContent='▶ INITIALIZE AR'; return; }
-
-  $launch.classList.add('gone');
-  $overlay.classList.add('active');
-  setupThree();
-  xrSession.addEventListener('select', onSelect);
-  xrSession.addEventListener('end', onEnd);
-  xrRefSpace = await xrSession.requestReferenceSpace('local');
-  const vs = await xrSession.requestReferenceSpace('viewer');
-  hitTestSource = await xrSession.requestHitTestSource({ space: vs });
-  renderer.xr.setReferenceSpaceType('local');
-  renderer.xr.setSession(xrSession);
-  renderer.setAnimationLoop(onFrame);
-});
-
-function setupThree() {
-  clock = new THREE.Clock();
-  renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, premultipliedAlpha:false });
-  renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.xr.enabled = true;
-  renderer.outputEncoding = THREE.sRGBEncoding;
-  renderer.setClearColor(0x000000, 0);  // ✅ fully transparent clear
-  document.body.appendChild(renderer.domElement);
-
-  scene = new THREE.Scene();
-  scene.background = null;  // ✅ no scene background
-  camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 20);
-
-  scene.add(new THREE.AmbientLight(0x223355, 1.5));
-  const pt = new THREE.PointLight(0x00c8ff, 2.5, 5);
-  pt.position.set(0,1,0); scene.add(pt);
-
-  reticleGroup = new THREE.Group();
-  const rm = new THREE.MeshBasicMaterial({ color:0x00c8ff });
-  reticleGroup.add(new THREE.Mesh(new THREE.TorusGeometry(0.07,0.004,8,48), rm));
-  reticleGroup.add(new THREE.Mesh(new THREE.TorusGeometry(0.03,0.002,8,32), rm));
-  reticleGroup.visible = false;
-  reticleGroup.matrixAutoUpdate = false;
-  scene.add(reticleGroup);
+  }
 }
 
-function buildHologram(mat4) {
-  if (hologramGroup) { scene.remove(hologramGroup); hologramGroup=null; }
-  ringMeshes=[]; beamMeshes=[]; particleSystem=null;
+function updateParticles() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx; p.y += p.vy;
+    p.vy += 0.15; // gravity
+    p.vx *= 0.95; p.vy *= 0.95;
+    p.life -= p.decay;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
 
-  hologramGroup = new THREE.Group();
-  hologramGroup.applyMatrix4(mat4);
+function drawParticles() {
+  for (const p of particles) {
+    ctx.save();
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color;
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r * p.life, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
 
-  // Platform
-  hologramGroup.add(new THREE.Mesh(
-    new THREE.CylinderGeometry(0.28,0.32,0.025,48),
-    new THREE.MeshStandardMaterial({ color:0x001133, emissive:0x002266, emissiveIntensity:0.9, metalness:0.95, roughness:0.05 })
-  ));
-  const step = new THREE.Mesh(new THREE.CylinderGeometry(0.20,0.28,0.012,48),
-    new THREE.MeshStandardMaterial({ color:0x001a44, emissive:0x003388, emissiveIntensity:0.6, metalness:0.9, roughness:0.1 }));
-  step.position.y=0.018; hologramGroup.add(step);
+// ───────────────────────────────────────────────────────────────
+//  STATE
+// ───────────────────────────────────────────────────────────────
+let handLandmarks = null;
+let handVisible   = false;
+let suiteDeployed = false;
+let allAttached   = false;
+let frameCount    = 0;
+let deployTimestamp = 0;
 
-  // Rings
-  [[0.26,0x00c8ff,0.4],[0.19,0x0077ff,-0.55],[0.12,0x00ffcc,0.7]].forEach(([r,col,spd],i)=>{
-    const m = new THREE.Mesh(new THREE.TorusGeometry(r,0.0045,8,96), new THREE.MeshBasicMaterial({color:col}));
-    m.rotation.x=Math.PI/2; m.position.y=0.027+i*0.004;
-    hologramGroup.add(m); ringMeshes.push({mesh:m,speed:spd});
+// Pulse ring effect on attach
+const pulseRings = [];
+function addPulse(x, y) {
+  pulseRings.push({ x, y, r: 10, life: 1 });
+}
+function updatePulses() {
+  for (let i = pulseRings.length-1; i>=0; i--) {
+    pulseRings[i].r += 4; pulseRings[i].life -= 0.04;
+    if (pulseRings[i].life <= 0) pulseRings.splice(i,1);
+  }
+}
+function drawPulses() {
+  for (const p of pulseRings) {
+    ctx.save();
+    ctx.globalAlpha = p.life * 0.6;
+    ctx.strokeStyle = '#ffcc00';
+    ctx.shadowBlur = 15; ctx.shadowColor = '#ff8800';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// ───────────────────────────────────────────────────────────────
+//  UPDATE LOOP
+// ───────────────────────────────────────────────────────────────
+function update() {
+  frameCount++;
+  const t = frameCount * 0.03;
+
+  // Detect raised hand
+  if (handLandmarks) {
+    const wrist = handLandmarks[0];
+    const wristScreen = wrist.y * canvas.height;
+    // Trigger when wrist is above bottom 40% of screen
+    if (wristScreen < canvas.height * 0.62 && !suiteDeployed) {
+      suiteDeployed = true;
+      deployTimestamp = frameCount;
+      document.getElementById('status-msg').textContent = 'SUIT DEPLOYING...';
+    }
+  }
+
+  // Part updates
+  let attachedCount = 0;
+  for (const part of PARTS) {
+    part.bobPhase += 0.04;
+
+    if (part.state === 'floor') {
+      // Idle bounce on floor
+      part.x = part.floorX + Math.sin(part.bobPhase * 0.7 + part.id.length) * 3;
+      part.y = part.floorY + Math.sin(part.bobPhase + part.id.length) * 4;
+      part.rot = part.floorRot + Math.sin(part.bobPhase * 0.5) * 0.08;
+
+      // Check if we should start flying (with delay)
+      if (suiteDeployed && handLandmarks) {
+        const elapsed = (frameCount - deployTimestamp);
+        if (elapsed * (1000/60) >= part.delay) {
+          part.state = 'flying';
+          // Initial burst velocity toward hand
+          const tgt = part.getTarget(handLandmarks);
+          const dx = tgt.x - part.x, dy = tgt.y - part.y;
+          const d = Math.hypot(dx, dy);
+          part.vx = (dx/d) * 12;
+          part.vy = (dy/d) * 12;
+          part.vrot = (Math.random()-0.5)*0.3;
+        }
+      }
+
+    } else if (part.state === 'flying') {
+      if (handLandmarks) {
+        const tgt = part.getTarget(handLandmarks);
+        const dx = tgt.x - part.x, dy = tgt.y - part.y;
+        const dist = Math.hypot(dx, dy);
+
+        // Spring toward target
+        const spring = 0.18;
+        const damp   = 0.82;
+        part.vx = (part.vx + dx * spring) * damp;
+        part.vy = (part.vy + dy * spring) * damp;
+        part.vrot *= 0.88;
+
+        part.x += part.vx;
+        part.y += part.vy;
+        part.rot += part.vrot;
+
+        // Attach when close
+        if (dist < 22) {
+          part.state = 'attached';
+          part.x = tgt.x; part.y = tgt.y;
+          part.vx = 0; part.vy = 0; part.vrot = 0;
+          spawnSparks(tgt.x, tgt.y, part.id === 'repulsor' ? '#80d0ff' : '#ffcc44');
+          addPulse(tgt.x, tgt.y);
+        }
+      } else {
+        // Hand lost → float back down
+        part.vy += 0.4;
+        part.vx *= 0.97;
+        part.x += part.vx; part.y += part.vy;
+        part.rot += part.vrot; part.vrot *= 0.98;
+        if (part.y > canvas.height + 100) {
+          // Reset to floor
+          part.state = 'floor';
+          part.y = canvas.height - 30;
+          part.vy = 0; part.vx = 0; part.vrot = 0;
+          suiteDeployed = false;
+          deployTimestamp = 0;
+        }
+      }
+      attachedCount++;
+
+    } else if (part.state === 'attached') {
+      if (handLandmarks) {
+        const tgt = part.getTarget(handLandmarks);
+        // Smooth snap follow
+        part.x += (tgt.x - part.x) * 0.35;
+        part.y += (tgt.y - part.y) * 0.35;
+        part.rot += (0 - part.rot) * 0.2;
+        attachedCount++;
+      } else {
+        // Hand lost
+        part.state = 'flying';
+        part.vx = (Math.random()-0.5)*3;
+        part.vy = -2;
+      }
+    }
+  }
+
+  allAttached = (attachedCount === PARTS.length) && PARTS.every(p => p.state === 'attached');
+  if (allAttached) {
+    document.getElementById('status-msg').textContent = 'SUIT ONLINE — POWER AT 100%';
+  }
+
+  updateParticles();
+  updatePulses();
+}
+
+// ───────────────────────────────────────────────────────────────
+//  DRAW LOOP
+// ───────────────────────────────────────────────────────────────
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Scanline vignette overlay
+  const vgrd = ctx.createRadialGradient(
+    canvas.width/2, canvas.height/2, canvas.height*0.3,
+    canvas.width/2, canvas.height/2, canvas.height*0.9
+  );
+  vgrd.addColorStop(0, 'rgba(0,0,0,0)');
+  vgrd.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.fillStyle = vgrd;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Floor glow line
+  const floorGlow = ctx.createLinearGradient(0, canvas.height-8, 0, canvas.height);
+  floorGlow.addColorStop(0, 'rgba(255,140,0,0.0)');
+  floorGlow.addColorStop(0, 'rgba(255,140,0,0.18)');
+  floorGlow.addColorStop(1, 'rgba(255,80,0,0.0)');
+  ctx.fillStyle = 'rgba(255,120,0,0.08)';
+  ctx.fillRect(0, canvas.height-2, canvas.width, 2);
+
+  // Hand skeleton (subtle)
+  if (handLandmarks && handVisible) {
+    drawHandSkeleton();
+  }
+
+  // Shadow under floor parts
+  for (const part of PARTS) {
+    if (part.state === 'floor') {
+      ctx.save();
+      ctx.globalAlpha = 0.25;
+      ctx.fillStyle = 'rgba(255,80,0,0.4)';
+      ctx.filter = 'blur(8px)';
+      ctx.fillRect(part.x - part.w*0.5*0.8, canvas.height - 12, part.w*0.8, 8);
+      ctx.restore();
+    }
+  }
+
+  // Draw parts (floor first, then flying, then attached on top)
+  const drawOrder = ['floor', 'flying', 'attached'];
+  for (const state of drawOrder) {
+    for (const part of PARTS) {
+      if (part.state !== state) continue;
+      drawPart(part, state);
+    }
+  }
+
+  drawPulses();
+  drawParticles();
+
+  // All-attached glow effect
+  if (allAttached) {
+    const framesSinceAll = PARTS.filter(p=>p.state==='attached').length === PARTS.length;
+    if (framesSinceAll) {
+      ctx.save();
+      ctx.globalAlpha = 0.07 + 0.04 * Math.sin(frameCount * 0.12);
+      ctx.fillStyle = 'rgba(255,150,50,1)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+    }
+  }
+}
+
+function drawPart(part, state) {
+  ctx.save();
+  ctx.translate(part.x, part.y);
+  ctx.rotate(part.rot);
+  ctx.scale(part.scale, part.scale);
+
+  const hw = part.w * 0.5, hh = part.h * 0.5;
+
+  // Glow for flying state
+  if (state === 'flying') {
+    ctx.shadowBlur = 25;
+    ctx.shadowColor = part.id === 'repulsor' ? '#60b0ff' : '#ff9900';
+  }
+  if (state === 'attached') {
+    ctx.shadowBlur = 12;
+    ctx.shadowColor = part.id === 'repulsor' ? '#40a0ff' : '#ff7700';
+  }
+
+  ctx.drawImage(part.img, -hw, -hh, part.w, part.h);
+
+  // Flying trail streak
+  if (state === 'flying' && (Math.abs(part.vx) + Math.abs(part.vy)) > 5) {
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = part.id === 'repulsor' ? '#80c0ff' : '#ff9900';
+    ctx.filter = 'blur(6px)';
+    for (let s = 1; s <= 3; s++) {
+      ctx.globalAlpha = 0.15 / s;
+      ctx.fillRect(-hw - part.vx*s*0.5, -hh - part.vy*s*0.5, part.w, part.h);
+    }
+  }
+
+  ctx.restore();
+}
+
+function drawHandSkeleton() {
+  const lms = handLandmarks;
+  const connections = [
+    [0,1],[1,2],[2,3],[3,4],
+    [0,5],[5,6],[6,7],[7,8],
+    [5,9],[9,10],[10,11],[11,12],
+    [9,13],[13,14],[14,15],[15,16],
+    [13,17],[17,18],[18,19],[19,20],
+    [0,17]
+  ];
+
+  ctx.save();
+  ctx.globalAlpha = 0.35;
+  ctx.strokeStyle = '#ff8800';
+  ctx.lineWidth = 1.5;
+  ctx.shadowBlur = 6; ctx.shadowColor = '#ff6600';
+
+  for (const [a, b] of connections) {
+    const pa = { x: (1-lms[a].x)*canvas.width, y: lms[a].y*canvas.height };
+    const pb = { x: (1-lms[b].x)*canvas.width, y: lms[b].y*canvas.height };
+    ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+  }
+
+  for (let i = 0; i < 21; i++) {
+    const p = { x: (1-lms[i].x)*canvas.width, y: lms[i].y*canvas.height };
+    ctx.fillStyle = '#ffcc00';
+    ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+// ───────────────────────────────────────────────────────────────
+//  ANIMATION LOOP
+// ───────────────────────────────────────────────────────────────
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// ───────────────────────────────────────────────────────────────
+//  MEDIAPIPE HANDS
+// ───────────────────────────────────────────────────────────────
+let mediapipeReady = false;
+
+function initMediaPipe() {
+  const hands = new Hands({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
   });
 
-  // Centre beam
-  vertBeam = new THREE.Mesh(new THREE.CylinderGeometry(0.012,0.028,1.1,10),
-    new THREE.MeshBasicMaterial({color:0x00c8ff,transparent:true,opacity:0.15}));
-  vertBeam.position.y=0.025+0.55; hologramGroup.add(vertBeam);
-  const core = new THREE.Mesh(new THREE.CylinderGeometry(0.002,0.002,1.1,6),
-    new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.6}));
-  core.position.y=0.025+0.55; hologramGroup.add(core);
+  hands.setOptions({
+    maxNumHands: 1,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.7,
+    minTrackingConfidence: 0.6
+  });
 
-  // Outer beams
-  for(let i=0;i<8;i++){
-    const a=(i/8)*Math.PI*2, h=0.65+Math.random()*0.2;
-    const b=new THREE.Mesh(new THREE.CylinderGeometry(0.002,0.006,h,5),
-      new THREE.MeshBasicMaterial({color:0x0088ff,transparent:true,opacity:0.25}));
-    b.position.set(Math.cos(a)*0.22, h/2+0.025, Math.sin(a)*0.22);
-    hologramGroup.add(b); beamMeshes.push(b);
+  hands.onResults((results) => {
+    if (!mediapipeReady) {
+      mediapipeReady = true;
+      hideLoading();
+    }
+
+    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+      handLandmarks = results.multiHandLandmarks[0];
+      handVisible   = true;
+    } else {
+      handLandmarks = null;
+      handVisible   = false;
+    }
+  });
+
+  // Webcam
+  navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, facingMode: 'user' } })
+    .then((stream) => {
+      video.srcObject = stream;
+      video.play();
+
+      const camera = new Camera(video, {
+        onFrame: async () => { await hands.send({ image: video }); },
+        width: 1280, height: 720
+      });
+      camera.start();
+    })
+    .catch((err) => {
+      console.error(err);
+      document.getElementById('loading-label').textContent = 'CAMERA ACCESS DENIED';
+    });
+}
+
+// ───────────────────────────────────────────────────────────────
+//  LOADING SCREEN
+// ───────────────────────────────────────────────────────────────
+const loadingBar = document.getElementById('loading-bar');
+const loadingLabel = document.getElementById('loading-label');
+const loadingSteps = [
+  [10, 'BOOTING REPULSOR CORE...'],
+  [25, 'CALIBRATING NANO-ACTUATORS...'],
+  [45, 'LOADING SUIT INVENTORY...'],
+  [65, 'ACQUIRING CAMERA FEED...'],
+  [80, 'HAND RECOGNITION ONLINE...'],
+  [95, 'AWAITING SUIT LOCK...'],
+];
+
+let loadStep = 0;
+function animateLoading() {
+  if (loadStep < loadingSteps.length) {
+    const [pct, msg] = loadingSteps[loadStep];
+    loadingBar.style.width = pct + '%';
+    loadingLabel.textContent = msg;
+    loadStep++;
+    setTimeout(animateLoading, 400 + Math.random()*300);
   }
+}
+animateLoading();
 
-  // AKSHAT text
-  holoCanvas=document.createElement('canvas'); holoCanvas.width=512; holoCanvas.height=220;
-  holoCtx=holoCanvas.getContext('2d'); drawHoloFrame(0);
-  holoTexture=new THREE.CanvasTexture(holoCanvas);
-  const tm=new THREE.Mesh(new THREE.PlaneGeometry(0.55,0.22),
-    new THREE.MeshBasicMaterial({map:holoTexture,transparent:true,opacity:0.95,side:THREE.DoubleSide,depthWrite:false}));
-  tm.position.y=1.05; tm.name='holoText'; hologramGroup.add(tm);
-
-  buildParticles();
-
-  const gd=new THREE.Mesh(new THREE.CircleGeometry(0.13,32),
-    new THREE.MeshBasicMaterial({color:0x00c8ff,transparent:true,opacity:0.10,side:THREE.DoubleSide,depthWrite:false}));
-  gd.rotation.x=-Math.PI/2; gd.position.y=0.029; hologramGroup.add(gd);
-  scene.add(hologramGroup);
+function hideLoading() {
+  loadingBar.style.width = '100%';
+  loadingLabel.textContent = 'SUIT SYSTEMS NOMINAL';
+  setTimeout(() => {
+    const ls = document.getElementById('loading-screen');
+    ls.style.opacity = '0';
+    setTimeout(() => ls.style.display = 'none', 1000);
+    document.getElementById('jarvis-text').style.opacity = '1';
+    document.getElementById('status-msg').style.opacity = '1';
+    scatterParts();
+  }, 600);
 }
 
-function drawHoloFrame(t){
-  const W=512,H=220,ctx=holoCtx;
-  ctx.clearRect(0,0,W,H);
-  ctx.strokeStyle='rgba(0,200,255,0.05)'; ctx.lineWidth=1;
-  for(let y=0;y<H;y+=4){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
-  const sy=((t*75)%(H+30))-15;
-  const sg=ctx.createLinearGradient(0,sy-12,0,sy+12);
-  sg.addColorStop(0,'rgba(0,200,255,0)'); sg.addColorStop(0.5,'rgba(0,200,255,0.5)'); sg.addColorStop(1,'rgba(0,200,255,0)');
-  ctx.fillStyle=sg; ctx.fillRect(0,sy-12,W,24);
-  ctx.save(); ctx.shadowColor='#00c8ff'; ctx.shadowBlur=30; ctx.fillStyle='rgba(0,170,255,0.2)';
-  ctx.font='bold 88px "Courier New"'; ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText('AKSHAT',W/2,H/2); ctx.restore();
-  ctx.save(); ctx.shadowColor='#00ffdd'; ctx.shadowBlur=14; ctx.fillStyle='#00eeff';
-  ctx.font='bold 84px "Courier New"'; ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText('AKSHAT',W/2,H/2); ctx.restore();
-  if(Math.sin(t*6.7)>0.91){
-    ctx.save(); ctx.globalAlpha=0.3; ctx.fillStyle='#ff2266';
-    ctx.font='bold 84px "Courier New"'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('AKSHAT',W/2+5,H/2); ctx.restore();
-  }
-  ctx.save(); ctx.globalAlpha=0.38; ctx.fillStyle='#00aaff'; ctx.font='10px "Courier New"'; ctx.textAlign='center';
-  ctx.fillText('◈ HOLOGRAM SYS · WORLD-LOCKED · ARCore ◈',W/2,H-12); ctx.restore();
-}
-
-function buildParticles(){
-  const N=100, pos=new Float32Array(N*3), vel=new Float32Array(N*3);
-  for(let i=0;i<N;i++){
-    const a=Math.random()*Math.PI*2, r=0.05+Math.random()*0.22;
-    pos[i*3]=Math.cos(a)*r; pos[i*3+1]=0.25+Math.random()*0.85; pos[i*3+2]=Math.sin(a)*r;
-    vel[i*3]=(Math.random()-.5)*.0007; vel[i*3+1]=.0003+Math.random()*.0005; vel[i*3+2]=(Math.random()-.5)*.0007;
-  }
-  const geo=new THREE.BufferGeometry();
-  geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
-  particleSystem=new THREE.Points(geo,new THREE.PointsMaterial({color:0x00ccff,size:.006,transparent:true,opacity:.72,depthWrite:false,sizeAttenuation:true}));
-  particleSystem._vel=vel; hologramGroup.add(particleSystem);
-}
-
-function tickParticles(){
-  if(!particleSystem)return;
-  const pos=particleSystem.geometry.attributes.position.array, vel=particleSystem._vel;
-  for(let i=0,n=pos.length/3;i<n;i++){
-    pos[i*3]+=vel[i*3]; pos[i*3+1]+=vel[i*3+1]; pos[i*3+2]+=vel[i*3+2];
-    if(pos[i*3+1]>1.2){const a=Math.random()*Math.PI*2,r=.05+Math.random()*.2;pos[i*3]=Math.cos(a)*r;pos[i*3+1]=.22;pos[i*3+2]=Math.sin(a)*r;}
-  }
-  particleSystem.geometry.attributes.position.needsUpdate=true;
-}
-
-function onSelect(){
-  if(!reticleGroup.visible||hologramPlaced)return;
-  buildHologram(reticleGroup.matrix);
-  hologramPlaced=true; reticleGroup.visible=false;
-  $status.textContent='◈ HOLOGRAM WORLD-LOCKED'; $status.style.animation='none';
-  $hint.textContent='Walk around · hologram stays locked'; $reset.classList.add('show');
-}
-
-$reset.addEventListener('click',()=>{
-  if(hologramGroup){scene.remove(hologramGroup);hologramGroup=null;}
-  particleSystem=null; hologramPlaced=false; reticleGroup.visible=true;
-  $status.textContent='SCANNING SURFACE…'; $status.style.animation='pulse 2s ease-in-out infinite';
-  $hint.textContent='Point at a flat surface · then tap'; $reset.classList.remove('show');
-});
-
-function onFrame(time,xrFrame){
-  if(!xrFrame)return;
-  const t=time/1000; clock.getDelta();
-  if(hitTestSource&&!hologramPlaced){
-    const hits=xrFrame.getHitTestResults(hitTestSource);
-    if(hits.length>0){
-      const hp=hits[0].getPose(xrRefSpace);
-      reticleGroup.visible=true;
-      reticleGroup.matrix.fromArray(hp.transform.matrix);
-      $status.textContent='◉ SURFACE FOUND — TAP TO DEPLOY';
-    } else { reticleGroup.visible=false; $status.textContent='SCANNING SURFACE…'; }
-  }
-  if(hologramGroup){
-    ringMeshes.forEach(({mesh,speed})=>{mesh.rotation.z+=speed*.016;});
-    if(vertBeam) vertBeam.material.opacity=0.12+Math.sin(t*2.4)*.07;
-    beamMeshes.forEach((b,i)=>{b.material.opacity=.18+Math.sin(t*1.8+i*.8)*.11;});
-    tickParticles();
-    if(holoTexture){drawHoloFrame(t);holoTexture.needsUpdate=true;}
-    const tm=hologramGroup.getObjectByName('holoText');
-    if(tm){const cp=new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld);tm.lookAt(cp);}
-  }
-  renderer.render(scene,camera);
-}
-
-function onEnd(){
-  $overlay.classList.remove('active'); $launch.classList.remove('gone'); $launch.style.opacity='1';
-  $start.disabled=false; $start.textContent='▶ INITIALIZE AR';
-  hologramPlaced=false; particleSystem=null;
-  if(renderer)renderer.setAnimationLoop(null); $reset.classList.remove('show');
-}
-
-init();
+// ───────────────────────────────────────────────────────────────
+//  BOOT
+// ───────────────────────────────────────────────────────────────
+loop();
+setTimeout(initMediaPipe, 500);
 </script>
 </body>
 </html>
