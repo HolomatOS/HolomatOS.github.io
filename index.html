@@ -178,7 +178,7 @@ const $hint=$('#hintText'), $reset=$('#resetBtn'), $start=$('#startBtn');
 const $err=$('#errMsg'), $httpsWarn=$('#httpsWarn');
 const $arDot=$('#arCoreDot'), $arLabel=$('#arCoreLabel');
 
-function $(id){ return document.getElementById(id); }
+function $(id){ return document.getElementById(id.replace('#','')); }
 
 // HTTPS check
 if (!['https:',''].includes(location.protocol) && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
