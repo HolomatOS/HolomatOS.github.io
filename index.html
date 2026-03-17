@@ -17,13 +17,24 @@
     touch-action: none;
   }
 
-  /* ── Canvas sits on top of the WebXR camera feed ── */
+  /* ── Live camera feed — always visible behind everything ── */
+  #camera-video {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;       /* fill the screen like a viewfinder */
+    z-index: 1;
+    display: none;           /* shown once stream is ready */
+  }
+
+  /* ── Canvas sits on top of the video — transparent background ── */
   #scan-canvas {
     position: fixed;
     top: 0; left: 0;
     width: 100%; height: 100%;
-    pointer-events: none;   /* clicks pass through to WebXR */
+    pointer-events: none;
     z-index: 10;
+    background: transparent; /* IMPORTANT: don't cover the video */
   }
 
   /* ── Start screen shown before WebXR activates ── */
@@ -152,7 +163,10 @@
   <button id="start-btn" onclick="startAR()">Start scanning</button>
 </div>
 
-<!-- ── CANVAS: scan line is drawn here ─────────── -->
+<!-- ── CAMERA FEED: always-on background ──────── -->
+<video id="camera-video" autoplay muted playsinline></video>
+
+<!-- ── CANVAS: scan line drawn here (transparent) ── -->
 <canvas id="scan-canvas"></canvas>
 
 <!-- ── HUD: floats next to the detected object ─── -->
@@ -200,26 +214,27 @@ import {
 
 
 // ── DOM refs ──
-const canvas  = document.getElementById("scan-canvas");
-const ctx     = canvas.getContext("2d");
-const hud     = document.getElementById("hud");
+const canvas   = document.getElementById("scan-canvas");
+const ctx      = canvas.getContext("2d");
+const hud      = document.getElementById("hud");
 const hudTitle = document.getElementById("hud-title");
 const hudBody  = document.getElementById("hud-body");
 const hudDist  = document.getElementById("hud-dist");
 const statusEl = document.getElementById("status");
 const frameEl  = document.getElementById("frame-overlay");
+// The visible <video> in the HTML — shows camera feed on screen
+const videoEl  = document.getElementById("camera-video");
 
 // ── State ──
-let segmenter    = null;   // MediaPipe instance
-let xrSession    = null;   // WebXR session
-let videoEl      = null;   // hidden <video> for the camera stream
-let scanY        = 0;      // current Y position of the sweep line
-let scanDir      = 1;      // 1 = downward, -1 = upward
-let lastMaskTime = 0;      // timestamp of last valid mask
-let lastQueryTime = 0;     // timestamp of last Claude call
-let currentMaskBBox = null; // {minX,maxX,minY,maxY} in canvas pixels
-let isScanning   = false;  // true while sweep animation is running
-let rafId        = null;   // requestAnimationFrame handle
+let segmenter       = null;
+let xrSession       = null;
+let scanY           = 0;
+let scanDir         = 1;
+let lastMaskTime    = 0;
+let lastQueryTime   = 0;
+let currentMaskBBox = null;
+let isScanning      = false;
+let rafId           = null;
 
 
 // ══════════════════════════════════════════════
@@ -279,17 +294,14 @@ window.startAR = async function() {
 
   xrSession.addEventListener("end", () => location.reload());
 
-  // Get the camera video feed from WebXR
+  // Attach camera stream to our visible <video> element
   const stream = await navigator.mediaDevices.getUserMedia({
     video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
   });
-  videoEl = document.createElement("video");
   videoEl.srcObject = stream;
-  videoEl.playsInline = true;
-  videoEl.muted = true;
+  videoEl.style.display = "block"; // make it visible
   await videoEl.play();
 
-  // Start the frame loop
   tick();
 };
 
@@ -301,17 +313,15 @@ async function fallbackCamera() {
   const stream = await navigator.mediaDevices.getUserMedia({
     video: { facingMode: "environment" }
   });
-  videoEl = document.createElement("video");
+  // Attach to the visible <video> element already in the page
   videoEl.srcObject = stream;
-  videoEl.playsInline = true;
-  videoEl.muted = true;
+  videoEl.style.display = "block"; // show it — this IS the camera feed
   await videoEl.play();
 
-  // Draw the camera feed as the background ourselves
   canvas.width  = window.innerWidth;
   canvas.height = window.innerHeight;
   document.getElementById("start-screen").style.display = "none";
-  showStatus("Camera ready (fallback mode)");
+  showStatus("Camera ready");
   tick();
 }
 
@@ -323,22 +333,24 @@ async function fallbackCamera() {
 function tick() {
   rafId = requestAnimationFrame(tick);
 
-  // In fallback mode we draw the video as background
-  if (!xrSession) {
-    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-  } else {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-  }
+  // Clear canvas each frame — the <video> element behind it shows the feed
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  if (!videoEl || videoEl.readyState < 2) return;
+  // Wait until video is actually playing before segmenting
+  if (videoEl.readyState < 2) return;
 
   const now = performance.now();
 
   // ── Run segmentation on this frame ──
-  // MediaPipe analyses the video frame and returns a mask
-  const result = segmenter.segmentForVideo(videoEl, now);
-  const mask   = result?.categoryMask;
-
+  let result, mask;
+  try {
+    result = segmenter.segmentForVideo(videoEl, now);
+    mask   = result?.categoryMask;
+  } catch(e) {
+    // Segmenter occasionally errors mid-stream — skip frame, do not crash
+    console.warn("Segmentation error:", e.message);
+    return;
+  }
   if (!mask) return;
 
   // ── Find the most-confident object in the mask ──
