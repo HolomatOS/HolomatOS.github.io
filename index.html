@@ -3,640 +3,710 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>AR Scanner</title>
+<meta name="mobile-web-app-capable" content="yes">
+<title>AR AKSHAT Hologram</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <style>
-  /* ── Reset & base ── */
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-
-  body {
-    background: #000;
-    font-family: 'Courier New', monospace;
-    overflow: hidden;
-    width: 100vw;
-    height: 100dvh;
-    touch-action: none;
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --blue:#00c8ff;
+    --blue2:#0066ff;
+    --glow:rgba(0,200,255,0.6);
+    --dark:#020d1a;
+    --surface:rgba(2,18,40,0.92);
+    --text:#b8e4ff;
+    --muted:rgba(184,228,255,0.45);
   }
+  html,body{width:100%;height:100%;background:var(--dark);overflow:hidden;
+    font-family:'Courier New',monospace;color:var(--text);
+    -webkit-tap-highlight-color:transparent}
+  canvas{display:block;position:fixed;inset:0}
 
-  /* ── Live camera feed — always visible behind everything ── */
-  #camera-video {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    object-fit: cover;       /* fill the screen like a viewfinder */
-    z-index: 1;
-    display: none;           /* shown once stream is ready */
+  /* ── Launch Screen ── */
+  #launch{
+    position:fixed;inset:0;z-index:50;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;
+    background:radial-gradient(ellipse at 50% 35%,#041428 0%,#020d1a 68%);
+    transition:opacity .7s ease;
   }
+  #launch.gone{opacity:0;pointer-events:none}
 
-  /* ── Canvas sits on top of the video — transparent background ── */
-  #scan-canvas {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    pointer-events: none;
-    z-index: 10;
-    background: transparent; /* IMPORTANT: don't cover the video */
+  .hex-logo{
+    position:relative;width:100px;height:100px;
+    display:flex;align-items:center;justify-content:center;
   }
+  .hex-logo svg{position:absolute;inset:0;animation:rotateSlow 12s linear infinite}
+  .hex-logo .icon{font-size:40px;z-index:1;filter:drop-shadow(0 0 12px var(--blue))}
 
-  /* ── Start screen shown before WebXR activates ── */
-  #start-screen {
-    position: fixed;
-    inset: 0;
-    background: #000;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 24px;
-    z-index: 100;
+  @keyframes rotateSlow{to{transform:rotate(360deg)}}
+
+  .title-block{text-align:center}
+  .title-block h1{
+    font-size:22px;letter-spacing:6px;text-transform:uppercase;
+    color:var(--blue);text-shadow:0 0 24px var(--glow);
+    margin-bottom:6px
   }
+  .title-block p{font-size:10px;color:var(--muted);letter-spacing:3px;text-transform:uppercase}
 
-  #start-screen h1 {
-    color: #00ffcc;
-    font-size: 22px;
-    letter-spacing: 4px;
-    text-transform: uppercase;
+  .chips{display:flex;flex-direction:column;gap:8px;width:min(300px,86vw)}
+  .chip{
+    border:1px solid rgba(0,200,255,0.2);border-radius:6px;
+    padding:9px 14px;background:var(--surface);
+    font-size:11px;color:var(--muted);
+    display:flex;align-items:center;gap:10px
   }
-
-  #start-screen p {
-    color: #557;
-    font-size: 13px;
-    text-align: center;
-    max-width: 280px;
-    line-height: 1.7;
+  .chip-dot{
+    width:6px;height:6px;border-radius:50%;flex-shrink:0;
+    background:var(--blue);box-shadow:0 0 8px var(--blue)
   }
 
-  #start-btn {
-    background: transparent;
-    border: 1px solid #00ffcc;
-    color: #00ffcc;
-    font-family: 'Courier New', monospace;
-    font-size: 13px;
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    padding: 14px 32px;
-    cursor: pointer;
-    transition: background 0.2s;
+  #startBtn{
+    padding:14px 44px;
+    background:transparent;
+    border:1.5px solid var(--blue);
+    border-radius:40px;
+    color:var(--blue);
+    font-size:13px;letter-spacing:3px;text-transform:uppercase;
+    font-family:'Courier New',monospace;
+    cursor:pointer;
+    position:relative;overflow:hidden;
+    transition:color .25s,box-shadow .25s;
   }
-  #start-btn:hover { background: rgba(0,255,204,0.08); }
-  #start-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  #startBtn::after{
+    content:'';position:absolute;inset:0;
+    background:var(--blue);transform:scaleX(0);transform-origin:left;
+    transition:transform .3s ease;z-index:-1
+  }
+  #startBtn:hover::after,#startBtn:active::after{transform:scaleX(1)}
+  #startBtn:hover,#startBtn:active{color:#000;box-shadow:0 0 30px var(--glow)}
+  #startBtn:disabled{opacity:.35;cursor:not-allowed}
 
-  /* ── HUD info box that floats next to the object ── */
-  #hud {
-    position: fixed;
-    display: none;               /* hidden until scan completes */
-    max-width: 200px;
-    background: rgba(0, 0, 0, 0.75);
-    border: 1px solid #00ffcc55;
-    border-left: 2px solid #00ffcc;
-    padding: 10px 12px;
-    z-index: 20;
-    pointer-events: none;
-    transition: opacity 0.3s;
+  #errMsg{
+    display:none;font-size:12px;color:#ff6b35;
+    text-align:center;max-width:270px;line-height:1.7
   }
 
-  #hud-title {
-    color: #00ffcc;
-    font-size: 11px;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    margin-bottom: 6px;
+  /* ── AR Overlay ── */
+  #overlay{
+    position:fixed;inset:0;pointer-events:none;
+    z-index:20;display:none;
   }
+  #overlay.active{display:block}
 
-  #hud-body {
-    color: #aaa;
-    font-size: 11px;
-    line-height: 1.5;
+  /* Crosshair reticle */
+  #reticle{
+    position:absolute;top:50%;left:50%;
+    transform:translate(-50%,-50%);
+    width:56px;height:56px;
+    transition:opacity .3s;
   }
+  #reticle svg{width:100%;height:100%}
 
-  #hud-dist {
-    color: #555;
-    font-size: 10px;
-    margin-top: 6px;
-    letter-spacing: 1px;
+  /* Status bar */
+  #statusBar{
+    position:absolute;top:20px;left:50%;transform:translateX(-50%);
+    background:var(--surface);border:1px solid rgba(0,200,255,0.2);
+    border-radius:24px;padding:8px 20px;
+    font-size:11px;letter-spacing:2px;text-transform:uppercase;
+    color:var(--blue);text-align:center;
+    white-space:nowrap;
+    animation:pulse 2s ease-in-out infinite;
   }
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
 
-  /* ── Scanning status label at the top ── */
-  #status {
-    position: fixed;
-    top: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    color: #00ffcc;
-    font-size: 10px;
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    opacity: 0;
-    transition: opacity 0.4s;
-    z-index: 20;
-    pointer-events: none;
-  }
-  #status.visible { opacity: 1; }
+  /* Corner decorations */
+  .corner{position:absolute;width:24px;height:24px}
+  .corner svg{width:100%;height:100%}
+  .corner.tl{top:16px;left:16px}
+  .corner.tr{top:16px;right:16px;transform:scaleX(-1)}
+  .corner.bl{bottom:16px;left:16px;transform:scaleY(-1)}
+  .corner.br{bottom:16px;right:16px;transform:scale(-1,-1)}
 
-  /* ── Corner brackets that frame the detected object ── */
-  #frame-overlay {
-    position: fixed;
-    pointer-events: none;
-    z-index: 15;
-    display: none;
+  /* Bottom hint */
+  #hint{
+    position:absolute;bottom:40px;left:50%;transform:translateX(-50%);
+    font-size:11px;letter-spacing:2px;text-transform:uppercase;
+    color:var(--muted);text-align:center;pointer-events:auto;
   }
-  .bracket {
-    position: absolute;
-    width: 14px;
-    height: 14px;
-    border-color: #00ffcc;
-    border-style: solid;
-    opacity: 0.8;
+  #resetBtn{
+    display:none;margin-top:10px;
+    background:transparent;border:1px solid rgba(0,200,255,0.35);
+    border-radius:20px;padding:7px 20px;
+    color:var(--blue);font-size:11px;letter-spacing:2px;
+    font-family:'Courier New',monospace;text-transform:uppercase;
+    cursor:pointer;
   }
-  .bracket.tl { top: 0;  left: 0;  border-width: 1px 0 0 1px; }
-  .bracket.tr { top: 0;  right: 0; border-width: 1px 1px 0 0; }
-  .bracket.bl { bottom: 0; left: 0; border-width: 0 0 1px 1px; }
-  .bracket.br { bottom: 0; right: 0; border-width: 0 1px 1px 0; }
+  #resetBtn.show{display:block}
 </style>
 </head>
 <body>
 
-<!-- ── START SCREEN ─────────────────────────────── -->
-<div id="start-screen">
-  <h1>AR Scanner</h1>
-  <p>Point at any object. The scanner will outline it, sweep across it, then identify it.</p>
-  <p style="color:#334;font-size:11px;">Requires Chrome on Android · HTTPS required</p>
-  <button id="start-btn" onclick="startAR()">Start scanning</button>
+<!-- ─── Launch Screen ─── -->
+<div id="launch">
+  <div class="hex-logo">
+    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <polygon points="50,4 93,27 93,73 50,96 7,73 7,27"
+        fill="none" stroke="#00c8ff" stroke-width="1.5"
+        stroke-dasharray="8 3" opacity="0.7"/>
+      <polygon points="50,14 83,32 83,68 50,86 17,68 17,32"
+        fill="none" stroke="#0066ff" stroke-width="1" opacity="0.4"/>
+    </svg>
+    <span class="icon">◈</span>
+  </div>
+
+  <div class="title-block">
+    <h1>AKSHAT // AR</h1>
+    <p>Holographic Projection System v1.0</p>
+  </div>
+
+  <div class="chips">
+    <div class="chip"><span class="chip-dot"></span>WebXR Plane Detection + World Anchors</div>
+    <div class="chip"><span class="chip-dot"></span>3D Holographic Platform Projection</div>
+    <div class="chip"><span class="chip-dot"></span>Requires: Chrome Android + ARCore</div>
+  </div>
+
+  <button id="startBtn">▶ INITIALIZE AR</button>
+  <p id="errMsg"></p>
 </div>
 
-<!-- ── CAMERA FEED: always-on background ──────── -->
-<video id="camera-video" autoplay muted playsinline></video>
+<!-- ─── AR DOM Overlay ─── -->
+<div id="overlay">
+  <div id="reticle">
+    <svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+      <!-- outer ring -->
+      <circle cx="28" cy="28" r="25" fill="none" stroke="#00c8ff" stroke-width="1"
+        stroke-dasharray="10 4" opacity="0.6">
+        <animateTransform attributeName="transform" type="rotate"
+          from="0 28 28" to="360 28 28" dur="6s" repeatCount="indefinite"/>
+      </circle>
+      <!-- inner cross -->
+      <line x1="28" y1="14" x2="28" y2="20" stroke="#00c8ff" stroke-width="1.5"/>
+      <line x1="28" y1="36" x2="28" y2="42" stroke="#00c8ff" stroke-width="1.5"/>
+      <line x1="14" y1="28" x2="20" y2="28" stroke="#00c8ff" stroke-width="1.5"/>
+      <line x1="36" y1="28" x2="42" y2="28" stroke="#00c8ff" stroke-width="1.5"/>
+      <!-- centre dot -->
+      <circle cx="28" cy="28" r="2.5" fill="#00c8ff" opacity="0.9">
+        <animate attributeName="opacity" values="0.9;0.3;0.9" dur="1.2s" repeatCount="indefinite"/>
+      </circle>
+    </svg>
+  </div>
 
-<!-- ── CANVAS: scan line drawn here (transparent) ── -->
-<canvas id="scan-canvas"></canvas>
+  <div id="statusBar">SCANNING SURFACE…</div>
 
-<!-- ── HUD: floats next to the detected object ─── -->
-<div id="hud">
-  <div id="hud-title">Unknown</div>
-  <div id="hud-body">Scanning…</div>
-  <div id="hud-dist"></div>
+  <!-- corner brackets -->
+  <div class="corner tl">
+    <svg viewBox="0 0 24 24"><path d="M2 12 L2 2 L12 2" fill="none" stroke="#00c8ff" stroke-width="1.5"/></svg>
+  </div>
+  <div class="corner tr">
+    <svg viewBox="0 0 24 24"><path d="M2 12 L2 2 L12 2" fill="none" stroke="#00c8ff" stroke-width="1.5"/></svg>
+  </div>
+  <div class="corner bl">
+    <svg viewBox="0 0 24 24"><path d="M2 12 L2 2 L12 2" fill="none" stroke="#00c8ff" stroke-width="1.5"/></svg>
+  </div>
+  <div class="corner br">
+    <svg viewBox="0 0 24 24"><path d="M2 12 L2 2 L12 2" fill="none" stroke="#00c8ff" stroke-width="1.5"/></svg>
+  </div>
+
+  <div id="hint">
+    <span id="hintText">Point at a flat surface then tap</span>
+    <button id="resetBtn">⟳ RESET PROJECTION</button>
+  </div>
 </div>
 
-<!-- ── CORNER BRACKETS ──────────────────────────── -->
-<div id="frame-overlay">
-  <div class="bracket tl"></div>
-  <div class="bracket tr"></div>
-  <div class="bracket bl"></div>
-  <div class="bracket br"></div>
-</div>
-
-<!-- ── STATUS LABEL ─────────────────────────────── -->
-<div id="status">Detecting…</div>
-
-
-<!-- ══════════════════════════════════════════════
-     STEP 1 — Load MediaPipe Vision Tasks (WASM)
-     This runs entirely on-device, no server needed
-     ══════════════════════════════════════════════ -->
-<script type="module">
-
-// ─── CONFIG ──────────────────────────────────────────────
-// Put your Claude API key here (or proxy it through your own server)
-const CLAUDE_API_KEY = "YOUR_API_KEY_HERE";
-const CLAUDE_MODEL   = "claude-opus-4-5";
-
-// How long (ms) with no mask before HUD disappears
-const LOOK_AWAY_GRACE = 400;
-
-// Only re-query Claude if >2s has passed since last ID
-const REQUERY_COOLDOWN = 2000;
+<script>
+'use strict';
 // ─────────────────────────────────────────────────────────
+//  State
+// ─────────────────────────────────────────────────────────
+let renderer, scene, camera, clock;
+let xrSession = null, xrRefSpace = null, hitTestSource = null;
+let reticleGroup = null;       // 3D reticle in world
+let hologramGroup = null;      // placed hologram
+let hologramPlaced = false;
+let placedMatrix = new THREE.Matrix4();
 
+// animation handles
+let holoCanvas, holoCtx, holoTexture;
+let scanY = 0;
+let ringMeshes = [], beamMeshes = [];
+let particlePositions, particleSystem;
+let vertBeam;
 
-import {
-  ImageSegmenter,
-  FilesetResolver
-} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+const overlay = document.getElementById('overlay');
+const statusBar = document.getElementById('statusBar');
+const hintText  = document.getElementById('hintText');
+const resetBtn  = document.getElementById('resetBtn');
+const startBtn  = document.getElementById('startBtn');
+const errMsg    = document.getElementById('errMsg');
+const launchEl  = document.getElementById('launch');
 
-
-// ── DOM refs ──
-const canvas   = document.getElementById("scan-canvas");
-const ctx      = canvas.getContext("2d");
-const hud      = document.getElementById("hud");
-const hudTitle = document.getElementById("hud-title");
-const hudBody  = document.getElementById("hud-body");
-const hudDist  = document.getElementById("hud-dist");
-const statusEl = document.getElementById("status");
-const frameEl  = document.getElementById("frame-overlay");
-// The visible <video> in the HTML — shows camera feed on screen
-const videoEl  = document.getElementById("camera-video");
-
-// ── State ──
-let segmenter       = null;
-let xrSession       = null;
-let scanY           = 0;
-let scanDir         = 1;
-let lastMaskTime    = 0;
-let lastQueryTime   = 0;
-let currentMaskBBox = null;
-let isScanning      = false;
-let rafId           = null;
-
-
-// ══════════════════════════════════════════════
-// STEP 2 — Initialise MediaPipe segmenter
-// Model: selfie_multiclass — recognises many object categories
-// ══════════════════════════════════════════════
-async function initSegmenter() {
-  const vision = await FilesetResolver.forVisionTasks(
-    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
-  );
-
-  segmenter = await ImageSegmenter.createFromOptions(vision, {
-    baseOptions: {
-      // This model classifies each pixel into one of 24 categories
-      modelAssetPath:
-        "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite",
-      delegate: "GPU"   // use the phone GPU for speed
-    },
-    runningMode: "VIDEO",           // frame-by-frame live mode
-    outputCategoryMask: true,       // we get per-pixel class IDs
-    outputConfidenceMasks: false    // skip probability maps (saves memory)
-  });
-}
-
-
-// ══════════════════════════════════════════════
-// STEP 3 — Start WebXR + camera
-// DOM Overlay = our HTML renders ON TOP of the AR camera feed
-// ══════════════════════════════════════════════
-window.startAR = async function() {
-  const btn = document.getElementById("start-btn");
-  btn.disabled = true;
-  btn.textContent = "Loading…";
-
-  await initSegmenter();
-
-  // Check if WebXR AR is supported
-  if (!navigator.xr || !(await navigator.xr.isSessionSupported("immersive-ar"))) {
-    // Fallback: use plain getUserMedia camera instead of WebXR
-    // Useful for testing on desktop or non-AR browsers
-    fallbackCamera();
+// ─────────────────────────────────────────────────────────
+//  Check WebXR support
+// ─────────────────────────────────────────────────────────
+async function init() {
+  if (!navigator.xr) {
+    showError('WebXR not supported. Use Chrome on an ARCore-compatible Android phone.');
     return;
   }
-
-  xrSession = await navigator.xr.requestSession("immersive-ar", {
-    requiredFeatures: ["dom-overlay"],
-    domOverlay: { root: document.body }  // our full body is the overlay
-  });
-
-  // Resize canvas to match screen
-  canvas.width  = window.innerWidth;
-  canvas.height = window.innerHeight;
-
-  // Hide start screen, show AR
-  document.getElementById("start-screen").style.display = "none";
-  showStatus("Point at an object");
-
-  xrSession.addEventListener("end", () => location.reload());
-
-  // Attach camera stream to our visible <video> element
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
-  });
-  videoEl.srcObject = stream;
-  videoEl.style.display = "block"; // make it visible
-  await videoEl.play();
-
-  tick();
-};
-
-
-// ══════════════════════════════════════════════
-// Fallback: plain camera (for non-WebXR browsers / desktop testing)
-// ══════════════════════════════════════════════
-async function fallbackCamera() {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: "environment" }
-  });
-  // Attach to the visible <video> element already in the page
-  videoEl.srcObject = stream;
-  videoEl.style.display = "block"; // show it — this IS the camera feed
-  await videoEl.play();
-
-  canvas.width  = window.innerWidth;
-  canvas.height = window.innerHeight;
-  document.getElementById("start-screen").style.display = "none";
-  showStatus("Camera ready");
-  tick();
+  const supported = await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
+  if (!supported) {
+    showError('Immersive AR not supported on this device/browser. Requires ARCore + Chrome Android.');
+    return;
+  }
+  startBtn.disabled = false;
+  startBtn.textContent = '▶ INITIALIZE AR';
 }
 
+function showError(msg) {
+  errMsg.style.display = 'block';
+  errMsg.textContent = msg;
+  startBtn.disabled = true;
+}
 
-// ══════════════════════════════════════════════
-// STEP 4 — Main animation loop
-// Runs every frame (~30-60fps)
-// ══════════════════════════════════════════════
-function tick() {
-  rafId = requestAnimationFrame(tick);
+// ─────────────────────────────────────────────────────────
+//  Start AR Session
+// ─────────────────────────────────────────────────────────
+startBtn.addEventListener('click', async () => {
+  startBtn.disabled = true;
+  startBtn.textContent = 'INITIALIZING…';
 
-  // Clear canvas each frame — the <video> element behind it shows the feed
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // Wait until video is actually playing before segmenting
-  if (videoEl.readyState < 2) return;
-
-  const now = performance.now();
-
-  // ── Run segmentation on this frame ──
-  let result, mask;
   try {
-    result = segmenter.segmentForVideo(videoEl, now);
-    mask   = result?.categoryMask;
-  } catch(e) {
-    // Segmenter occasionally errors mid-stream — skip frame, do not crash
-    console.warn("Segmentation error:", e.message);
+    xrSession = await navigator.xr.requestSession('immersive-ar', {
+      requiredFeatures: ['hit-test', 'dom-overlay'],
+      optionalFeatures:  ['anchors', 'plane-detection'],
+      domOverlay: { root: overlay }
+    });
+  } catch (e) {
+    showError('Could not start AR session: ' + e.message);
+    startBtn.disabled = false;
+    startBtn.textContent = '▶ INITIALIZE AR';
     return;
   }
-  if (!mask) return;
 
-  // ── Find the most-confident object in the mask ──
-  const bbox = extractBestMaskBBox(
-    mask.getAsUint8Array(),
-    mask.width,
-    mask.height
-  );
+  // Hide launch, show overlay
+  launchEl.classList.add('gone');
+  overlay.classList.add('active');
 
-  if (bbox) {
-    // ── Object is visible ──
-    lastMaskTime = now;
-    currentMaskBBox = scaleBBoxToCanvas(bbox, mask.width, mask.height);
-    updateFrameBrackets(currentMaskBBox);
-    drawScanLine(currentMaskBBox, mask, mask.width, mask.height);
-    showStatus("Scanning…");
+  setupThree();
+  xrSession.addEventListener('select', onSelect);
+  xrSession.addEventListener('end', onSessionEnd);
 
-    // Query Claude if we haven't recently
-    if (now - lastQueryTime > REQUERY_COOLDOWN && !isScanning) {
-      lastQueryTime = now;
-      identifyObject(currentMaskBBox);
-    }
+  xrRefSpace = await xrSession.requestReferenceSpace('local');
 
-  } else {
-    // ── No object visible ──
-    if (now - lastMaskTime > LOOK_AWAY_GRACE) {
-      hideHUD();
-      hideFrameBrackets();
-      showStatus("Point at an object");
-      isScanning = false;
-    }
+  // Hit test source (relative to viewer)
+  const viewerSpace = await xrSession.requestReferenceSpace('viewer');
+  hitTestSource = await xrSession.requestHitTestSource({ space: viewerSpace });
+
+  renderer.xr.setSession(xrSession);
+  renderer.setAnimationLoop(onFrame);
+});
+
+// ─────────────────────────────────────────────────────────
+//  Three.js Setup
+// ─────────────────────────────────────────────────────────
+function setupThree() {
+  clock = new THREE.Clock();
+
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.xr.enabled = true;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  document.body.appendChild(renderer.domElement);
+
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+
+  // Ambient + point light
+  scene.add(new THREE.AmbientLight(0x112244, 1.2));
+  const pt = new THREE.PointLight(0x00c8ff, 2, 4);
+  pt.position.set(0, 1, 0);
+  scene.add(pt);
+
+  // 3D Reticle (ring on ground)
+  reticleGroup = new THREE.Group();
+  const rRing = new THREE.TorusGeometry(0.06, 0.003, 8, 48);
+  const rMat  = new THREE.MeshBasicMaterial({ color: 0x00c8ff });
+  reticleGroup.add(new THREE.Mesh(rRing, rMat));
+  const rInner = new THREE.TorusGeometry(0.025, 0.002, 8, 32);
+  reticleGroup.add(new THREE.Mesh(rInner, rMat));
+  reticleGroup.visible = false;
+  scene.add(reticleGroup);
+}
+
+// ─────────────────────────────────────────────────────────
+//  Build Platform + Hologram
+// ─────────────────────────────────────────────────────────
+function buildHologram(matrix) {
+  if (hologramGroup) scene.remove(hologramGroup);
+  ringMeshes = []; beamMeshes = [];
+
+  hologramGroup = new THREE.Group();
+  hologramGroup.applyMatrix4(matrix);
+
+  // ── Platform base disc ──
+  const baseGeo = new THREE.CylinderGeometry(0.28, 0.32, 0.025, 48);
+  const baseMat = new THREE.MeshStandardMaterial({
+    color: 0x001133, emissive: 0x002266,
+    emissiveIntensity: 0.8, metalness: 0.95, roughness: 0.05
+  });
+  hologramGroup.add(new THREE.Mesh(baseGeo, baseMat));
+
+  // Step ring
+  const stepGeo = new THREE.CylinderGeometry(0.20, 0.28, 0.012, 48);
+  const stepMat = new THREE.MeshStandardMaterial({
+    color: 0x001a44, emissive: 0x003388,
+    emissiveIntensity: 0.6, metalness: 0.9, roughness: 0.1
+  });
+  const step = new THREE.Mesh(stepGeo, stepMat);
+  step.position.y = 0.018;
+  hologramGroup.add(step);
+
+  // ── Glowing torus rings ──
+  const radii = [0.26, 0.19, 0.12];
+  const colors= [0x00c8ff, 0x0077ff, 0x00ffcc];
+  radii.forEach((r, i) => {
+    const geo = new THREE.TorusGeometry(r, 0.0045, 8, 96);
+    const mat = new THREE.MeshBasicMaterial({ color: colors[i] });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.rotation.x = Math.PI / 2;
+    mesh.position.y = 0.025 + i * 0.004;
+    hologramGroup.add(mesh);
+    ringMeshes.push({ mesh, speed: (i % 2 === 0 ? 1 : -1) * (0.4 + i * 0.15) });
+  });
+
+  // ── Light beam columns (6 beams from outer ring) ──
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2;
+    const h = 0.7 + Math.random() * 0.2;
+    const geo = new THREE.CylinderGeometry(0.002, 0.006, h, 6);
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x00aaff, transparent: true, opacity: 0.28
+    });
+    const beam = new THREE.Mesh(geo, mat);
+    beam.position.set(
+      Math.cos(angle) * 0.22,
+      h / 2 + 0.025,
+      Math.sin(angle) * 0.22
+    );
+    hologramGroup.add(beam);
+    beamMeshes.push(beam);
   }
 
-  mask.close(); // free GPU memory
+  // ── Centre vertical beam (platform → hologram) ──
+  const vbGeo = new THREE.CylinderGeometry(0.008, 0.025, 1.1, 12);
+  const vbMat = new THREE.MeshBasicMaterial({
+    color: 0x00c8ff, transparent: true, opacity: 0.18
+  });
+  vertBeam = new THREE.Mesh(vbGeo, vbMat);
+  vertBeam.position.y = 0.025 + 0.55;
+  hologramGroup.add(vertBeam);
+
+  // Bright core line
+  const coreGeo = new THREE.CylinderGeometry(0.002, 0.002, 1.1, 8);
+  const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55 });
+  const core = new THREE.Mesh(coreGeo, coreMat);
+  core.position.y = 0.025 + 0.55;
+  hologramGroup.add(core);
+
+  // ── Holographic AKSHAT text (canvas texture) ──
+  holoCanvas = document.createElement('canvas');
+  holoCanvas.width  = 512;
+  holoCanvas.height = 220;
+  holoCtx = holoCanvas.getContext('2d');
+  drawHoloFrame(0);
+
+  holoTexture = new THREE.CanvasTexture(holoCanvas);
+  const textGeo = new THREE.PlaneGeometry(0.55, 0.22);
+  const textMat = new THREE.MeshBasicMaterial({
+    map: holoTexture, transparent: true,
+    opacity: 0.92, side: THREE.DoubleSide, depthWrite: false
+  });
+  const textMesh = new THREE.Mesh(textGeo, textMat);
+  textMesh.position.y = 1.06;
+  textMesh.name = 'holoText';
+  hologramGroup.add(textMesh);
+
+  // Secondary mirror (facing other way)
+  const textMesh2 = textMesh.clone();
+  textMesh2.rotation.y = Math.PI;
+  hologramGroup.add(textMesh2);
+
+  // ── Floating particles ──
+  buildParticles();
+
+  // ── Top glow disc ──
+  const glowGeo = new THREE.CircleGeometry(0.12, 32);
+  const glowMat = new THREE.MeshBasicMaterial({
+    color: 0x00c8ff, transparent: true, opacity: 0.12,
+    side: THREE.DoubleSide, depthWrite: false
+  });
+  const glow = new THREE.Mesh(glowGeo, glowMat);
+  glow.rotation.x = -Math.PI / 2;
+  glow.position.y = 0.028;
+  hologramGroup.add(glow);
+
+  scene.add(hologramGroup);
 }
 
+// ─────────────────────────────────────────────────────────
+//  Draw Holographic Text Canvas
+// ─────────────────────────────────────────────────────────
+function drawHoloFrame(time) {
+  const W = holoCanvas.width, H = holoCanvas.height;
+  const ctx = holoCtx;
+  ctx.clearRect(0, 0, W, H);
 
-// ══════════════════════════════════════════════
-// STEP 5 — Extract mask bounding box
-// Finds the region where the most prominent object lives.
-// Ignores background (class 0) and sky (class 1).
-// Returns {minX, maxX, minY, maxY} in mask-pixel coordinates.
-// ══════════════════════════════════════════════
-function extractBestMaskBBox(maskData, mw, mh) {
-  let minX = mw, maxX = 0, minY = mh, maxY = 0;
-  let pixelCount = 0;
+  // Background gradient (faint)
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0,   'rgba(0,30,80,0.0)');
+  bg.addColorStop(0.5, 'rgba(0,80,160,0.08)');
+  bg.addColorStop(1,   'rgba(0,30,80,0.0)');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
 
-  for (let i = 0; i < maskData.length; i++) {
-    const cls = maskData[i];
-    // Class 0 = background, skip it
-    if (cls === 0) continue;
-
-    const x = i % mw;
-    const y = Math.floor(i / mw);
-    if (x < minX) minX = x;
-    if (x > maxX) maxX = x;
-    if (y < minY) minY = y;
-    if (y > maxY) maxY = y;
-    pixelCount++;
+  // Horizontal scan lines (static thin lines)
+  ctx.strokeStyle = 'rgba(0,200,255,0.06)';
+  ctx.lineWidth = 1;
+  for (let y = 0; y < H; y += 4) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
   }
 
-  // If less than 1% of the frame is object, ignore it (noise filter)
-  if (pixelCount < mw * mh * 0.01) return null;
-  if (maxX <= minX || maxY <= minY) return null;
+  // Moving bright scan line
+  const sy = ((time * 80) % (H + 40)) - 20;
+  const scanGrad = ctx.createLinearGradient(0, sy - 10, 0, sy + 10);
+  scanGrad.addColorStop(0,   'rgba(0,200,255,0)');
+  scanGrad.addColorStop(0.5, 'rgba(0,200,255,0.55)');
+  scanGrad.addColorStop(1,   'rgba(0,200,255,0)');
+  ctx.fillStyle = scanGrad;
+  ctx.fillRect(0, sy - 10, W, 20);
 
-  return { minX, maxX, minY, maxY, maskData, mw, mh };
-}
-
-
-// Scale mask bbox (which is 256x256) up to canvas pixel coords
-function scaleBBoxToCanvas(bbox, mw, mh) {
-  const sx = canvas.width  / mw;
-  const sy = canvas.height / mh;
-  return {
-    minX: bbox.minX * sx,
-    maxX: bbox.maxX * sx,
-    minY: bbox.minY * sy,
-    maxY: bbox.maxY * sy,
-    // Keep originals for mask drawing
-    rawBbox: bbox
-  };
-}
-
-
-// ══════════════════════════════════════════════
-// STEP 6 — Draw the scan line CLIPPED to the object silhouette
-//
-// Key insight: ctx.clip() restricts ALL drawing to within the mask.
-// So even though we draw a full-width line, it only SHOWS
-// on the pixels where the object was detected.
-// ══════════════════════════════════════════════
-function drawScanLine(cbbox, mask, mw, mh) {
-  const { minY, maxY } = cbbox;
-  const bbox = cbbox.rawBbox;
-
-  // Advance scan line position
-  const speed = (maxY - minY) * 0.012;  // proportional to object height
-  scanY += speed * scanDir;
-  if (scanY > maxY) { scanY = maxY; scanDir = -1; }
-  if (scanY < minY) { scanY = minY; scanDir =  1; }
-
-  // ── Build the clip region from mask pixels ──
-  // We create a Path2D that traces around every "object" pixel.
-  // For performance, we work in mask coordinates and scale up.
-  const sx = canvas.width  / mw;
-  const sy = canvas.height / mh;
-
+  // Outer glow text
   ctx.save();
-
-  // Use the mask pixels as clip path
-  const path = new Path2D();
-  const data = bbox.maskData;
-  for (let y = bbox.minY; y <= bbox.maxY; y++) {
-    for (let x = bbox.minX; x <= bbox.maxX; x++) {
-      if (data[y * mw + x] !== 0) {
-        // Each non-background pixel becomes a tiny rect in the clip path
-        path.rect(x * sx, y * sy, sx + 0.5, sy + 0.5);
-      }
-    }
-  }
-  ctx.clip(path);
-
-  // ── Draw the actual scan line (only visible inside clip) ──
-  // Outer glow pass
-  ctx.strokeStyle = "rgba(0, 255, 204, 0.2)";
-  ctx.lineWidth   = 10;
-  ctx.beginPath();
-  ctx.moveTo(0, scanY);
-  ctx.lineTo(canvas.width, scanY);
-  ctx.stroke();
-
-  // Core bright line
-  ctx.strokeStyle = "#00ffcc";
-  ctx.lineWidth   = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(0, scanY);
-  ctx.lineTo(canvas.width, scanY);
-  ctx.stroke();
-
-  // Trailing fade (gradient below the scan line)
-  const grad = ctx.createLinearGradient(0, scanY, 0, scanY + 40);
-  grad.addColorStop(0, "rgba(0,255,204,0.15)");
-  grad.addColorStop(1, "rgba(0,255,204,0)");
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, scanY, canvas.width, 40);
-
+  ctx.shadowColor   = '#00c8ff';
+  ctx.shadowBlur    = 28;
+  ctx.fillStyle     = 'rgba(0,180,255,0.18)';
+  ctx.font          = 'bold 86px "Courier New"';
+  ctx.textAlign     = 'center';
+  ctx.textBaseline  = 'middle';
+  ctx.fillText('AKSHAT', W / 2, H / 2);
   ctx.restore();
-  isScanning = true;
+
+  // Main crisp text
+  ctx.save();
+  ctx.shadowColor   = '#00ffcc';
+  ctx.shadowBlur    = 16;
+  ctx.fillStyle     = '#00e8ff';
+  ctx.font          = 'bold 82px "Courier New"';
+  ctx.textAlign     = 'center';
+  ctx.textBaseline  = 'middle';
+  ctx.fillText('AKSHAT', W / 2, H / 2);
+  ctx.restore();
+
+  // Glitch offset (occasional)
+  if (Math.sin(time * 7.3) > 0.92) {
+    ctx.save();
+    ctx.globalAlpha   = 0.35;
+    ctx.shadowColor   = '#ff0066';
+    ctx.shadowBlur    = 8;
+    ctx.fillStyle     = '#ff4488';
+    ctx.font          = 'bold 82px "Courier New"';
+    ctx.textAlign     = 'center';
+    ctx.textBaseline  = 'middle';
+    ctx.fillText('AKSHAT', W / 2 + 4, H / 2);
+    ctx.restore();
+  }
+
+  // Data ticker text (bottom)
+  ctx.save();
+  ctx.globalAlpha  = 0.4;
+  ctx.fillStyle    = '#00aaff';
+  ctx.font         = '11px "Courier New"';
+  ctx.textAlign    = 'center';
+  ctx.fillText('◈ HOLOGRAM SYS · WORLD-LOCKED · ARCore ◈', W / 2, H - 14);
+  ctx.restore();
 }
 
+// ─────────────────────────────────────────────────────────
+//  Particle System
+// ─────────────────────────────────────────────────────────
+function buildParticles() {
+  const count = 120;
+  const positions  = new Float32Array(count * 3);
+  const velocities = new Float32Array(count * 3);
+  const baseY      = new Float32Array(count);
 
-// ══════════════════════════════════════════════
-// STEP 7 — Send cropped image to Claude Vision API
-// We crop just the bounding box of the detected object,
-// encode it as base64, and POST to Claude.
-// ══════════════════════════════════════════════
-async function identifyObject(cbbox) {
-  // Create a small offscreen canvas with just the object region
-  const oc  = document.createElement("canvas");
-  const pad = 12;  // a little padding around the crop
-  oc.width  = Math.min(256, cbbox.maxX - cbbox.minX + pad * 2);
-  oc.height = Math.min(256, cbbox.maxY - cbbox.minY + pad * 2);
-  const oc_ctx = oc.getContext("2d");
-
-  // Draw the video frame cropped to bbox
-  oc_ctx.drawImage(
-    videoEl,
-    Math.max(0, cbbox.minX - pad),   // source x (in video coords, scaled)
-    Math.max(0, cbbox.minY - pad),   // source y
-    cbbox.maxX - cbbox.minX + pad * 2,
-    cbbox.maxY - cbbox.minY + pad * 2,
-    0, 0, oc.width, oc.height        // destination = full offscreen canvas
-  );
-
-  const base64 = oc.toDataURL("image/jpeg", 0.75).split(",")[1];
-
-  hudTitle.textContent = "Identifying…";
-  hudBody.textContent  = "";
-  showHUD(cbbox);
-
-  // Bail if no API key set
-  if (CLAUDE_API_KEY === "YOUR_API_KEY_HERE") {
-    hudTitle.textContent = "Demo mode";
-    hudBody.textContent  = "Add your Claude API key to the top of the file to get live object identification.";
-    return;
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const r     = 0.08 + Math.random() * 0.22;
+    positions[i*3]   = Math.cos(angle) * r;
+    positions[i*3+1] = 0.3 + Math.random() * 0.85;
+    positions[i*3+2] = Math.sin(angle) * r;
+    velocities[i*3]  = (Math.random() - 0.5) * 0.0008;
+    velocities[i*3+1]= 0.0004 + Math.random() * 0.0006;
+    velocities[i*3+2]= (Math.random() - 0.5) * 0.0008;
+    baseY[i]         = positions[i*3+1];
   }
 
-  try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type":         "application/json",
-        "x-api-key":            CLAUDE_API_KEY,
-        "anthropic-version":    "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true"
-      },
-      body: JSON.stringify({
-        model: CLAUDE_MODEL,
-        max_tokens: 120,
-        messages: [{
-          role: "user",
-          content: [
-            {
-              type: "image",
-              source: { type: "base64", media_type: "image/jpeg", data: base64 }
-            },
-            {
-              type: "text",
-              text: "What is this object? Reply with: 1) its name (3 words max), 2) one sentence describing what it does. Be direct, no preamble."
-            }
-          ]
-        }]
-      })
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+  const mat = new THREE.PointsMaterial({
+    color: 0x00ccff, size: 0.006,
+    transparent: true, opacity: 0.7,
+    depthWrite: false, sizeAttenuation: true
+  });
+
+  particleSystem = new THREE.Points(geo, mat);
+  particleSystem._vel  = velocities;
+  particleSystem._baseY= baseY;
+  hologramGroup.add(particleSystem);
+  particlePositions = positions;
+}
+
+function animateParticles() {
+  if (!particleSystem) return;
+  const pos = particleSystem.geometry.attributes.position.array;
+  const vel = particleSystem._vel;
+  const n   = pos.length / 3;
+
+  for (let i = 0; i < n; i++) {
+    pos[i*3]   += vel[i*3];
+    pos[i*3+1] += vel[i*3+1];
+    pos[i*3+2] += vel[i*3+2];
+    // Reset when particle drifts too high
+    if (pos[i*3+1] > 1.25) {
+      const angle = Math.random() * Math.PI * 2;
+      const r     = 0.06 + Math.random() * 0.20;
+      pos[i*3]    = Math.cos(angle) * r;
+      pos[i*3+1]  = 0.25 + Math.random() * 0.1;
+      pos[i*3+2]  = Math.sin(angle) * r;
+    }
+  }
+  particleSystem.geometry.attributes.position.needsUpdate = true;
+}
+
+// ─────────────────────────────────────────────────────────
+//  Select (tap) handler
+// ─────────────────────────────────────────────────────────
+function onSelect() {
+  if (!reticleGroup.visible) return;
+  if (hologramPlaced) return;   // already placed
+
+  buildHologram(reticleGroup.matrix);
+  hologramPlaced = true;
+  reticleGroup.visible = false;
+
+  statusBar.textContent  = '◈ HOLOGRAM LOCKED TO WORLD';
+  statusBar.style.animation = 'none';
+  hintText.textContent   = 'Walk around to see the hologram';
+  resetBtn.classList.add('show');
+}
+
+resetBtn.addEventListener('click', () => {
+  if (hologramGroup) { scene.remove(hologramGroup); hologramGroup = null; }
+  particleSystem = null;
+  hologramPlaced = false;
+  reticleGroup.visible = true;
+  statusBar.textContent = 'SCANNING SURFACE…';
+  statusBar.style.animation = 'pulse 2s ease-in-out infinite';
+  hintText.textContent  = 'Point at a flat surface then tap';
+  resetBtn.classList.remove('show');
+});
+
+// ─────────────────────────────────────────────────────────
+//  Main XR frame loop
+// ─────────────────────────────────────────────────────────
+function onFrame(time, xrFrame) {
+  if (!xrFrame) return;
+
+  const t   = time / 1000;
+  const dt  = clock.getDelta();
+  const pose= xrFrame.getViewerPose(xrRefSpace);
+
+  // ── Hit test → reticle ──
+  if (hitTestSource && !hologramPlaced) {
+    const hits = xrFrame.getHitTestResults(hitTestSource);
+    if (hits.length > 0) {
+      const hitPose = hits[0].getPose(xrRefSpace);
+      reticleGroup.visible = true;
+      reticleGroup.matrix.fromArray(hitPose.transform.matrix);
+      reticleGroup.matrix.decompose(
+        reticleGroup.position,
+        reticleGroup.quaternion,
+        reticleGroup.scale
+      );
+      statusBar.textContent = '◉ SURFACE DETECTED — TAP TO DEPLOY';
+    } else {
+      reticleGroup.visible = false;
+      statusBar.textContent = 'SCANNING SURFACE…';
+    }
+  }
+
+  // ── Animate hologram ──
+  if (hologramGroup) {
+    // Rotate rings
+    ringMeshes.forEach(({ mesh, speed }) => {
+      mesh.rotation.z += speed * dt;
     });
 
-    const data = await res.json();
-    const reply = data?.content?.[0]?.text ?? "Could not identify.";
+    // Pulse beam opacity
+    if (vertBeam) {
+      vertBeam.material.opacity = 0.12 + Math.sin(t * 2.5) * 0.07;
+    }
 
-    // Split into name + description
-    const lines = reply.trim().split("\n").filter(Boolean);
-    hudTitle.textContent = lines[0]?.replace(/^1[).]\s*/, "") ?? "Object";
-    hudBody.textContent  = lines[1]?.replace(/^2[).]\s*/, "") ?? reply;
+    // Pulse outer beams
+    beamMeshes.forEach((b, i) => {
+      b.material.opacity = 0.18 + Math.sin(t * 1.8 + i * 0.7) * 0.12;
+      b.scale.y = 0.92 + Math.sin(t * 2.1 + i * 0.5) * 0.08;
+    });
 
-  } catch (err) {
-    hudBody.textContent = "Network error.";
-    console.error(err);
+    // Animate particles
+    animateParticles();
+
+    // Update hologram texture (canvas)
+    if (holoTexture) {
+      drawHoloFrame(t);
+      holoTexture.needsUpdate = true;
+    }
+
+    // Slow hologram rotation (face camera)
+    // Find text mesh and billboard it toward camera
+    hologramGroup.children.forEach(c => {
+      if (c.name === 'holoText' && pose) {
+        // Billboard: keep facing camera
+        const camPos = new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld);
+        const worldPos = new THREE.Vector3();
+        hologramGroup.getWorldPosition(worldPos);
+        worldPos.y = camPos.y; // only rotate on Y
+        c.lookAt(camPos);
+      }
+    });
   }
+
+  renderer.render(scene, camera);
 }
 
-
-// ══════════════════════════════════════════════
-// STEP 8 — HUD positioning
-// Place the HUD div to the right of the bounding box.
-// If near the right edge, flip it to the left.
-// ══════════════════════════════════════════════
-function showHUD(cbbox) {
-  const hudW = 200;
-  const gap  = 16;
-  let left = cbbox.maxX + gap;
-
-  // Flip to left side if not enough space
-  if (left + hudW > window.innerWidth - 8) {
-    left = cbbox.minX - hudW - gap;
-  }
-
-  // Clamp to screen
-  left = Math.max(8, Math.min(left, window.innerWidth - hudW - 8));
-
-  const top = Math.max(8, cbbox.minY);
-
-  hud.style.left    = left + "px";
-  hud.style.top     = top  + "px";
-  hud.style.display = "block";
-  hud.style.opacity = "1";
+// ─────────────────────────────────────────────────────────
+//  Session end
+// ─────────────────────────────────────────────────────────
+function onSessionEnd() {
+  overlay.classList.remove('active');
+  launchEl.classList.remove('gone');
+  launchEl.style.opacity = '1';
+  startBtn.disabled  = false;
+  startBtn.textContent = '▶ INITIALIZE AR';
+  hologramPlaced = false;
+  if (renderer) renderer.setAnimationLoop(null);
+  resetBtn.classList.remove('show');
 }
 
-function hideHUD() {
-  hud.style.opacity = "0";
-  setTimeout(() => { hud.style.display = "none"; }, 300);
-}
-
-
-// ══════════════════════════════════════════════
-// STEP 9 — Corner bracket frame around object
-// ══════════════════════════════════════════════
-function updateFrameBrackets(cbbox) {
-  const el  = frameEl;
-  const pad = 6;
-  el.style.display = "block";
-  el.style.left    = (cbbox.minX - pad) + "px";
-  el.style.top     = (cbbox.minY - pad) + "px";
-  el.style.width   = (cbbox.maxX - cbbox.minX + pad * 2) + "px";
-  el.style.height  = (cbbox.maxY - cbbox.minY + pad * 2) + "px";
-}
-
-function hideFrameBrackets() {
-  frameEl.style.display = "none";
-}
-
-
-// ── Tiny status label helpers ──
-function showStatus(msg) {
-  statusEl.textContent = msg;
-  statusEl.classList.add("visible");
-}
-
+// ─────────────────────────────────────────────────────────
+//  Boot
+// ─────────────────────────────────────────────────────────
+startBtn.disabled = true;
+startBtn.textContent = 'CHECKING DEVICE…';
+init();
 </script>
 </body>
 </html>
