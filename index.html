@@ -2,774 +2,629 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<title>J.A.R.V.I.S. // AR SYSTEM</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>AR Scanner</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;500;700&display=swap');
+  /* ── Reset & base ── */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
 
-  :root {
-    --cyan: #00d4ff;
-    --cyan2: #00ffcc;
-    --red: #ff3366;
-    --gold: #ffd700;
-    --dim: rgba(0,212,255,0.15);
-    --glow: 0 0 12px #00d4ff, 0 0 24px rgba(0,212,255,0.4);
+  body {
+    background: #000;
+    font-family: 'Courier New', monospace;
+    overflow: hidden;
+    width: 100vw;
+    height: 100dvh;
+    touch-action: none;
   }
 
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { overflow:hidden; background:#000; font-family:'Share Tech Mono', monospace; }
+  /* ── Canvas sits on top of the WebXR camera feed ── */
+  #scan-canvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;   /* clicks pass through to WebXR */
+    z-index: 10;
+  }
 
-  canvas { display:block; }
+  /* ── Start screen shown before WebXR activates ── */
+  #start-screen {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    z-index: 100;
+  }
 
-  /* ── BOOT SCREEN ── */
-  #boot {
-    position:fixed; inset:0; background:#000;
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    z-index:999; gap:20px;
+  #start-screen h1 {
+    color: #00ffcc;
+    font-size: 22px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
   }
-  #boot-logo {
-    font-family:'Rajdhani', sans-serif; font-weight:700;
-    font-size:42px; letter-spacing:12px; color:var(--cyan);
-    text-shadow: var(--glow);
-    animation: pulse-logo 2s ease-in-out infinite;
+
+  #start-screen p {
+    color: #557;
+    font-size: 13px;
+    text-align: center;
+    max-width: 280px;
+    line-height: 1.7;
   }
-  @keyframes pulse-logo {
-    0%,100%{ opacity:1; } 50%{ opacity:0.6; }
-  }
-  #boot-sub {
-    font-size:11px; letter-spacing:4px; color:rgba(0,212,255,0.5);
-  }
-  #boot-lines { width:280px; }
-  .boot-line {
-    display:flex; justify-content:space-between; align-items:center;
-    padding:4px 0; border-bottom:1px solid rgba(0,212,255,0.1);
-    font-size:10px; color:rgba(0,212,255,0.7);
-    animation: boot-in 0.3s ease forwards; opacity:0;
-  }
-  .boot-line .status { color:var(--cyan2); }
-  .boot-line .status.fail { color:var(--red); }
-  @keyframes boot-in { to{ opacity:1; } }
 
   #start-btn {
-    margin-top:10px;
-    padding:14px 40px; font-size:13px; letter-spacing:4px;
-    font-family:'Share Tech Mono', monospace;
-    background:transparent; color:var(--cyan);
-    border:1px solid var(--cyan); cursor:pointer;
-    box-shadow: var(--glow); text-shadow: var(--glow);
-    clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
-    transition: all 0.2s;
-    display:none;
+    background: transparent;
+    border: 1px solid #00ffcc;
+    color: #00ffcc;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    padding: 14px 32px;
+    cursor: pointer;
+    transition: background 0.2s;
   }
-  #start-btn:hover {
-    background:rgba(0,212,255,0.1);
-    box-shadow: 0 0 30px rgba(0,212,255,0.6);
-  }
+  #start-btn:hover { background: rgba(0,255,204,0.08); }
+  #start-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
-  /* ── MAIN HUD ── */
+  /* ── HUD info box that floats next to the object ── */
   #hud {
-    position:fixed; inset:0; pointer-events:none;
-    color:var(--cyan); z-index:100; display:none;
-    font-size:10px; letter-spacing:1px;
+    position: fixed;
+    display: none;               /* hidden until scan completes */
+    max-width: 200px;
+    background: rgba(0, 0, 0, 0.75);
+    border: 1px solid #00ffcc55;
+    border-left: 2px solid #00ffcc;
+    padding: 10px 12px;
+    z-index: 20;
+    pointer-events: none;
+    transition: opacity 0.3s;
   }
 
-  /* Scanline */
-  #hud::before {
-    content:'';
-    position:absolute; inset:0; pointer-events:none;
-    background: repeating-linear-gradient(
-      0deg, transparent, transparent 2px,
-      rgba(0,212,255,0.015) 2px, rgba(0,212,255,0.015) 4px
-    );
-    z-index:1;
+  #hud-title {
+    color: #00ffcc;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
   }
 
-  .scan-sweep {
-    position:absolute; left:0; right:0; height:2px;
-    background: linear-gradient(90deg, transparent 0%, rgba(0,212,255,0.5) 50%, transparent 100%);
-    animation: sweep 5s linear infinite; opacity:0.4;
-    box-shadow:0 0 8px var(--cyan);
-  }
-  @keyframes sweep { from{top:-2px} to{top:100%} }
-
-  /* Corners */
-  .hud-corner {
-    position:absolute; width:50px; height:50px;
-  }
-  .hud-corner::before, .hud-corner::after {
-    content:''; position:absolute;
-    background:var(--cyan); box-shadow: var(--glow);
-  }
-  .hud-corner::before { height:2px; width:30px; }
-  .hud-corner::after  { width:2px; height:30px; }
-  .hud-corner.tl { top:16px; left:16px; }
-  .hud-corner.tl::before { top:0; left:0; }
-  .hud-corner.tl::after  { top:0; left:0; }
-  .hud-corner.tr { top:16px; right:16px; transform:scaleX(-1); }
-  .hud-corner.tr::before { top:0; left:0; }
-  .hud-corner.tr::after  { top:0; left:0; }
-  .hud-corner.bl { bottom:16px; left:16px; transform:scaleY(-1); }
-  .hud-corner.bl::before { top:0; left:0; }
-  .hud-corner.bl::after  { top:0; left:0; }
-  .hud-corner.br { bottom:16px; right:16px; transform:scale(-1,-1); }
-  .hud-corner.br::before { top:0; left:0; }
-  .hud-corner.br::after  { top:0; left:0; }
-
-  /* Left panel */
-  #panel-left {
-    position:absolute; top:80px; left:16px;
-    width:170px; line-height:1.9;
-  }
-  .hud-section-title {
-    font-family:'Rajdhani',sans-serif; font-weight:700;
-    font-size:11px; letter-spacing:3px;
-    color:rgba(0,212,255,0.6); margin-bottom:4px;
-    border-bottom:1px solid rgba(0,212,255,0.25); padding-bottom:3px;
-  }
-  .hud-row {
-    display:flex; justify-content:space-between;
-    font-size:9px; opacity:0.85;
-    border-bottom:1px solid rgba(0,212,255,0.06);
-    padding:1px 0;
-  }
-  .hud-row .key { color:rgba(0,212,255,0.55); }
-  .hud-row .val { color:#fff; }
-  .hud-row .val.ok  { color:var(--cyan2); }
-  .hud-row .val.warn{ color:var(--gold); }
-  .hud-row .val.bad { color:var(--red); }
-  .hud-bar { height:3px; background:rgba(0,212,255,0.15); margin:2px 0 4px; }
-  .hud-bar-fill { height:100%; background:var(--cyan); box-shadow:0 0 6px var(--cyan); transition:width 0.5s; }
-
-  /* Right panel */
-  #panel-right {
-    position:absolute; top:80px; right:16px;
-    width:160px; line-height:1.9; text-align:right;
+  #hud-body {
+    color: #aaa;
+    font-size: 11px;
+    line-height: 1.5;
   }
 
-  /* Top center */
-  #panel-top {
-    position:absolute; top:16px; left:50%;
-    transform:translateX(-50%);
-    text-align:center; white-space:nowrap;
-  }
-  #clock-main {
-    font-family:'Rajdhani',sans-serif; font-weight:700;
-    font-size:22px; letter-spacing:4px;
-    text-shadow: var(--glow);
-  }
-  #date-line { font-size:9px; letter-spacing:3px; opacity:0.5; margin-top:-2px; }
-
-  /* Bottom bar */
-  #panel-bottom {
-    position:absolute; bottom:80px; left:50%;
-    transform:translateX(-50%);
-    text-align:center; white-space:nowrap;
-  }
-  #scan-status {
-    font-family:'Rajdhani',sans-serif; font-weight:500;
-    font-size:14px; letter-spacing:5px;
-    text-shadow: var(--glow);
-  }
-  #scan-status.locked { color:var(--cyan2); }
-  #scan-status.scanning { animation: blink 1s infinite; }
-  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
-  #tap-hint { font-size:9px; letter-spacing:3px; opacity:0.45; margin-top:4px; }
-
-  /* Center crosshair ring */
-  #center-hud {
-    position:absolute; top:50%; left:50%;
-    transform:translate(-50%,-50%);
-    width:80px; height:80px; pointer-events:none;
-  }
-  .center-ring {
-    position:absolute; inset:0; border-radius:50%;
-    border:1px solid rgba(0,212,255,0.35);
-  }
-  .center-ring.inner { inset:25px; border-color:rgba(0,255,200,0.4); }
-  .center-dot {
-    position:absolute; top:50%; left:50%;
-    transform:translate(-50%,-50%);
-    width:4px; height:4px; border-radius:50%;
-    background:var(--cyan); box-shadow: var(--glow);
-  }
-  .cross-h, .cross-v {
-    position:absolute; background:rgba(0,212,255,0.4);
-  }
-  .cross-h { top:50%; left:50%; transform:translate(-50%,-50%); height:1px; width:10px; margin-left:16px; }
-  .cross-h.neg { margin-left:-26px; }
-  .cross-v { top:50%; left:50%; transform:translate(-50%,-50%); width:1px; height:10px; margin-top:16px; }
-  .cross-v.neg { margin-top:-26px; }
-
-  /* Nodes count badge */
-  #nodes-badge {
-    position:absolute; top:80px; left:50%;
-    transform:translateX(-50%);
-    font-size:9px; letter-spacing:3px; opacity:0.5;
+  #hud-dist {
+    color: #555;
+    font-size: 10px;
+    margin-top: 6px;
+    letter-spacing: 1px;
   }
 
-  /* Warning flash */
-  #flash {
-    position:fixed; inset:0;
-    background:rgba(0,212,255,0.05);
-    pointer-events:none; z-index:200;
-    opacity:0; transition:opacity 0.1s;
+  /* ── Scanning status label at the top ── */
+  #status {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #00ffcc;
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    opacity: 0;
+    transition: opacity 0.4s;
+    z-index: 20;
+    pointer-events: none;
   }
+  #status.visible { opacity: 1; }
+
+  /* ── Corner brackets that frame the detected object ── */
+  #frame-overlay {
+    position: fixed;
+    pointer-events: none;
+    z-index: 15;
+    display: none;
+  }
+  .bracket {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-color: #00ffcc;
+    border-style: solid;
+    opacity: 0.8;
+  }
+  .bracket.tl { top: 0;  left: 0;  border-width: 1px 0 0 1px; }
+  .bracket.tr { top: 0;  right: 0; border-width: 1px 1px 0 0; }
+  .bracket.bl { bottom: 0; left: 0; border-width: 0 0 1px 1px; }
+  .bracket.br { bottom: 0; right: 0; border-width: 0 1px 1px 0; }
 </style>
 </head>
 <body>
 
-<!-- BOOT SCREEN -->
-<div id="boot">
-  <div id="boot-logo">J.A.R.V.I.S.</div>
-  <div id="boot-sub">JUST A RATHER VERY INTELLIGENT SYSTEM</div>
-  <div id="boot-lines"></div>
-  <button id="start-btn">◈ ENTER AR SYSTEM</button>
+<!-- ── START SCREEN ─────────────────────────────── -->
+<div id="start-screen">
+  <h1>AR Scanner</h1>
+  <p>Point at any object. The scanner will outline it, sweep across it, then identify it.</p>
+  <p style="color:#334;font-size:11px;">Requires Chrome on Android · HTTPS required</p>
+  <button id="start-btn" onclick="startAR()">Start scanning</button>
 </div>
 
-<!-- MAIN HUD -->
+<!-- ── CANVAS: scan line is drawn here ─────────── -->
+<canvas id="scan-canvas"></canvas>
+
+<!-- ── HUD: floats next to the detected object ─── -->
 <div id="hud">
-  <div class="scan-sweep"></div>
-  <div class="hud-corner tl"></div>
-  <div class="hud-corner tr"></div>
-  <div class="hud-corner bl"></div>
-  <div class="hud-corner br"></div>
-
-  <div id="panel-top">
-    <div id="clock-main">00:00:00</div>
-    <div id="date-line">MONDAY · STARK INDUSTRIES · AR-7</div>
-  </div>
-
-  <div id="nodes-badge">DEPLOYED NODES: <span id="node-count">0</span></div>
-
-  <div id="panel-left">
-    <div class="hud-section-title">SYSTEM</div>
-    <div class="hud-row"><span class="key">STATUS</span><span class="val ok" id="sys-status">NOMINAL</span></div>
-    <div class="hud-row"><span class="key">ARC REACTOR</span><span class="val ok" id="arc-pct">97.4%</span></div>
-    <div class="hud-bar"><div class="hud-bar-fill" id="arc-bar" style="width:97%"></div></div>
-    <div class="hud-row"><span class="key">SHIELDS</span><span class="val ok">ACTIVE</span></div>
-    <div class="hud-row"><span class="key">REPULSORS</span><span class="val warn">STANDBY</span></div>
-    <div class="hud-row"><span class="key">JARVIS</span><span class="val ok">ONLINE</span></div>
-    <div style="margin-top:8px" class="hud-section-title">ENVIRONMENT</div>
-    <div class="hud-row"><span class="key">SURFACE</span><span class="val" id="surf-val">SCANNING</span></div>
-    <div class="hud-row"><span class="key">DEPTH</span><span class="val" id="depth-val">--</span></div>
-    <div class="hud-row"><span class="key">TEMP</span><span class="val" id="temp-val">36.2°C</span></div>
-    <div class="hud-row"><span class="key">THREAT</span><span class="val ok" id="threat-val">MINIMAL</span></div>
-  </div>
-
-  <div id="panel-right">
-    <div class="hud-section-title" style="text-align:right">NAVIGATION</div>
-    <div class="hud-row"><span class="val">40.7589° N</span><span class="key">LAT</span></div>
-    <div class="hud-row"><span class="val">73.9851° W</span><span class="key">LON</span></div>
-    <div class="hud-row"><span class="val" id="alt-val">42.1 m</span><span class="key">ALT</span></div>
-    <div class="hud-row"><span class="val">12 km/h NW</span><span class="key">WIND</span></div>
-    <div style="margin-top:8px" class="hud-section-title" style="text-align:right">OPTICAL</div>
-    <div class="hud-row"><span class="val ok">ACTIVE</span><span class="key">TRACK</span></div>
-    <div class="hud-row"><span class="val" id="fps-val">60</span><span class="key">FPS</span></div>
-    <div class="hud-row"><span class="val ok">LOCKED</span><span class="key">IMU</span></div>
-    <div class="hud-row"><span class="val ok">████ 87%</span><span class="key">SIGNAL</span></div>
-  </div>
-
-  <div id="center-hud">
-    <div class="center-ring"></div>
-    <div class="center-ring inner"></div>
-    <div class="center-dot"></div>
-    <div class="cross-h"></div>
-    <div class="cross-h neg"></div>
-    <div class="cross-v"></div>
-    <div class="cross-v neg"></div>
-  </div>
-
-  <div id="panel-bottom">
-    <div id="scan-status" class="scanning">◈ SCANNING ENVIRONMENT ◈</div>
-    <div id="tap-hint">TAP SURFACE TO DEPLOY ANALYSIS NODE</div>
-  </div>
+  <div id="hud-title">Unknown</div>
+  <div id="hud-body">Scanning…</div>
+  <div id="hud-dist"></div>
 </div>
 
-<div id="flash"></div>
+<!-- ── CORNER BRACKETS ──────────────────────────── -->
+<div id="frame-overlay">
+  <div class="bracket tl"></div>
+  <div class="bracket tr"></div>
+  <div class="bracket bl"></div>
+  <div class="bracket br"></div>
+</div>
 
-<script type="importmap">
-{ "imports": {
-  "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
-  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
-}}
-</script>
+<!-- ── STATUS LABEL ─────────────────────────────── -->
+<div id="status">Detecting…</div>
 
+
+<!-- ══════════════════════════════════════════════
+     STEP 1 — Load MediaPipe Vision Tasks (WASM)
+     This runs entirely on-device, no server needed
+     ══════════════════════════════════════════════ -->
 <script type="module">
-import * as THREE from 'three';
 
-/* ═══════════════════════════════════════════
-   AUDIO ENGINE
-═══════════════════════════════════════════ */
-let ctx;
-function ac() { if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)(); return ctx; }
+// ─── CONFIG ──────────────────────────────────────────────
+// Put your Claude API key here (or proxy it through your own server)
+const CLAUDE_API_KEY = "YOUR_API_KEY_HERE";
+const CLAUDE_MODEL   = "claude-opus-4-5";
 
-function tone(freq, type, dur, vol, delay=0) {
-  const c = ac();
-  const o = c.createOscillator(), g = c.createGain();
-  o.connect(g); g.connect(c.destination);
-  o.frequency.value = freq; o.type = type;
-  const t = c.currentTime + delay;
-  g.gain.setValueAtTime(vol, t);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.start(t); o.stop(t + dur + 0.01);
-}
+// How long (ms) with no mask before HUD disappears
+const LOOK_AWAY_GRACE = 400;
 
-function soundBoot()  { [220,330,440,660,880].forEach((f,i)=>tone(f,'sine',0.3,0.3,i*0.1)); }
-function soundScan()  { tone(1200,'sine',0.06,0.15); tone(900,'sine',0.08,0.1,0.07); }
-function soundPlace() {
-  tone(440,'sawtooth',0.04,0.2);
-  tone(660,'sine',0.1,0.25,0.05);
-  tone(880,'sine',0.15,0.2,0.12);
-  tone(1320,'sine',0.08,0.15,0.22);
-}
-function soundHum() {
-  const c = ac(), o = c.createOscillator(), g = c.createGain();
-  o.connect(g); g.connect(c.destination);
-  o.frequency.value = 60; o.type = 'sawtooth';
-  g.gain.setValueAtTime(0.02, c.currentTime);
-  o.start(); setTimeout(()=>o.stop(), 200);
-}
+// Only re-query Claude if >2s has passed since last ID
+const REQUERY_COOLDOWN = 2000;
+// ─────────────────────────────────────────────────────────
 
-/* ═══════════════════════════════════════════
-   RENDERER
-═══════════════════════════════════════════ */
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setSize(innerWidth, innerHeight);
-renderer.xr.enabled = true;
-document.body.appendChild(renderer.domElement);
 
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.01, 30);
-scene.add(new THREE.AmbientLight(0x00d4ff, 0.6));
-const pt = new THREE.PointLight(0x00ffcc, 1.5, 5);
-pt.position.set(0,2,0); scene.add(pt);
+import {
+  ImageSegmenter,
+  FilesetResolver
+} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
 
-/* ═══════════════════════════════════════════
-   RETICLE
-═══════════════════════════════════════════ */
-const rGroup = new THREE.Group();
-rGroup.matrixAutoUpdate = false;
-rGroup.visible = false;
-scene.add(rGroup);
 
-// Outer hex ring
-const outerRing = new THREE.Mesh(
-  new THREE.RingGeometry(0.10, 0.12, 6),
-  new THREE.MeshBasicMaterial({ color:0x00d4ff, transparent:true, opacity:0.9, side:THREE.DoubleSide })
-);
-outerRing.rotation.x = -Math.PI/2;
-rGroup.add(outerRing);
+// ── DOM refs ──
+const canvas  = document.getElementById("scan-canvas");
+const ctx     = canvas.getContext("2d");
+const hud     = document.getElementById("hud");
+const hudTitle = document.getElementById("hud-title");
+const hudBody  = document.getElementById("hud-body");
+const hudDist  = document.getElementById("hud-dist");
+const statusEl = document.getElementById("status");
+const frameEl  = document.getElementById("frame-overlay");
 
-// Middle ring
-const midRing = new THREE.Mesh(
-  new THREE.RingGeometry(0.06, 0.075, 32),
-  new THREE.MeshBasicMaterial({ color:0x00ffcc, transparent:true, opacity:0.7, side:THREE.DoubleSide })
-);
-midRing.rotation.x = -Math.PI/2;
-rGroup.add(midRing);
+// ── State ──
+let segmenter    = null;   // MediaPipe instance
+let xrSession    = null;   // WebXR session
+let videoEl      = null;   // hidden <video> for the camera stream
+let scanY        = 0;      // current Y position of the sweep line
+let scanDir      = 1;      // 1 = downward, -1 = upward
+let lastMaskTime = 0;      // timestamp of last valid mask
+let lastQueryTime = 0;     // timestamp of last Claude call
+let currentMaskBBox = null; // {minX,maxX,minY,maxY} in canvas pixels
+let isScanning   = false;  // true while sweep animation is running
+let rafId        = null;   // requestAnimationFrame handle
 
-// Inner dot
-const innerDot = new THREE.Mesh(
-  new THREE.CircleGeometry(0.012, 16),
-  new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.9, side:THREE.DoubleSide })
-);
-innerDot.rotation.x = -Math.PI/2;
-rGroup.add(innerDot);
 
-// 4 tick marks
-const tickMat = new THREE.LineBasicMaterial({ color:0x00d4ff, transparent:true, opacity:0.5 });
-[0,1,2,3].forEach(i => {
-  const a = (i / 4) * Math.PI * 2;
-  const geo = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(Math.cos(a)*0.085, 0, Math.sin(a)*0.085),
-    new THREE.Vector3(Math.cos(a)*0.115, 0, Math.sin(a)*0.115),
-  ]);
-  rGroup.add(new THREE.Line(geo, tickMat));
-});
-
-/* ═══════════════════════════════════════════
-   PARTICLES
-═══════════════════════════════════════════ */
-const PC = 200;
-const pPos = new Float32Array(PC * 3);
-const pVel = new Float32Array(PC);
-for (let i=0; i<PC; i++) {
-  pPos[i*3]   = (Math.random()-0.5)*6;
-  pPos[i*3+1] = (Math.random()-0.5)*4;
-  pPos[i*3+2] = (Math.random()-0.5)*6 - 1;
-  pVel[i] = 0.0004 + Math.random()*0.0008;
-}
-const pGeo = new THREE.BufferGeometry();
-pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
-scene.add(new THREE.Points(pGeo, new THREE.PointsMaterial({
-  color:0x00d4ff, size:0.005, transparent:true, opacity:0.45
-})));
-
-/* ═══════════════════════════════════════════
-   SCAN PULSE
-═══════════════════════════════════════════ */
-function spawnPulse(pos) {
-  const g = new THREE.Group();
-  g.position.copy(pos);
-  scene.add(g);
-  let s=0.02, op=1;
-  const ring = new THREE.Mesh(
-    new THREE.RingGeometry(0.85,1.0,64),
-    new THREE.MeshBasicMaterial({color:0x00d4ff,transparent:true,opacity:1,side:THREE.DoubleSide})
+// ══════════════════════════════════════════════
+// STEP 2 — Initialise MediaPipe segmenter
+// Model: selfie_multiclass — recognises many object categories
+// ══════════════════════════════════════════════
+async function initSegmenter() {
+  const vision = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
   );
-  ring.rotation.x = -Math.PI/2;
-  g.add(ring);
-  const ring2 = new THREE.Mesh(
-    new THREE.RingGeometry(0.4,0.5,64),
-    new THREE.MeshBasicMaterial({color:0x00ffcc,transparent:true,opacity:0.6,side:THREE.DoubleSide})
-  );
-  ring2.rotation.x = -Math.PI/2;
-  g.add(ring2);
-  function tick() {
-    s += 0.05; op -= 0.028;
-    g.scale.setScalar(s);
-    ring.material.opacity = Math.max(0, op);
-    ring2.material.opacity = Math.max(0, op*0.6);
-    if (op > 0) requestAnimationFrame(tick);
-    else scene.remove(g);
+
+  segmenter = await ImageSegmenter.createFromOptions(vision, {
+    baseOptions: {
+      // This model classifies each pixel into one of 24 categories
+      modelAssetPath:
+        "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite",
+      delegate: "GPU"   // use the phone GPU for speed
+    },
+    runningMode: "VIDEO",           // frame-by-frame live mode
+    outputCategoryMask: true,       // we get per-pixel class IDs
+    outputConfidenceMasks: false    // skip probability maps (saves memory)
+  });
+}
+
+
+// ══════════════════════════════════════════════
+// STEP 3 — Start WebXR + camera
+// DOM Overlay = our HTML renders ON TOP of the AR camera feed
+// ══════════════════════════════════════════════
+window.startAR = async function() {
+  const btn = document.getElementById("start-btn");
+  btn.disabled = true;
+  btn.textContent = "Loading…";
+
+  await initSegmenter();
+
+  // Check if WebXR AR is supported
+  if (!navigator.xr || !(await navigator.xr.isSessionSupported("immersive-ar"))) {
+    // Fallback: use plain getUserMedia camera instead of WebXR
+    // Useful for testing on desktop or non-AR browsers
+    fallbackCamera();
+    return;
   }
+
+  xrSession = await navigator.xr.requestSession("immersive-ar", {
+    requiredFeatures: ["dom-overlay"],
+    domOverlay: { root: document.body }  // our full body is the overlay
+  });
+
+  // Resize canvas to match screen
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  // Hide start screen, show AR
+  document.getElementById("start-screen").style.display = "none";
+  showStatus("Point at an object");
+
+  xrSession.addEventListener("end", () => location.reload());
+
+  // Get the camera video feed from WebXR
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+  });
+  videoEl = document.createElement("video");
+  videoEl.srcObject = stream;
+  videoEl.playsInline = true;
+  videoEl.muted = true;
+  await videoEl.play();
+
+  // Start the frame loop
+  tick();
+};
+
+
+// ══════════════════════════════════════════════
+// Fallback: plain camera (for non-WebXR browsers / desktop testing)
+// ══════════════════════════════════════════════
+async function fallbackCamera() {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: "environment" }
+  });
+  videoEl = document.createElement("video");
+  videoEl.srcObject = stream;
+  videoEl.playsInline = true;
+  videoEl.muted = true;
+  await videoEl.play();
+
+  // Draw the camera feed as the background ourselves
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+  document.getElementById("start-screen").style.display = "none";
+  showStatus("Camera ready (fallback mode)");
   tick();
 }
 
-/* ═══════════════════════════════════════════
-   ANALYSIS PANEL
-═══════════════════════════════════════════ */
-const MATERIALS = ['REINFORCED CONCRETE','CARBON FIBER ALLOY','COMPOSITE POLYMER','TEMPERED BOROSILICATE','STRUCTURAL STEEL','OAK COMPOSITE'];
-const THREATS   = [['MINIMAL','#00ff88'],['LOW','#aaffaa'],['MODERATE','#ffd700'],['ELEVATED','#ff8800']];
-const COMPOUNDS = () => `C${(Math.random()*80+10|0)}H${(Math.random()*40+5|0)}O${(Math.random()*20+2|0)}`;
 
-function drawPanelCanvas() {
-  const W=640, H=400;
-  const cv = document.createElement('canvas');
-  cv.width=W; cv.height=H;
-  const c = cv.getContext('2d');
+// ══════════════════════════════════════════════
+// STEP 4 — Main animation loop
+// Runs every frame (~30-60fps)
+// ══════════════════════════════════════════════
+function tick() {
+  rafId = requestAnimationFrame(tick);
 
-  const mat   = MATERIALS[Math.random()*MATERIALS.length|0];
-  const [threat,tCol] = THREATS[Math.random()*THREATS.length|0];
-  const integ  = (72 + Math.random()*27).toFixed(1);
-  const temp   = (15 + Math.random()*25).toFixed(1);
-  const dist   = (0.4 + Math.random()*3.5).toFixed(2);
-  const nodeId = Math.random().toString(36).slice(2,10).toUpperCase();
-  const density= (1.2 + Math.random()*5).toFixed(2);
-
-  // BG
-  c.fillStyle='rgba(0,6,18,0.93)';
-  c.fillRect(0,0,W,H);
-
-  // Grid bg
-  c.strokeStyle='rgba(0,212,255,0.06)';
-  c.lineWidth=1;
-  for(let x=0;x<W;x+=32){c.beginPath();c.moveTo(x,0);c.lineTo(x,H);c.stroke();}
-  for(let y=0;y<H;y+=32){c.beginPath();c.moveTo(0,y);c.lineTo(W,y);c.stroke();}
-
-  // Outer border
-  c.strokeStyle='#00d4ff';
-  c.lineWidth=1.5;
-  c.strokeRect(1.5,1.5,W-3,H-3);
-
-  // Corner accents
-  const ca=[[0,0,1,1],[W,0,-1,1],[0,H,1,-1],[W,H,-1,-1]];
-  ca.forEach(([x,y,sx,sy])=>{
-    c.strokeStyle='#00ffcc'; c.lineWidth=3;
-    c.beginPath(); c.moveTo(x+sx*28,y); c.lineTo(x,y); c.lineTo(x,y+sy*28); c.stroke();
-  });
-
-  // Header bar
-  c.fillStyle='rgba(0,212,255,0.12)';
-  c.fillRect(1.5,1.5,W-3,46);
-  c.strokeStyle='rgba(0,212,255,0.35)';
-  c.lineWidth=1;
-  c.beginPath(); c.moveTo(0,48); c.lineTo(W,48); c.stroke();
-
-  c.fillStyle='#00d4ff';
-  c.font='bold 13px "Share Tech Mono",monospace';
-  c.letterSpacing='3px';
-  c.fillText('◈  SURFACE ANALYSIS NODE', 16, 30);
-
-  c.fillStyle='rgba(0,212,255,0.45)';
-  c.font='10px "Share Tech Mono",monospace';
-  c.fillText(`ID: ${nodeId}`, W-140, 22);
-  c.fillText(new Date().toISOString().slice(0,19).replace('T',' ')+' UTC', W-200, 38);
-
-  // Data section
-  const rows = [
-    ['MATERIAL',       mat,          '#ffffff'],
-    ['INTEGRITY',      `${integ}%`,  integ>80?'#00ff88':integ>60?'#ffd700':'#ff3366'],
-    ['SURFACE TEMP',   `${temp} °C`, '#ffffff'],
-    ['DISTANCE',       `${dist} m`,  '#ffffff'],
-    ['DENSITY',        `${density} g/cm³`,'#ffffff'],
-    ['THREAT LEVEL',   threat,       tCol],
-    ['COMPOUND',       COMPOUNDS(),  'rgba(0,212,255,0.7)'],
-  ];
-
-  rows.forEach(([k,v,col],i)=>{
-    const y = 75 + i*34;
-    c.fillStyle='rgba(0,212,255,0.08)';
-    c.fillRect(8, y-16, 220, 22);
-    c.fillStyle='rgba(0,212,255,0.5)';
-    c.font='9px "Share Tech Mono",monospace';
-    c.letterSpacing='2px';
-    c.fillText(k, 14, y);
-    c.fillStyle=col;
-    c.font='bold 10px "Share Tech Mono",monospace';
-    c.letterSpacing='1px';
-    c.fillText(v, 240, y);
-    c.strokeStyle='rgba(0,212,255,0.1)';
-    c.lineWidth=1;
-    c.beginPath(); c.moveTo(8,y+6); c.lineTo(W-8,y+6); c.stroke();
-  });
-
-  // Waveform
-  c.strokeStyle='rgba(0,212,255,0.25)';
-  c.lineWidth=1;
-  c.beginPath(); c.moveTo(8,356); c.lineTo(W-8,356); c.stroke();
-
-  c.beginPath();
-  c.strokeStyle='#00d4ff';
-  c.lineWidth=1.5;
-  for(let x=12;x<W-12;x+=2){
-    const y = 375 + Math.sin(x*0.12)*7 + Math.sin(x*0.35)*4 + Math.sin(x*0.08+1.5)*3;
-    x===12 ? c.moveTo(x,y) : c.lineTo(x,y);
+  // In fallback mode we draw the video as background
+  if (!xrSession) {
+    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+  } else {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
-  c.stroke();
 
-  c.fillStyle='rgba(0,212,255,0.35)';
-  c.font='8px "Share Tech Mono",monospace';
-  c.letterSpacing='2px';
-  c.fillText('SPECTRAL RESONANCE SIGNATURE', 12, 396);
-  c.fillText(`CONFIDENCE: ${(90+Math.random()*9).toFixed(1)}%`, W-180, 396);
+  if (!videoEl || videoEl.readyState < 2) return;
 
-  return cv;
-}
+  const now = performance.now();
 
-function makePanel(worldPos) {
-  const group = new THREE.Group();
-  group.position.copy(worldPos);
-  group.position.y += 0.38;
+  // ── Run segmentation on this frame ──
+  // MediaPipe analyses the video frame and returns a mask
+  const result = segmenter.segmentForVideo(videoEl, now);
+  const mask   = result?.categoryMask;
 
-  const cv = drawPanelCanvas();
-  const tex = new THREE.CanvasTexture(cv);
+  if (!mask) return;
 
-  const panel = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.62, 0.39),
-    new THREE.MeshBasicMaterial({ map:tex, transparent:true, side:THREE.DoubleSide })
+  // ── Find the most-confident object in the mask ──
+  const bbox = extractBestMaskBBox(
+    mask.getAsUint8Array(),
+    mask.width,
+    mask.height
   );
-  group.add(panel);
 
-  // Glowing frame
-  const framePts = [
-    new THREE.Vector3(-0.31,-0.195,0), new THREE.Vector3( 0.31,-0.195,0),
-    new THREE.Vector3( 0.31, 0.195,0), new THREE.Vector3(-0.31, 0.195,0),
-    new THREE.Vector3(-0.31,-0.195,0),
-  ];
-  const frameGeo = new THREE.BufferGeometry().setFromPoints(framePts);
-  group.add(new THREE.Line(frameGeo, new THREE.LineBasicMaterial({ color:0x00d4ff })));
+  if (bbox) {
+    // ── Object is visible ──
+    lastMaskTime = now;
+    currentMaskBBox = scaleBBoxToCanvas(bbox, mask.width, mask.height);
+    updateFrameBrackets(currentMaskBBox);
+    drawScanLine(currentMaskBBox, mask, mask.width, mask.height);
+    showStatus("Scanning…");
 
-  // Stem
-  const stemGeo = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(0,0,0), new THREE.Vector3(0,-0.38,0)
-  ]);
-  group.add(new THREE.Line(stemGeo, new THREE.LineBasicMaterial({
-    color:0x00d4ff, transparent:true, opacity:0.35
-  })));
+    // Query Claude if we haven't recently
+    if (now - lastQueryTime > REQUERY_COOLDOWN && !isScanning) {
+      lastQueryTime = now;
+      identifyObject(currentMaskBBox);
+    }
 
-  // Anchor dot
-  const dot = new THREE.Mesh(
-    new THREE.CircleGeometry(0.018, 16),
-    new THREE.MeshBasicMaterial({ color:0x00ffcc, transparent:true, opacity:0.9, side:THREE.DoubleSide })
-  );
-  dot.position.y = -0.38;
-  dot.rotation.x = -Math.PI/2;
-  group.add(dot);
-
-  return { group, tex };
-}
-
-/* ═══════════════════════════════════════════
-   STATE
-═══════════════════════════════════════════ */
-let hitTestSource = null;
-const anchors = new Map();
-const panels   = [];
-let nodeCount  = 0;
-let lastScan   = 0;
-
-/* ═══════════════════════════════════════════
-   BOOT SEQUENCE
-═══════════════════════════════════════════ */
-const bootItems = [
-  ['ARC REACTOR CORE', 'ONLINE'],
-  ['NEURAL INTERFACE', 'SYNCED'],
-  ['MOTION SENSORS', 'CALIBRATED'],
-  ['AR OPTICS', 'INITIALIZED'],
-  ['THREAT MATRIX', 'LOADED'],
-  ['JARVIS AI', 'CONNECTED'],
-];
-const bootEl = document.getElementById('boot-lines');
-bootItems.forEach(([k,v],i) => {
-  const div = document.createElement('div');
-  div.className='boot-line';
-  div.style.animationDelay = `${0.4+i*0.22}s`;
-  div.innerHTML = `<span>${k}</span><span class="status">${v}</span>`;
-  bootEl.appendChild(div);
-});
-setTimeout(()=>{
-  document.getElementById('start-btn').style.display='block';
-}, 400 + bootItems.length*220 + 300);
-
-/* ═══════════════════════════════════════════
-   AR SESSION START
-═══════════════════════════════════════════ */
-document.getElementById('start-btn').addEventListener('click', async () => {
-  soundBoot();
-
-  const session = await navigator.xr.requestSession('immersive-ar', {
-    requiredFeatures: ['hit-test','anchors'],
-    optionalFeatures: ['dom-overlay'],
-    domOverlay: { root: document.body }
-  });
-
-  renderer.xr.setSession(session);
-  document.getElementById('boot').style.display = 'none';
-  document.getElementById('hud').style.display  = 'block';
-
-  const vs = await session.requestReferenceSpace('viewer');
-  hitTestSource = await session.requestHitTestSource({ space: vs });
-
-  session.addEventListener('select', () => {
-    if (!rGroup.visible) return;
-    soundPlace();
-    flashScreen();
-
-    const pos = new THREE.Vector3();
-    pos.setFromMatrixPosition(new THREE.Matrix4().fromArray(rGroup.matrix.elements));
-    spawnPulse(pos.clone());
-
-    const { group, tex } = makePanel(pos);
-    scene.add(group);
-    panels.push({ group, tex });
-    nodeCount++;
-    document.getElementById('node-count').textContent = nodeCount;
-
-    renderer.xr.getSession().createAnchor(
-      rGroup.matrix, renderer.xr.getReferenceSpace()
-    ).then(a => anchors.set(a, group)).catch(()=>{});
-  });
-
-  setInterval(updateHUD, 120);
-  setInterval(()=>{ if(rGroup.visible) soundScan(); }, 2200);
-});
-
-/* ═══════════════════════════════════════════
-   HUD UPDATER
-═══════════════════════════════════════════ */
-function updateHUD() {
-  const now = new Date();
-  document.getElementById('clock-main').textContent = now.toTimeString().slice(0,8);
-  document.getElementById('date-line').textContent =
-    now.toLocaleDateString('en-US',{weekday:'long'}).toUpperCase() + ' · STARK INDUSTRIES · AR-7';
-
-  const arc = 95 + Math.sin(Date.now()*0.0012)*2.5;
-  document.getElementById('arc-pct').textContent = arc.toFixed(1)+'%';
-  document.getElementById('arc-bar').style.width = arc+'%';
-
-  document.getElementById('temp-val').textContent =
-    (35.8 + Math.sin(Date.now()*0.0004)*1.2).toFixed(1)+'°C';
-
-  document.getElementById('alt-val').textContent =
-    (41.8 + Math.sin(Date.now()*0.0003)*0.4).toFixed(1)+' m';
-
-  const locked = rGroup.visible;
-  const ss = document.getElementById('scan-status');
-  ss.textContent = locked ? '◈ SURFACE LOCKED ◈' : '◈ SCANNING ENVIRONMENT ◈';
-  ss.className = locked ? 'locked' : 'scanning';
-  document.getElementById('surf-val').textContent = locked ? 'DETECTED' : 'SCANNING';
-  document.getElementById('depth-val').textContent =
-    locked ? (0.45+Math.random()*0.15).toFixed(2)+'m' : '--';
-
-  const threats = ['MINIMAL','MINIMAL','MINIMAL','LOW','MODERATE'];
-  const tCols   = ['ok','ok','ok','ok','warn'];
-  const ti = Math.random()>0.97 ? 3 : 0;
-  const tv = document.getElementById('threat-val');
-  tv.textContent = threats[ti];
-  tv.className = 'val ' + tCols[ti];
-}
-
-/* ═══════════════════════════════════════════
-   SCREEN FLASH
-═══════════════════════════════════════════ */
-function flashScreen() {
-  const f = document.getElementById('flash');
-  f.style.opacity='1';
-  setTimeout(()=>f.style.opacity='0', 100);
-}
-
-/* ═══════════════════════════════════════════
-   RENDER LOOP
-═══════════════════════════════════════════ */
-const camWP = new THREE.Vector3();
-let t = 0;
-
-renderer.setAnimationLoop((timestamp, frame) => {
-  if (!frame) return;
-  t += 0.016;
-
-  const refSpace = renderer.xr.getReferenceSpace();
-
-  // Hit test
-  if (hitTestSource) {
-    const hits = frame.getHitTestResults(hitTestSource);
-    if (hits.length > 0) {
-      const pose = hits[0].getPose(refSpace);
-      if (pose) {
-        rGroup.visible = true;
-        rGroup.matrix.fromArray(pose.transform.matrix);
-      }
-    } else {
-      rGroup.visible = false;
+  } else {
+    // ── No object visible ──
+    if (now - lastMaskTime > LOOK_AWAY_GRACE) {
+      hideHUD();
+      hideFrameBrackets();
+      showStatus("Point at an object");
+      isScanning = false;
     }
   }
 
-  // Animate reticle
-  if (rGroup.visible) {
-    outerRing.rotation.z += 0.008;
-    midRing.rotation.z   -= 0.015;
-    innerDot.material.opacity = 0.7 + Math.sin(t*4)*0.3;
+  mask.close(); // free GPU memory
+}
+
+
+// ══════════════════════════════════════════════
+// STEP 5 — Extract mask bounding box
+// Finds the region where the most prominent object lives.
+// Ignores background (class 0) and sky (class 1).
+// Returns {minX, maxX, minY, maxY} in mask-pixel coordinates.
+// ══════════════════════════════════════════════
+function extractBestMaskBBox(maskData, mw, mh) {
+  let minX = mw, maxX = 0, minY = mh, maxY = 0;
+  let pixelCount = 0;
+
+  for (let i = 0; i < maskData.length; i++) {
+    const cls = maskData[i];
+    // Class 0 = background, skip it
+    if (cls === 0) continue;
+
+    const x = i % mw;
+    const y = Math.floor(i / mw);
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+    pixelCount++;
   }
 
-  // Particles drift
-  const pa = pGeo.attributes.position;
-  for (let i=0; i<PC; i++) {
-    pa.array[i*3+1] += pVel[i];
-    if (pa.array[i*3+1] > 2.5) pa.array[i*3+1] = -2.5;
-  }
-  pa.needsUpdate = true;
+  // If less than 1% of the frame is object, ignore it (noise filter)
+  if (pixelCount < mw * mh * 0.01) return null;
+  if (maxX <= minX || maxY <= minY) return null;
 
-  // Billboard panels toward camera
-  camera.getWorldPosition(camWP);
-  panels.forEach(({ group }) => { group.lookAt(camWP); });
+  return { minX, maxX, minY, maxY, maskData, mw, mh };
+}
 
-  // Anchor tracking
-  if (frame.trackedAnchors) {
-    for (const [anchor, obj] of anchors) {
-      if (frame.trackedAnchors.has(anchor)) {
-        const ap = frame.getPose(anchor.anchorSpace, refSpace);
-        if (ap) {
-          const m = new THREE.Matrix4().fromArray(ap.transform.matrix);
-          obj.position.setFromMatrixPosition(m);
-        }
+
+// Scale mask bbox (which is 256x256) up to canvas pixel coords
+function scaleBBoxToCanvas(bbox, mw, mh) {
+  const sx = canvas.width  / mw;
+  const sy = canvas.height / mh;
+  return {
+    minX: bbox.minX * sx,
+    maxX: bbox.maxX * sx,
+    minY: bbox.minY * sy,
+    maxY: bbox.maxY * sy,
+    // Keep originals for mask drawing
+    rawBbox: bbox
+  };
+}
+
+
+// ══════════════════════════════════════════════
+// STEP 6 — Draw the scan line CLIPPED to the object silhouette
+//
+// Key insight: ctx.clip() restricts ALL drawing to within the mask.
+// So even though we draw a full-width line, it only SHOWS
+// on the pixels where the object was detected.
+// ══════════════════════════════════════════════
+function drawScanLine(cbbox, mask, mw, mh) {
+  const { minY, maxY } = cbbox;
+  const bbox = cbbox.rawBbox;
+
+  // Advance scan line position
+  const speed = (maxY - minY) * 0.012;  // proportional to object height
+  scanY += speed * scanDir;
+  if (scanY > maxY) { scanY = maxY; scanDir = -1; }
+  if (scanY < minY) { scanY = minY; scanDir =  1; }
+
+  // ── Build the clip region from mask pixels ──
+  // We create a Path2D that traces around every "object" pixel.
+  // For performance, we work in mask coordinates and scale up.
+  const sx = canvas.width  / mw;
+  const sy = canvas.height / mh;
+
+  ctx.save();
+
+  // Use the mask pixels as clip path
+  const path = new Path2D();
+  const data = bbox.maskData;
+  for (let y = bbox.minY; y <= bbox.maxY; y++) {
+    for (let x = bbox.minX; x <= bbox.maxX; x++) {
+      if (data[y * mw + x] !== 0) {
+        // Each non-background pixel becomes a tiny rect in the clip path
+        path.rect(x * sx, y * sy, sx + 0.5, sy + 0.5);
       }
     }
   }
+  ctx.clip(path);
 
-  renderer.render(scene, camera);
-});
+  // ── Draw the actual scan line (only visible inside clip) ──
+  // Outer glow pass
+  ctx.strokeStyle = "rgba(0, 255, 204, 0.2)";
+  ctx.lineWidth   = 10;
+  ctx.beginPath();
+  ctx.moveTo(0, scanY);
+  ctx.lineTo(canvas.width, scanY);
+  ctx.stroke();
+
+  // Core bright line
+  ctx.strokeStyle = "#00ffcc";
+  ctx.lineWidth   = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(0, scanY);
+  ctx.lineTo(canvas.width, scanY);
+  ctx.stroke();
+
+  // Trailing fade (gradient below the scan line)
+  const grad = ctx.createLinearGradient(0, scanY, 0, scanY + 40);
+  grad.addColorStop(0, "rgba(0,255,204,0.15)");
+  grad.addColorStop(1, "rgba(0,255,204,0)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, scanY, canvas.width, 40);
+
+  ctx.restore();
+  isScanning = true;
+}
+
+
+// ══════════════════════════════════════════════
+// STEP 7 — Send cropped image to Claude Vision API
+// We crop just the bounding box of the detected object,
+// encode it as base64, and POST to Claude.
+// ══════════════════════════════════════════════
+async function identifyObject(cbbox) {
+  // Create a small offscreen canvas with just the object region
+  const oc  = document.createElement("canvas");
+  const pad = 12;  // a little padding around the crop
+  oc.width  = Math.min(256, cbbox.maxX - cbbox.minX + pad * 2);
+  oc.height = Math.min(256, cbbox.maxY - cbbox.minY + pad * 2);
+  const oc_ctx = oc.getContext("2d");
+
+  // Draw the video frame cropped to bbox
+  oc_ctx.drawImage(
+    videoEl,
+    Math.max(0, cbbox.minX - pad),   // source x (in video coords, scaled)
+    Math.max(0, cbbox.minY - pad),   // source y
+    cbbox.maxX - cbbox.minX + pad * 2,
+    cbbox.maxY - cbbox.minY + pad * 2,
+    0, 0, oc.width, oc.height        // destination = full offscreen canvas
+  );
+
+  const base64 = oc.toDataURL("image/jpeg", 0.75).split(",")[1];
+
+  hudTitle.textContent = "Identifying…";
+  hudBody.textContent  = "";
+  showHUD(cbbox);
+
+  // Bail if no API key set
+  if (CLAUDE_API_KEY === "YOUR_API_KEY_HERE") {
+    hudTitle.textContent = "Demo mode";
+    hudBody.textContent  = "Add your Claude API key to the top of the file to get live object identification.";
+    return;
+  }
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type":         "application/json",
+        "x-api-key":            CLAUDE_API_KEY,
+        "anthropic-version":    "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true"
+      },
+      body: JSON.stringify({
+        model: CLAUDE_MODEL,
+        max_tokens: 120,
+        messages: [{
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: { type: "base64", media_type: "image/jpeg", data: base64 }
+            },
+            {
+              type: "text",
+              text: "What is this object? Reply with: 1) its name (3 words max), 2) one sentence describing what it does. Be direct, no preamble."
+            }
+          ]
+        }]
+      })
+    });
+
+    const data = await res.json();
+    const reply = data?.content?.[0]?.text ?? "Could not identify.";
+
+    // Split into name + description
+    const lines = reply.trim().split("\n").filter(Boolean);
+    hudTitle.textContent = lines[0]?.replace(/^1[).]\s*/, "") ?? "Object";
+    hudBody.textContent  = lines[1]?.replace(/^2[).]\s*/, "") ?? reply;
+
+  } catch (err) {
+    hudBody.textContent = "Network error.";
+    console.error(err);
+  }
+}
+
+
+// ══════════════════════════════════════════════
+// STEP 8 — HUD positioning
+// Place the HUD div to the right of the bounding box.
+// If near the right edge, flip it to the left.
+// ══════════════════════════════════════════════
+function showHUD(cbbox) {
+  const hudW = 200;
+  const gap  = 16;
+  let left = cbbox.maxX + gap;
+
+  // Flip to left side if not enough space
+  if (left + hudW > window.innerWidth - 8) {
+    left = cbbox.minX - hudW - gap;
+  }
+
+  // Clamp to screen
+  left = Math.max(8, Math.min(left, window.innerWidth - hudW - 8));
+
+  const top = Math.max(8, cbbox.minY);
+
+  hud.style.left    = left + "px";
+  hud.style.top     = top  + "px";
+  hud.style.display = "block";
+  hud.style.opacity = "1";
+}
+
+function hideHUD() {
+  hud.style.opacity = "0";
+  setTimeout(() => { hud.style.display = "none"; }, 300);
+}
+
+
+// ══════════════════════════════════════════════
+// STEP 9 — Corner bracket frame around object
+// ══════════════════════════════════════════════
+function updateFrameBrackets(cbbox) {
+  const el  = frameEl;
+  const pad = 6;
+  el.style.display = "block";
+  el.style.left    = (cbbox.minX - pad) + "px";
+  el.style.top     = (cbbox.minY - pad) + "px";
+  el.style.width   = (cbbox.maxX - cbbox.minX + pad * 2) + "px";
+  el.style.height  = (cbbox.maxY - cbbox.minY + pad * 2) + "px";
+}
+
+function hideFrameBrackets() {
+  frameEl.style.display = "none";
+}
+
+
+// ── Tiny status label helpers ──
+function showStatus(msg) {
+  statusEl.textContent = msg;
+  statusEl.classList.add("visible");
+}
+
 </script>
 </body>
 </html>
