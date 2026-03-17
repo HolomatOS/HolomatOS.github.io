@@ -2,956 +2,690 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>IRON MAN — SUIT UP</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>NEOCITY AR // 2077</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #000; overflow: hidden; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#000; overflow:hidden; touch-action:none; font-family:'Courier New',monospace; }
 
-  #video {
-    position: absolute; top: 0; left: 0;
-    width: 100%; height: 100%;
-    object-fit: cover;
-    transform: scaleX(-1);
-    opacity: 0.85;
-  }
+/* ── START SCREEN ── */
+#start-screen {
+  position:fixed; inset:0;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  background: radial-gradient(ellipse at 40% 60%, #0d0025 0%, #000510 50%, #000 100%);
+  z-index:100;
+}
+.glitch {
+  font-size:44px; font-weight:900; letter-spacing:10px;
+  color:#00ffff;
+  text-shadow: 0 0 20px #00ffff, 0 0 60px #00ffff55;
+  position:relative; margin-bottom:6px;
+  animation: glitch 4s infinite;
+}
+@keyframes glitch {
+  0%,90%,100%{ text-shadow: 0 0 20px #00ffff, 0 0 60px #00ffff55; transform:none }
+  92%{ transform:translate(-2px,0); text-shadow: 2px 0 #ff00aa, -2px 0 #00ffff }
+  94%{ transform:translate(2px,0);  text-shadow: -2px 0 #ff00aa, 2px 0 #00ffff }
+  96%{ transform:none; text-shadow: 0 0 20px #00ffff }
+}
+.tagline { font-size:11px; letter-spacing:6px; color:#ff00aa; text-shadow:0 0 12px #ff00aa; margin-bottom:60px; }
+.divider { width:180px; height:1px; background:linear-gradient(90deg,transparent,#00ffff66,transparent); margin-bottom:40px; }
 
-  #canvas {
-    position: absolute; top: 0; left: 0;
-    width: 100%; height: 100%;
-  }
+#start-btn {
+  border:1px solid #00ffff; background:transparent;
+  color:#00ffff; font-family:'Courier New',monospace;
+  font-size:13px; letter-spacing:5px; padding:16px 44px;
+  cursor:pointer; text-transform:uppercase;
+  box-shadow: 0 0 20px #00ffff22, inset 0 0 20px #00ffff08;
+  transition:all 0.15s;
+}
+#start-btn:active { background:#00ffff18; box-shadow:0 0 40px #00ffff55, inset 0 0 30px #00ffff18; }
 
-  #hud {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    pointer-events: none;
-    font-family: 'Courier New', monospace;
-    color: #ff7700;
-  }
+.prereqs { margin-top:44px; color:#334; font-size:10px; letter-spacing:2px; text-align:center; line-height:2; }
+.prereqs span { color:#556; }
 
-  #jarvis-text {
-    position: absolute; top: 22px; left: 50%;
-    transform: translateX(-50%);
-    font-size: 13px;
-    letter-spacing: 4px;
-    text-transform: uppercase;
-    color: #ffcc00;
-    text-shadow: 0 0 12px #ffaa00, 0 0 30px #ff7700;
-    opacity: 0;
-    transition: opacity 0.5s;
-  }
+/* ── HUD ── */
+#hud {
+  position:fixed; inset:0; pointer-events:none; z-index:10;
+  display:none;
+}
+#hud-tl { position:absolute; top:18px; left:18px; }
+#hud-tr { position:absolute; top:18px; right:18px; text-align:right; }
+#hud-bl { position:absolute; bottom:36px; left:50%; transform:translateX(-50%); text-align:center; }
 
-  #status-msg {
-    position: absolute; bottom: 30px; left: 50%;
-    transform: translateX(-50%);
-    font-size: 14px;
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    color: #ff8800;
-    text-shadow: 0 0 10px #ff6600;
-    opacity: 0;
-    transition: opacity 0.5s;
-  }
+.hud-label { color:#ff00aa; font-size:14px; letter-spacing:5px; text-shadow:0 0 14px #ff00aa; }
+.hud-value { color:#00ffff; font-size:10px; letter-spacing:2px; text-shadow:0 0 8px #00ffff; margin-top:4px; }
+.hud-stat  { color:#00ffff88; font-size:9px; letter-spacing:2px; }
 
-  #loading-screen {
-    position: absolute; top: 0; left: 0;
-    width: 100%; height: 100%;
-    background: #000;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    z-index: 100;
-    transition: opacity 1s;
-  }
+#instruction {
+  display:inline-block; color:#00ffff; font-size:12px; letter-spacing:3px;
+  padding:10px 22px; border:1px solid #00ffff44; background:#00000099;
+  text-shadow:0 0 10px #00ffff;
+  animation: pulse-border 2s infinite;
+}
+@keyframes pulse-border {
+  0%,100%{ border-color:#00ffff44; box-shadow:none }
+  50%{ border-color:#00ffff99; box-shadow:0 0 14px #00ffff33 }
+}
 
-  #loading-screen .logo {
-    font-family: 'Courier New', monospace;
-    font-size: 52px;
-    font-weight: 900;
-    letter-spacing: 12px;
-    color: #ffcc00;
-    text-shadow: 0 0 20px #ff8800, 0 0 60px #ff4400;
-    margin-bottom: 20px;
-  }
+/* ── CORNER BRACKETS ── */
+.corner { position:absolute; width:24px; height:24px; border-color:#00ffff44; border-style:solid; }
+.c-tl { top:10px; left:10px; border-width:1px 0 0 1px; }
+.c-tr { top:10px; right:10px; border-width:1px 1px 0 0; }
+.c-bl { bottom:28px; left:10px; border-width:0 0 1px 1px; }
+.c-br { bottom:28px; right:10px; border-width:0 1px 1px 0; }
 
-  #loading-screen .sub {
-    font-family: 'Courier New', monospace;
-    font-size: 13px;
-    letter-spacing: 5px;
-    color: #ff8800;
-    text-shadow: 0 0 10px #ff6600;
-    margin-bottom: 40px;
-  }
-
-  #loading-bar-bg {
-    width: 300px; height: 3px;
-    background: rgba(255,120,0,0.2);
-    border: 1px solid rgba(255,120,0,0.4);
-  }
-
-  #loading-bar {
-    height: 100%;
-    background: linear-gradient(90deg, #ff8800, #ffcc00);
-    box-shadow: 0 0 10px #ff8800;
-    width: 0%;
-    transition: width 0.3s;
-  }
-
-  #loading-label {
-    font-family: 'Courier New', monospace;
-    font-size: 11px;
-    letter-spacing: 3px;
-    color: #ff6600;
-    margin-top: 12px;
-  }
-
-  .hud-corner {
-    position: absolute;
-    width: 60px; height: 60px;
-    border-color: rgba(255,140,0,0.4);
-    border-style: solid;
-  }
-  .hud-corner.tl { top: 10px; left: 10px; border-width: 2px 0 0 2px; }
-  .hud-corner.tr { top: 10px; right: 10px; border-width: 2px 2px 0 0; }
-  .hud-corner.bl { bottom: 10px; left: 10px; border-width: 0 0 2px 2px; }
-  .hud-corner.br { bottom: 10px; right: 10px; border-width: 0 2px 2px 0; }
+/* ── NO-AR SCREEN ── */
+#no-ar {
+  position:fixed; inset:0; display:none; flex-direction:column;
+  align-items:center; justify-content:center; background:#000;
+  z-index:200; gap:14px; padding:40px; text-align:center;
+}
+#no-ar .err { color:#ff4444; font-size:13px; letter-spacing:3px; }
+#no-ar .msg { color:#556; font-size:12px; line-height:2; letter-spacing:1px; }
+#no-ar a { color:#00ffff; text-decoration:none; }
 </style>
 </head>
 <body>
 
-<div id="loading-screen">
-  <div class="logo">IRON MAN</div>
-  <div class="sub">MARK L — SUIT ASSEMBLY SYSTEM</div>
-  <div id="loading-bar-bg"><div id="loading-bar"></div></div>
-  <div id="loading-label">INITIALIZING JARVIS...</div>
+<!-- ── START ── -->
+<div id="start-screen">
+  <div class="glitch">NEOCITY</div>
+  <div class="tagline">AUGMENTED REALITY &nbsp;·&nbsp; 2077</div>
+  <div class="divider"></div>
+  <button id="start-btn" onclick="startAR()">⬡ &nbsp;ENTER AR MODE</button>
+  <div class="prereqs">
+    REQUIRES <span>Chrome on Android</span> + <span>ARCore</span><br>
+    Moto G Stylus 2025 · WebXR Hit-Test
+  </div>
 </div>
 
-<video id="video" playsinline autoplay muted></video>
-<canvas id="canvas"></canvas>
-
+<!-- ── HUD ── -->
 <div id="hud">
-  <div class="hud-corner tl"></div>
-  <div class="hud-corner tr"></div>
-  <div class="hud-corner bl"></div>
-  <div class="hud-corner br"></div>
-  <div id="jarvis-text">J.A.R.V.I.S. ONLINE — SUIT READY</div>
-  <div id="status-msg">RAISE HAND TO DEPLOY</div>
+  <div class="corner c-tl"></div>
+  <div class="corner c-tr"></div>
+  <div class="corner c-bl"></div>
+  <div class="corner c-br"></div>
+  <div id="hud-tl">
+    <div class="hud-label">NEOCITY</div>
+    <div class="hud-value" id="hud-status">SCANNING SURFACE...</div>
+  </div>
+  <div id="hud-tr">
+    <div class="hud-stat" id="stat-bldg">BLDG: —</div>
+    <div class="hud-stat" id="stat-veh">VEHICLES: —</div>
+    <div class="hud-stat" id="stat-pop">POPULATION: —</div>
+  </div>
+  <div id="hud-bl">
+    <div id="instruction">POINT AT FLOOR &nbsp;·&nbsp; TAP TO BUILD</div>
+  </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<!-- ── NO AR ── -->
+<div id="no-ar">
+  <div class="err">// AR NOT AVAILABLE //</div>
+  <div class="msg">
+    Open in <strong style="color:#ccc">Chrome</strong> on Android<br>
+    with <a href="https://play.google.com/store/apps/details?id=com.google.ar.core" target="_blank">ARCore</a> installed.<br><br>
+    <span style="color:#334">WebXR immersive-ar + hit-test required</span>
+  </div>
+</div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-// ───────────────────────────────────────────────────────────────
-//  CANVAS & VIDEO SETUP
-// ───────────────────────────────────────────────────────────────
-const canvas = document.getElementById('canvas');
-const ctx    = canvas.getContext('2d');
-const video  = document.getElementById('video');
+'use strict';
 
-function resize() {
-  canvas.width  = window.innerWidth;
-  canvas.height = window.innerHeight;
-}
-resize();
-window.addEventListener('resize', resize);
+// ═══════════════════════════════════════════════════════════════
+//  GLOBALS
+// ═══════════════════════════════════════════════════════════════
+let renderer, scene, camera, clock;
+let reticle;
+let hitTestSource  = null;
+let refSpace       = null;
+let cityPlaced     = false;
+let cityRoot       = null;
+let rainSystem     = null;
+let vehicles       = [];
+let growQueue      = [];     // buildings waiting to grow in
 
-// ───────────────────────────────────────────────────────────────
-//  DRAW ARMOR PIECES (offscreen canvases)
-//  Real Iron Man MK50 metallic armor pieces
-// ───────────────────────────────────────────────────────────────
-
-function makeCanvas(w, h) {
-  const c = document.createElement('canvas');
-  c.width = w; c.height = h;
-  return c;
-}
-
-// ── Helpers ──
-function metalGrad(ctx, x0, y0, x1, y1, light, mid, dark) {
-  const g = ctx.createLinearGradient(x0, y0, x1, y1);
-  g.addColorStop(0,   light);
-  g.addColorStop(0.35, mid);
-  g.addColorStop(0.75, dark);
-  g.addColorStop(1,   '#1a0a00');
-  return g;
-}
-
-function addShine(ctx, w, h) {
-  const s = ctx.createLinearGradient(0, 0, w * 0.7, h * 0.3);
-  s.addColorStop(0,   'rgba(255,255,255,0)');
-  s.addColorStop(0.3, 'rgba(255,255,255,0.32)');
-  s.addColorStop(0.7, 'rgba(255,255,255,0.06)');
-  s.addColorStop(1,   'rgba(255,255,255,0)');
-  ctx.fillStyle = s;
-}
-
-function panelLine(ctx, x1, y1, x2, y2) {
-  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-  ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,220,100,0.18)';
-  ctx.lineWidth = 0.5;
-  ctx.beginPath(); ctx.moveTo(x1+0.5,y1+0.5); ctx.lineTo(x2+0.5,y2+0.5); ctx.stroke();
-}
-
-// ── WRIST GUARD (gold) ──
-function drawWristGuard() {
-  const c = makeCanvas(100, 60); const g = c.getContext('2d');
-  const w = 100, h = 60;
-
-  g.beginPath();
-  g.moveTo(12, 0); g.lineTo(w-12, 0);
-  g.lineTo(w, h); g.lineTo(0, h);
-  g.closePath();
-  g.fillStyle = metalGrad(g, 0, 0, 0, h, '#FFE566','#C8960A','#7A5500');
-  g.fill();
-
-  // panel lines
-  for (let i = 1; i < 4; i++) {
-    const px = i/4; const lx1 = w*0.05*px + w*0.03;
-    panelLine(g, lx1, h*i/4, w - lx1, h*i/4);
-  }
-  panelLine(g, w*0.35, 0, w*0.35, h);
-  panelLine(g, w*0.65, 0, w*0.65, h);
-
-  // Center rivet pattern
-  for (let rx of [w*0.22, w*0.5, w*0.78]) {
-    for (let ry of [h*0.25, h*0.75]) {
-      const rg = g.createRadialGradient(rx, ry, 0, rx, ry, 4);
-      rg.addColorStop(0, '#fff8cc'); rg.addColorStop(1, '#8B6914');
-      g.fillStyle = rg; g.beginPath(); g.arc(rx, ry, 3.5, 0, Math.PI*2); g.fill();
-    }
-  }
-
-  // Shine
-  g.beginPath(); g.moveTo(12,0); g.lineTo(w-12,0); g.lineTo(w,h); g.lineTo(0,h); g.closePath();
-  addShine(g, w, h); g.fill();
-
-  // Edge
-  g.strokeStyle = 'rgba(255,240,120,0.7)'; g.lineWidth = 1.5;
-  g.beginPath(); g.moveTo(12,0.8); g.lineTo(w-12,0.8); g.stroke();
-  g.strokeStyle = 'rgba(0,0,0,0.6)'; g.lineWidth = 1.5;
-  g.beginPath(); g.moveTo(12,0); g.lineTo(w-12,0); g.lineTo(w,h); g.lineTo(0,h); g.closePath(); g.stroke();
-  return c;
-}
-
-// ── HAND PLATE (gold, back of hand) ──
-function drawHandPlate() {
-  const c = makeCanvas(120, 75); const g = c.getContext('2d');
-  const w = 120, h = 75;
-
-  // Hexagonal-ish shape
-  g.beginPath();
-  g.moveTo(w*0.1, 0); g.lineTo(w*0.9, 0);
-  g.lineTo(w, h*0.15); g.lineTo(w*0.95, h);
-  g.lineTo(w*0.05, h); g.lineTo(0, h*0.15);
-  g.closePath();
-  g.fillStyle = metalGrad(g, 0, 0, 0, h, '#FFE566','#C8960A','#7A5500');
-  g.fill();
-
-  // Radiating panel lines from center
-  const cx = w*0.5, cy = h*0.55;
-  const rays = 6;
-  for (let i = 0; i < rays; i++) {
-    const a = (i / rays) * Math.PI * 2;
-    panelLine(g, cx, cy, cx + Math.cos(a)*w*0.5, cy + Math.sin(a)*h*0.55);
-  }
-  // Horizontal divider
-  panelLine(g, w*0.05, h*0.4, w*0.95, h*0.4);
-
-  // Center hex
-  g.save(); g.translate(cx, h*0.35);
-  g.beginPath();
-  for (let i = 0; i < 6; i++) {
-    const a = (i/6)*Math.PI*2 - Math.PI/6;
-    i===0 ? g.moveTo(Math.cos(a)*10,Math.sin(a)*10) : g.lineTo(Math.cos(a)*10,Math.sin(a)*10);
-  }
-  g.closePath();
-  const hg = g.createRadialGradient(0,0,0,0,0,10);
-  hg.addColorStop(0,'#FFF5AA'); hg.addColorStop(1,'#B8860B');
-  g.fillStyle = hg; g.fill();
-  g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth=1; g.stroke();
-  g.restore();
-
-  // Shine
-  g.beginPath(); g.moveTo(w*0.1,0); g.lineTo(w*0.9,0); g.lineTo(w,h*0.15); g.lineTo(w*0.95,h); g.lineTo(w*0.05,h); g.lineTo(0,h*0.15); g.closePath();
-  addShine(g, w, h); g.fill();
-
-  g.strokeStyle='rgba(0,0,0,0.6)'; g.lineWidth=1.5;
-  g.beginPath(); g.moveTo(w*0.1,0); g.lineTo(w*0.9,0); g.lineTo(w,h*0.15); g.lineTo(w*0.95,h); g.lineTo(w*0.05,h); g.lineTo(0,h*0.15); g.closePath(); g.stroke();
-  return c;
-}
-
-// ── REPULSOR (gold ring + blue glow) ──
-function drawRepulsor() {
-  const c = makeCanvas(52, 52); const g = c.getContext('2d');
-  const cx = 26, cy = 26, r = 24;
-
-  // Outer ring body
-  g.beginPath(); g.arc(cx, cy, r, 0, Math.PI*2);
-  const og = g.createRadialGradient(cx-5,cy-5, 2, cx,cy, r);
-  og.addColorStop(0,'#FFE566'); og.addColorStop(0.6,'#B8860B'); og.addColorStop(1,'#5C4000');
-  g.fillStyle = og; g.fill();
-
-  // Inner dark ring
-  g.beginPath(); g.arc(cx,cy,r*0.62,0,Math.PI*2);
-  g.fillStyle='#0a0500'; g.fill();
-
-  // Glowing blue repulsor core
-  const bg = g.createRadialGradient(cx,cy,0,cx,cy,r*0.58);
-  bg.addColorStop(0,'rgba(220,240,255,1)');
-  bg.addColorStop(0.3,'rgba(100,180,255,0.95)');
-  bg.addColorStop(0.7,'rgba(30,100,220,0.8)');
-  bg.addColorStop(1,'rgba(0,40,120,0)');
-  g.beginPath(); g.arc(cx,cy,r*0.58,0,Math.PI*2);
-  g.fillStyle=bg; g.fill();
-
-  // Concentric detail rings on outer
-  for (const fr of [0.75, 0.88]) {
-    g.beginPath(); g.arc(cx,cy,r*fr,0,Math.PI*2);
-    g.strokeStyle='rgba(0,0,0,0.5)'; g.lineWidth=1; g.stroke();
-    g.strokeStyle='rgba(255,220,80,0.2)'; g.lineWidth=0.5; g.stroke();
-  }
-
-  // Radial notches
-  for (let i=0; i<8; i++) {
-    const a = (i/8)*Math.PI*2;
-    g.strokeStyle='rgba(0,0,0,0.4)'; g.lineWidth=1.5;
-    g.beginPath(); g.moveTo(cx+Math.cos(a)*r*0.7, cy+Math.sin(a)*r*0.7);
-    g.lineTo(cx+Math.cos(a)*r*0.95, cy+Math.sin(a)*r*0.95); g.stroke();
-  }
-
-  // Blue glow bloom (outer)
-  const glow = g.createRadialGradient(cx,cy,r*0.2,cx,cy,r*0.62);
-  glow.addColorStop(0,'rgba(120,200,255,0.5)');
-  glow.addColorStop(1,'rgba(50,120,255,0)');
-  g.beginPath(); g.arc(cx,cy,r*0.62,0,Math.PI*2);
-  g.fillStyle=glow; g.fill();
-
-  // Shine
-  const sh = g.createRadialGradient(cx-6,cy-6,0,cx,cy,r);
-  sh.addColorStop(0,'rgba(255,255,200,0.45)'); sh.addColorStop(1,'rgba(255,255,200,0)');
-  g.beginPath(); g.arc(cx,cy,r,0,Math.PI*2);
-  g.fillStyle=sh; g.fill();
-
-  return c;
-}
-
-// ── FINGER ARMOR (red, reused for all 5 fingers) ──
-function drawFingerArmor(label) {
-  const c = makeCanvas(34, 65); const g = c.getContext('2d');
-  const w = 34, h = 65;
-
-  // Upper segment (tip)
-  g.beginPath();
-  g.moveTo(w*0.2, 0); g.lineTo(w*0.8, 0);
-  g.quadraticCurveTo(w, 0, w, w*0.25);
-  g.lineTo(w, h*0.42); g.lineTo(0, h*0.42);
-  g.lineTo(0, w*0.25);
-  g.quadraticCurveTo(0, 0, w*0.2, 0);
-  g.closePath();
-  g.fillStyle = metalGrad(g,0,0,w,h*0.4,'#FF5555','#CC0000','#700000');
-  g.fill();
-  panelLine(g, w*0.15, h*0.18, w*0.85, h*0.18);
-  addShine(g, w, h*0.4); g.fill();
-
-  // Joint gap
-  g.fillStyle='rgba(0,0,0,0.7)';
-  g.fillRect(2, h*0.42, w-4, h*0.07);
-
-  // Lower segment (knuckle)
-  g.beginPath();
-  g.moveTo(0, h*0.49); g.lineTo(w, h*0.49);
-  g.lineTo(w*0.95, h); g.lineTo(w*0.05, h);
-  g.closePath();
-  g.fillStyle = metalGrad(g,0,h*0.49,w,h,'#FF4444','#BB0000','#5C0000');
-  g.fill();
-  panelLine(g, w*0.1, h*0.68, w*0.9, h*0.68);
-  g.beginPath();
-  g.moveTo(0, h*0.49); g.lineTo(w, h*0.49); g.lineTo(w*0.95, h); g.lineTo(w*0.05, h); g.closePath();
-  addShine(g, w, h); g.fill();
-
-  // Outline
-  g.strokeStyle='rgba(0,0,0,0.6)'; g.lineWidth=1.2;
-  g.beginPath(); g.moveTo(w*0.2,0); g.lineTo(w*0.8,0); g.quadraticCurveTo(w,0,w,w*0.25);
-  g.lineTo(w,h*0.42); g.lineTo(0,h*0.42); g.lineTo(0,w*0.25); g.quadraticCurveTo(0,0,w*0.2,0); g.closePath(); g.stroke();
-  g.beginPath(); g.moveTo(0,h*0.49); g.lineTo(w,h*0.49); g.lineTo(w*0.95,h); g.lineTo(w*0.05,h); g.closePath(); g.stroke();
-
-  // Small label indicator dot
-  const dg = g.createRadialGradient(w/2,h*0.28,0,w/2,h*0.28,4);
-  dg.addColorStop(0,'rgba(255,200,200,0.9)'); dg.addColorStop(1,'rgba(200,0,0,0)');
-  g.fillStyle=dg; g.beginPath(); g.arc(w/2,h*0.28,3.5,0,Math.PI*2); g.fill();
-
-  return c;
-}
-
-// ── THUMB ARMOR (wider, angled) ──
-function drawThumbArmor() {
-  const c = makeCanvas(40, 58); const g = c.getContext('2d');
-  const w = 40, h = 58;
-
-  // Main body
-  g.beginPath();
-  g.moveTo(w*0.1, 0); g.lineTo(w*0.9, 0);
-  g.lineTo(w, h*0.5); g.lineTo(w*0.9, h);
-  g.lineTo(w*0.1, h); g.lineTo(0, h*0.5);
-  g.closePath();
-  g.fillStyle = metalGrad(g,0,0,w,h,'#FF5555','#CC0000','#700000');
-  g.fill();
-
-  panelLine(g, w*0.1, h*0.42, w*0.9, h*0.42);
-  panelLine(g, w*0.3, 0, w*0.3, h);
-  panelLine(g, w*0.7, 0, w*0.7, h);
-
-  g.beginPath();
-  g.moveTo(w*0.1,0); g.lineTo(w*0.9,0); g.lineTo(w,h*0.5); g.lineTo(w*0.9,h); g.lineTo(w*0.1,h); g.lineTo(0,h*0.5); g.closePath();
-  addShine(g, w, h); g.fill();
-
-  g.strokeStyle='rgba(0,0,0,0.6)'; g.lineWidth=1.2;
-  g.beginPath();
-  g.moveTo(w*0.1,0); g.lineTo(w*0.9,0); g.lineTo(w,h*0.5); g.lineTo(w*0.9,h); g.lineTo(w*0.1,h); g.lineTo(0,h*0.5); g.closePath(); g.stroke();
-  return c;
-}
-
-// Pre-render all armor pieces
-const ARMOR_IMGS = {
-  wrist:     drawWristGuard(),
-  backplate: drawHandPlate(),
-  repulsor:  drawRepulsor(),
-  thumb:     drawThumbArmor(),
-  index:     drawFingerArmor('I'),
-  middle:    drawFingerArmor('M'),
-  ring:      drawFingerArmor('R'),
-  pinky:     drawFingerArmor('P'),
+const NEON = {
+  cyan:    { hex: 0x00ffff, css: '#00ffff' },
+  magenta: { hex: 0xff00aa, css: '#ff00aa' },
+  orange:  { hex: 0xff6622, css: '#ff6622' },
+  violet:  { hex: 0x9900ff, css: '#9900ff' },
+  green:   { hex: 0x00ff55, css: '#00ff55' },
+  yellow:  { hex: 0xffee00, css: '#ffee00' },
 };
+const NEON_LIST = Object.values(NEON);
 
-// ───────────────────────────────────────────────────────────────
-//  PART DEFINITIONS
-// ───────────────────────────────────────────────────────────────
-function avgLandmarks(lms, indices) {
-  let sx = 0, sy = 0;
-  for (const i of indices) { sx += lms[i].x; sy += lms[i].y; }
-  return { x: sx/indices.length, y: sy/indices.length };
-}
-
-function lmScreen(lm) {
-  // Flip X because video is mirrored
-  return { x: (1 - lm.x) * canvas.width, y: lm.y * canvas.height };
-}
-
-function avgScreen(lms, indices) {
-  const avg = avgLandmarks(lms, indices);
-  return { x: (1 - avg.x) * canvas.width, y: avg.y * canvas.height };
-}
-
-const PARTS = [
-  {
-    id: 'wrist', name: 'WRIST GUARD', img: ARMOR_IMGS.wrist,
-    w: 100, h: 60,
-    getTarget: (lms) => lmScreen(lms[0]),
-    delay: 0, state: 'floor',
-    x: 0, y: 0, vx: 0, vy: 0, rot: 0, vrot: 0, scale: 1, attachScale: 1,
-    floorX: 0, floorY: 0, floorRot: 0, bobPhase: 0,
-  },
-  {
-    id: 'backplate', name: 'HAND PLATE', img: ARMOR_IMGS.backplate,
-    w: 120, h: 75,
-    getTarget: (lms) => avgScreen(lms, [5,9,13,17]),
-    delay: 80, state: 'floor',
-    x: 0, y: 0, vx: 0, vy: 0, rot: 0, vrot: 0, scale: 1, attachScale: 1,
-    floorX: 0, floorY: 0, floorRot: 0, bobPhase: 0,
-  },
-  {
-    id: 'repulsor', name: 'REPULSOR', img: ARMOR_IMGS.repulsor,
-    w: 52, h: 52,
-    getTarget: (lms) => avgScreen(lms, [0,5,9,13,17]),
-    delay: 160, state: 'floor',
-    x: 0, y: 0, vx: 0, vy: 0, rot: 0, vrot: 0, scale: 1, attachScale: 1,
-    floorX: 0, floorY: 0, floorRot: 0, bobPhase: 0,
-  },
-  {
-    id: 'thumb', name: 'THUMB', img: ARMOR_IMGS.thumb,
-    w: 40, h: 58,
-    getTarget: (lms) => avgScreen(lms, [2,3,4]),
-    delay: 240, state: 'floor',
-    x: 0, y: 0, vx: 0, vy: 0, rot: 0, vrot: 0, scale: 1, attachScale: 1,
-    floorX: 0, floorY: 0, floorRot: 0, bobPhase: 0,
-  },
-  {
-    id: 'index', name: 'INDEX', img: ARMOR_IMGS.index,
-    w: 34, h: 65,
-    getTarget: (lms) => avgScreen(lms, [6,7,8]),
-    delay: 300, state: 'floor',
-    x: 0, y: 0, vx: 0, vy: 0, rot: 0, vrot: 0, scale: 1, attachScale: 1,
-    floorX: 0, floorY: 0, floorRot: 0, bobPhase: 0,
-  },
-  {
-    id: 'middle', name: 'MIDDLE', img: ARMOR_IMGS.middle,
-    w: 34, h: 65,
-    getTarget: (lms) => avgScreen(lms, [10,11,12]),
-    delay: 360, state: 'floor',
-    x: 0, y: 0, vx: 0, vy: 0, rot: 0, vrot: 0, scale: 1, attachScale: 1,
-    floorX: 0, floorY: 0, floorRot: 0, bobPhase: 0,
-  },
-  {
-    id: 'ring', name: 'RING', img: ARMOR_IMGS.ring,
-    w: 34, h: 65,
-    getTarget: (lms) => avgScreen(lms, [14,15,16]),
-    delay: 420, state: 'floor',
-    x: 0, y: 0, vx: 0, vy: 0, rot: 0, vrot: 0, scale: 1, attachScale: 1,
-    floorX: 0, floorY: 0, floorRot: 0, bobPhase: 0,
-  },
-  {
-    id: 'pinky', name: 'PINKY', img: ARMOR_IMGS.pinky,
-    w: 34, h: 65,
-    getTarget: (lms) => avgScreen(lms, [18,19,20]),
-    delay: 480, state: 'floor',
-    x: 0, y: 0, vx: 0, vy: 0, rot: 0, vrot: 0, scale: 1, attachScale: 1,
-    floorX: 0, floorY: 0, floorRot: 0, bobPhase: 0,
-  },
+const SIGNS = [
+  'ZION//NET','GH0ST CORP','CYBERWARE','RAMEN ++',
+  'NOODLE KING','YAKUZA.EXE','NET RUNNER','IMPLANTS',
+  'DATA HAVEN','CHROME CO','MANTIS ARM','NEOCITY AI',
+  'BRAINDANCE','MILITECH','ARASAKA','MIDNIGHT'
 ];
 
-// Scatter on floor
-function scatterParts() {
-  const floorY = canvas.height - 30;
-  const spread = canvas.width * 0.85;
-  const startX = canvas.width * 0.075;
-  PARTS.forEach((p, i) => {
-    const t = i / (PARTS.length - 1);
-    p.floorX = startX + spread * t + (Math.random()-0.5)*50;
-    p.floorY = floorY - Math.random()*30;
-    p.floorRot = (Math.random()-0.5)*0.5;
-    p.bobPhase = Math.random() * Math.PI * 2;
-    p.x = p.floorX;
-    p.y = p.floorY;
-    p.rot = p.floorRot;
+// ═══════════════════════════════════════════════════════════════
+//  THREE.JS SETUP
+// ═══════════════════════════════════════════════════════════════
+function initThree() {
+  clock = new THREE.Clock();
+
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.xr.enabled = true;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.4;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  document.body.appendChild(renderer.domElement);
+
+  scene  = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 200);
+  scene.add(camera);
+
+  // Very dim ambient — neon does the heavy lifting
+  scene.add(new THREE.AmbientLight(0x050515, 0.5));
+
+  // Reticle
+  buildReticle();
+
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
   });
 }
-scatterParts();
 
-// ───────────────────────────────────────────────────────────────
-//  PARTICLE SYSTEM  (sparks on attach)
-// ───────────────────────────────────────────────────────────────
-const particles = [];
+function buildReticle() {
+  reticle = new THREE.Group();
+  reticle.matrixAutoUpdate = false;
+  reticle.visible = false;
 
-function spawnSparks(x, y, color) {
-  for (let i = 0; i < 18; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const spd = 2 + Math.random() * 6;
-    particles.push({
-      x, y,
-      vx: Math.cos(a)*spd, vy: Math.sin(a)*spd,
-      life: 1, decay: 0.04 + Math.random()*0.04,
-      r: 2 + Math.random()*3,
-      color
+  // Outer ring
+  const ringGeo = new THREE.RingGeometry(0.07, 0.09, 40);
+  ringGeo.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI/2));
+  reticle.add(new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color:0x00ffff, side:THREE.DoubleSide })));
+
+  // Crosshair lines
+  for (const [rx, rz] of [[-0.11,0],[0.11,0],[0,-0.11],[0,0.11]]) {
+    const seg = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.018, 0.003),
+      new THREE.MeshBasicMaterial({ color:0x00ffff, side:THREE.DoubleSide })
+    );
+    seg.rotation.x = -Math.PI/2;
+    seg.position.set(rx, 0.001, rz);
+    reticle.add(seg);
+  }
+
+  // Center dot
+  const dotGeo = new THREE.CircleGeometry(0.012, 20);
+  dotGeo.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI/2));
+  reticle.add(new THREE.Mesh(dotGeo, new THREE.MeshBasicMaterial({ color:0xffffff, side:THREE.DoubleSide })));
+
+  scene.add(reticle);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  START AR SESSION
+// ═══════════════════════════════════════════════════════════════
+async function startAR() {
+  if (!navigator.xr) { showNoAR('WebXR not found'); return; }
+
+  const ok = await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
+  if (!ok) { showNoAR('immersive-ar not supported'); return; }
+
+  initThree();
+
+  try {
+    const session = await navigator.xr.requestSession('immersive-ar', {
+      requiredFeatures: ['hit-test'],
+      optionalFeatures: ['dom-overlay'],
+      domOverlay: { root: document.getElementById('hud') }
     });
+
+    renderer.xr.setReferenceSpaceType('local');
+    await renderer.xr.setSession(session);
+
+    refSpace = await session.requestReferenceSpace('local');
+    const viewerSpace = await session.requestReferenceSpace('viewer');
+    hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
+
+    session.addEventListener('select', onTap);
+    session.addEventListener('end', onSessionEnd);
+
+    renderer.setAnimationLoop(onFrame);
+
+    // Show HUD
+    document.getElementById('start-screen').style.display = 'none';
+    document.getElementById('hud').style.display = 'block';
+
+  } catch(e) {
+    console.error(e);
+    showNoAR(e.message);
   }
 }
 
-function updateParticles() {
-  for (let i = particles.length - 1; i >= 0; i--) {
-    const p = particles[i];
-    p.x += p.vx; p.y += p.vy;
-    p.vy += 0.15; // gravity
-    p.vx *= 0.95; p.vy *= 0.95;
-    p.life -= p.decay;
-    if (p.life <= 0) particles.splice(i, 1);
-  }
+function onSessionEnd() {
+  hitTestSource = null;
+  cityPlaced = false;
+  vehicles = [];
+  growQueue = [];
 }
 
-function drawParticles() {
-  for (const p of particles) {
-    ctx.save();
-    ctx.globalAlpha = p.life;
-    ctx.fillStyle = p.color;
-    ctx.shadowBlur = 8;
-    ctx.shadowColor = p.color;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.r * p.life, 0, Math.PI*2);
-    ctx.fill();
-    ctx.restore();
-  }
-}
+// ═══════════════════════════════════════════════════════════════
+//  RENDER LOOP
+// ═══════════════════════════════════════════════════════════════
+function onFrame(time, frame) {
+  const t = time * 0.001;
+  const delta = clock.getDelta();
 
-// ───────────────────────────────────────────────────────────────
-//  STATE
-// ───────────────────────────────────────────────────────────────
-let handLandmarks = null;
-let handVisible   = false;
-let suiteDeployed = false;
-let allAttached   = false;
-let frameCount    = 0;
-let deployTimestamp = 0;
-
-// Pulse ring effect on attach
-const pulseRings = [];
-function addPulse(x, y) {
-  pulseRings.push({ x, y, r: 10, life: 1 });
-}
-function updatePulses() {
-  for (let i = pulseRings.length-1; i>=0; i--) {
-    pulseRings[i].r += 4; pulseRings[i].life -= 0.04;
-    if (pulseRings[i].life <= 0) pulseRings.splice(i,1);
-  }
-}
-function drawPulses() {
-  for (const p of pulseRings) {
-    ctx.save();
-    ctx.globalAlpha = p.life * 0.6;
-    ctx.strokeStyle = '#ffcc00';
-    ctx.shadowBlur = 15; ctx.shadowColor = '#ff8800';
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.stroke();
-    ctx.restore();
-  }
-}
-
-// ───────────────────────────────────────────────────────────────
-//  UPDATE LOOP
-// ───────────────────────────────────────────────────────────────
-function update() {
-  frameCount++;
-  const t = frameCount * 0.03;
-
-  // Detect raised hand
-  if (handLandmarks) {
-    const wrist = handLandmarks[0];
-    const wristScreen = wrist.y * canvas.height;
-    // Trigger when wrist is above bottom 40% of screen
-    if (wristScreen < canvas.height * 0.62 && !suiteDeployed) {
-      suiteDeployed = true;
-      deployTimestamp = frameCount;
-      document.getElementById('status-msg').textContent = 'SUIT DEPLOYING...';
-    }
-  }
-
-  // Part updates
-  let attachedCount = 0;
-  for (const part of PARTS) {
-    part.bobPhase += 0.04;
-
-    if (part.state === 'floor') {
-      // Idle bounce on floor
-      part.x = part.floorX + Math.sin(part.bobPhase * 0.7 + part.id.length) * 3;
-      part.y = part.floorY + Math.sin(part.bobPhase + part.id.length) * 4;
-      part.rot = part.floorRot + Math.sin(part.bobPhase * 0.5) * 0.08;
-
-      // Check if we should start flying (with delay)
-      if (suiteDeployed && handLandmarks) {
-        const elapsed = (frameCount - deployTimestamp);
-        if (elapsed * (1000/60) >= part.delay) {
-          part.state = 'flying';
-          // Initial burst velocity toward hand
-          const tgt = part.getTarget(handLandmarks);
-          const dx = tgt.x - part.x, dy = tgt.y - part.y;
-          const d = Math.hypot(dx, dy);
-          part.vx = (dx/d) * 12;
-          part.vy = (dy/d) * 12;
-          part.vrot = (Math.random()-0.5)*0.3;
-        }
-      }
-
-    } else if (part.state === 'flying') {
-      if (handLandmarks) {
-        const tgt = part.getTarget(handLandmarks);
-        const dx = tgt.x - part.x, dy = tgt.y - part.y;
-        const dist = Math.hypot(dx, dy);
-
-        // Spring toward target
-        const spring = 0.18;
-        const damp   = 0.82;
-        part.vx = (part.vx + dx * spring) * damp;
-        part.vy = (part.vy + dy * spring) * damp;
-        part.vrot *= 0.88;
-
-        part.x += part.vx;
-        part.y += part.vy;
-        part.rot += part.vrot;
-
-        // Attach when close
-        if (dist < 22) {
-          part.state = 'attached';
-          part.x = tgt.x; part.y = tgt.y;
-          part.vx = 0; part.vy = 0; part.vrot = 0;
-          spawnSparks(tgt.x, tgt.y, part.id === 'repulsor' ? '#80d0ff' : '#ffcc44');
-          addPulse(tgt.x, tgt.y);
-        }
+  if (frame) {
+    // Hit test → move reticle
+    if (hitTestSource && !cityPlaced) {
+      const hits = frame.getHitTestResults(hitTestSource);
+      if (hits.length > 0) {
+        const pose = hits[0].getPose(refSpace);
+        reticle.visible = true;
+        reticle.matrix.fromArray(pose.transform.matrix);
+        // Spin crosshair
+        const pos = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
+        reticle.matrix.decompose(pos, q, s);
+        const spinQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), t * 1.2);
+        reticle.matrix.compose(pos, q.multiply(spinQ), s);
       } else {
-        // Hand lost → float back down
-        part.vy += 0.4;
-        part.vx *= 0.97;
-        part.x += part.vx; part.y += part.vy;
-        part.rot += part.vrot; part.vrot *= 0.98;
-        if (part.y > canvas.height + 100) {
-          // Reset to floor
-          part.state = 'floor';
-          part.y = canvas.height - 30;
-          part.vy = 0; part.vx = 0; part.vrot = 0;
-          suiteDeployed = false;
-          deployTimestamp = 0;
-        }
-      }
-      attachedCount++;
-
-    } else if (part.state === 'attached') {
-      if (handLandmarks) {
-        const tgt = part.getTarget(handLandmarks);
-        // Smooth snap follow
-        part.x += (tgt.x - part.x) * 0.35;
-        part.y += (tgt.y - part.y) * 0.35;
-        part.rot += (0 - part.rot) * 0.2;
-        attachedCount++;
-      } else {
-        // Hand lost
-        part.state = 'flying';
-        part.vx = (Math.random()-0.5)*3;
-        part.vy = -2;
+        reticle.visible = false;
       }
     }
   }
 
-  allAttached = (attachedCount === PARTS.length) && PARTS.every(p => p.state === 'attached');
-  if (allAttached) {
-    document.getElementById('status-msg').textContent = 'SUIT ONLINE — POWER AT 100%';
-  }
+  // Animate city
+  if (cityRoot && cityPlaced) animateWorld(t, delta);
 
-  updateParticles();
-  updatePulses();
+  renderer.render(scene, camera);
 }
 
-// ───────────────────────────────────────────────────────────────
-//  DRAW LOOP
-// ───────────────────────────────────────────────────────────────
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+// ═══════════════════════════════════════════════════════════════
+//  TAP HANDLER
+// ═══════════════════════════════════════════════════════════════
+function onTap() {
+  if (cityPlaced || !reticle.visible) return;
+  cityPlaced = true;
+  reticle.visible = false;
 
-  // Scanline vignette overlay
-  const vgrd = ctx.createRadialGradient(
-    canvas.width/2, canvas.height/2, canvas.height*0.3,
-    canvas.width/2, canvas.height/2, canvas.height*0.9
-  );
-  vgrd.addColorStop(0, 'rgba(0,0,0,0)');
-  vgrd.addColorStop(1, 'rgba(0,0,0,0.55)');
-  ctx.fillStyle = vgrd;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const pos = new THREE.Vector3();
+  const q   = new THREE.Quaternion();
+  const s   = new THREE.Vector3();
+  reticle.matrix.decompose(pos, q, s);
 
-  // Floor glow line
-  const floorGlow = ctx.createLinearGradient(0, canvas.height-8, 0, canvas.height);
-  floorGlow.addColorStop(0, 'rgba(255,140,0,0.0)');
-  floorGlow.addColorStop(0, 'rgba(255,140,0,0.18)');
-  floorGlow.addColorStop(1, 'rgba(255,80,0,0.0)');
-  ctx.fillStyle = 'rgba(255,120,0,0.08)';
-  ctx.fillRect(0, canvas.height-2, canvas.width, 2);
+  buildCity(pos);
 
-  // Hand skeleton (subtle)
-  if (handLandmarks && handVisible) {
-    drawHandSkeleton();
-  }
-
-  // Shadow under floor parts
-  for (const part of PARTS) {
-    if (part.state === 'floor') {
-      ctx.save();
-      ctx.globalAlpha = 0.25;
-      ctx.fillStyle = 'rgba(255,80,0,0.4)';
-      ctx.filter = 'blur(8px)';
-      ctx.fillRect(part.x - part.w*0.5*0.8, canvas.height - 12, part.w*0.8, 8);
-      ctx.restore();
-    }
-  }
-
-  // Draw parts (floor first, then flying, then attached on top)
-  const drawOrder = ['floor', 'flying', 'attached'];
-  for (const state of drawOrder) {
-    for (const part of PARTS) {
-      if (part.state !== state) continue;
-      drawPart(part, state);
-    }
-  }
-
-  drawPulses();
-  drawParticles();
-
-  // All-attached glow effect
-  if (allAttached) {
-    const framesSinceAll = PARTS.filter(p=>p.state==='attached').length === PARTS.length;
-    if (framesSinceAll) {
-      ctx.save();
-      ctx.globalAlpha = 0.07 + 0.04 * Math.sin(frameCount * 0.12);
-      ctx.fillStyle = 'rgba(255,150,50,1)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.restore();
-    }
-  }
+  document.getElementById('instruction').textContent = 'WALK AROUND TO EXPLORE ↙';
+  document.getElementById('hud-status').textContent = 'CITY ONLINE';
+  setTimeout(() => { document.getElementById('hud-bl').style.opacity = '0'; }, 5000);
 }
 
-function drawPart(part, state) {
-  ctx.save();
-  ctx.translate(part.x, part.y);
-  ctx.rotate(part.rot);
-  ctx.scale(part.scale, part.scale);
-
-  const hw = part.w * 0.5, hh = part.h * 0.5;
-
-  // Glow for flying state
-  if (state === 'flying') {
-    ctx.shadowBlur = 25;
-    ctx.shadowColor = part.id === 'repulsor' ? '#60b0ff' : '#ff9900';
+// ═══════════════════════════════════════════════════════════════
+//  PROCEDURAL TEXTURES
+// ═══════════════════════════════════════════════════════════════
+function makeWindowTex(cols, rows, neonCss) {
+  const sz = 256;
+  const c = document.createElement('canvas'); c.width = sz; c.height = sz;
+  const g = c.getContext('2d');
+  g.fillStyle = '#01010a'; g.fillRect(0, 0, sz, sz);
+  const ww = sz/cols, wh = sz/rows;
+  for (let col = 0; col < cols; col++) {
+    for (let row = 0; row < rows; row++) {
+      if (Math.random() < 0.62) {
+        const b = 0.35 + Math.random()*0.65;
+        g.fillStyle = Math.random() > 0.35
+          ? `rgba(255,245,200,${b*0.9})`
+          : hexAlpha(neonCss, b*0.8);
+        g.fillRect(col*ww+1.5, row*wh+1.5, ww-3, wh-3);
+      }
+    }
   }
-  if (state === 'attached') {
-    ctx.shadowBlur = 12;
-    ctx.shadowColor = part.id === 'repulsor' ? '#40a0ff' : '#ff7700';
+  return new THREE.CanvasTexture(c);
+}
+
+function makeSignTex(text, css) {
+  const c = document.createElement('canvas'); c.width=256; c.height=64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0,0,256,64);
+  g.font = 'bold 22px Courier New'; g.textAlign='center'; g.textBaseline='middle';
+  g.shadowBlur=20; g.shadowColor=css; g.fillStyle=css;
+  g.fillText(text, 128, 32);
+  // second pass for stronger glow
+  g.shadowBlur=8; g.fillText(text, 128, 32);
+  return new THREE.CanvasTexture(c);
+}
+
+function hexAlpha(hex, a) {
+  const r=parseInt(hex.slice(1,3),16), gr=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${gr},${b},${a})`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  BUILDING FACTORY
+// ═══════════════════════════════════════════════════════════════
+function makeBuilding(bx, bz, w, d, h, neon) {
+  const grp = new THREE.Group();
+  grp.position.set(bx, 0, bz);
+  grp.scale.y = 0.001; // starts flat, grows in
+
+  const nc = neon.hex, css = neon.css;
+
+  // ── Body
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color:0x040412, roughness:0.8, metalness:0.5,
+    emissive: new THREE.Color(nc).multiplyScalar(0.01),
+  });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), bodyMat);
+  body.position.y = h/2;
+  body.castShadow = true;
+  body.receiveShadow = true;
+  grp.add(body);
+
+  // ── Windows (4 faces)
+  const cols = Math.max(2, Math.round(w*7));
+  const rows = Math.max(4, Math.round(h*6));
+  const wTex = makeWindowTex(cols, rows, css);
+  const winMat = new THREE.MeshStandardMaterial({
+    map: wTex, emissiveMap: wTex,
+    emissive: new THREE.Color(0xffffff),
+    emissiveIntensity: 0.45,
+    roughness: 0.4, metalness: 0.05,
+  });
+  const faces = [
+    [w, h, 0, d/2+0.001, 0      ],
+    [w, h, 0,-(d/2+0.001), Math.PI],
+    [d, h, w/2+0.001, 0, Math.PI/2 ],
+    [d, h,-(w/2+0.001), 0,-Math.PI/2],
+  ];
+  for (const [fw, fh, fx, fz, ry] of faces) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(fw, fh), winMat);
+    m.position.set(fx, h/2, fz); m.rotation.y = ry;
+    grp.add(m);
   }
 
-  ctx.drawImage(part.img, -hw, -hh, part.w, part.h);
-
-  // Flying trail streak
-  if (state === 'flying' && (Math.abs(part.vx) + Math.abs(part.vy)) > 5) {
-    ctx.globalAlpha = 0.3;
-    ctx.fillStyle = part.id === 'repulsor' ? '#80c0ff' : '#ff9900';
-    ctx.filter = 'blur(6px)';
-    for (let s = 1; s <= 3; s++) {
-      ctx.globalAlpha = 0.15 / s;
-      ctx.fillRect(-hw - part.vx*s*0.5, -hh - part.vy*s*0.5, part.w, part.h);
+  // ── Neon horizontal bands
+  const bandMat = new THREE.MeshBasicMaterial({ color:nc });
+  const nBands = Math.floor(h/0.35);
+  for (let bi=0; bi < nBands; bi++) {
+    if (Math.random() > 0.38) continue;
+    const by = 0.12 + bi*0.35 + Math.random()*0.1;
+    const bh = 0.012 + Math.random()*0.008;
+    const bandData = [
+      [w+0.006, bh, 0,   d/2+0.002, 0],
+      [w+0.006, bh, 0, -(d/2+0.002), Math.PI],
+      [d+0.006, bh, w/2+0.002, 0, Math.PI/2],
+      [d+0.006, bh,-(w/2+0.002), 0,-Math.PI/2],
+    ];
+    for (const [bw2, bh2, bx2, bz2, bry] of bandData) {
+      const s = new THREE.Mesh(new THREE.PlaneGeometry(bw2, bh2), bandMat);
+      s.position.set(bx2, by, bz2); s.rotation.y = bry;
+      grp.add(s);
     }
   }
 
-  ctx.restore();
+  // ── Vertical neon edges on corners
+  const edgeMat = new THREE.MeshBasicMaterial({ color:nc });
+  for (const [ex, ez] of [[-w/2,-d/2],[w/2,-d/2],[w/2,d/2],[-w/2,d/2]]) {
+    if (Math.random() > 0.55) {
+      const eh = h*(0.25 + Math.random()*0.75);
+      const yOff = (h - eh)/2;
+      const edge = new THREE.Mesh(new THREE.BoxGeometry(0.007,eh,0.007), edgeMat);
+      edge.position.set(ex, yOff + eh/2, ez);
+      grp.add(edge);
+    }
+  }
+
+  // ── Roof slab
+  const roofMat = new THREE.MeshStandardMaterial({ color:0x080820, roughness:0.9, metalness:0.6 });
+  grp.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(w+0.01,0.025,d+0.01), roofMat), { position: new THREE.Vector3(0, h+0.012, 0) }));
+
+  // ── Antenna(s)
+  if (Math.random() > 0.35) {
+    const ah = 0.12 + Math.random()*0.35;
+    const antMat = new THREE.MeshStandardMaterial({ color:0x777788, metalness:0.95, roughness:0.15 });
+    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.004,0.004,ah,6), antMat);
+    ant.position.set((Math.random()-0.5)*w*0.35, h+ah/2, (Math.random()-0.5)*d*0.35);
+    grp.add(ant);
+    // Blinking red tip light
+    const blink = new THREE.PointLight(0xff2200, 3, 0.25);
+    blink.position.set(ant.position.x, h+ah+0.02, ant.position.z);
+    blink.userData.blink = true;
+    blink.userData.phase = Math.random()*Math.PI*2;
+    grp.add(blink);
+  }
+
+  // ── Neon roof sign
+  if (Math.random() > 0.4) {
+    const txt = SIGNS[Math.floor(Math.random()*SIGNS.length)];
+    const sTex = makeSignTex(txt, css);
+    const sMat = new THREE.MeshBasicMaterial({ map:sTex, transparent:true, side:THREE.DoubleSide, depthWrite:false });
+    const sw = 0.28 + Math.random()*0.28, sh = sw*0.25;
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(sw, sh), sMat);
+    // Random orientation
+    const side = Math.floor(Math.random()*4);
+    const sOffset = 0.01;
+    if (side===0)      sign.position.set(0, h+sh/2+0.04, d/2+sOffset);
+    else if (side===1) { sign.position.set(0, h+sh/2+0.04,-(d/2+sOffset)); sign.rotation.y=Math.PI; }
+    else if (side===2) { sign.position.set(w/2+sOffset, h+sh/2+0.04, 0); sign.rotation.y=Math.PI/2; }
+    else               { sign.position.set(-(w/2+sOffset), h+sh/2+0.04, 0); sign.rotation.y=-Math.PI/2; }
+    grp.add(sign);
+  }
+
+  // ── Main neon point light (pulsing)
+  const pl = new THREE.PointLight(nc, 1.5, Math.max(w,d)*6);
+  pl.position.set(0, h*0.55, 0);
+  pl.userData.pulse = true;
+  pl.userData.base  = 1.5;
+  pl.userData.phase = Math.random()*Math.PI*2;
+  grp.add(pl);
+
+  return grp;
 }
 
-function drawHandSkeleton() {
-  const lms = handLandmarks;
-  const connections = [
-    [0,1],[1,2],[2,3],[3,4],
-    [0,5],[5,6],[6,7],[7,8],
-    [5,9],[9,10],[10,11],[11,12],
-    [9,13],[13,14],[14,15],[15,16],
-    [13,17],[17,18],[18,19],[19,20],
-    [0,17]
+// ═══════════════════════════════════════════════════════════════
+//  RAIN SYSTEM
+// ═══════════════════════════════════════════════════════════════
+function makeRain(origin) {
+  const N = 1200;
+  const pos = new Float32Array(N*3);
+  for (let i=0; i<N; i++) {
+    const r = Math.sqrt(Math.random()) * 3.0;
+    const a = Math.random()*Math.PI*2;
+    pos[i*3]   = origin.x + Math.cos(a)*r;
+    pos[i*3+1] = origin.y + Math.random()*6;
+    pos[i*3+2] = origin.z + Math.sin(a)*r;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  const mat = new THREE.PointsMaterial({ color:0x3366ff, size:0.006, transparent:true, opacity:0.45, depthWrite:false });
+  const rain = new THREE.Points(geo, mat);
+  rain.userData.origin = origin;
+  scene.add(rain);
+  return rain;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  FLYING VEHICLES
+// ═══════════════════════════════════════════════════════════════
+function makeVehicle(origin, h) {
+  const color = Math.random()>0.5 ? 0x00ccff : 0xff4400;
+  const light = new THREE.PointLight(color, 2.5, 0.6);
+  const a = Math.random()*Math.PI*2;
+  const r = 0.6 + Math.random()*2.0;
+  light.position.set(origin.x + Math.cos(a)*r, origin.y+h, origin.z + Math.sin(a)*r);
+  light.userData = { origin, h, r, angle:a, speed:0.25+Math.random()*0.6, bob:Math.random()*Math.PI*2 };
+  scene.add(light);
+  vehicles.push(light);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  BUILD THE CITY
+// ═══════════════════════════════════════════════════════════════
+function buildCity(origin) {
+  cityRoot = new THREE.Group();
+
+  // City layout — outer ring, mid ring, inner, center tower
+  const layout = [
+    // Outer ring (8 tall towers)
+    { x:-0.85, z:-0.85, w:0.22, d:0.22, h:1.9,  ni:0 },
+    { x: 0.00, z:-0.95, w:0.20, d:0.26, h:2.4,  ni:1 },
+    { x: 0.85, z:-0.85, w:0.21, d:0.21, h:1.7,  ni:2 },
+    { x: 0.95, z: 0.00, w:0.24, d:0.19, h:2.1,  ni:3 },
+    { x: 0.85, z: 0.85, w:0.20, d:0.23, h:2.0,  ni:4 },
+    { x: 0.00, z: 0.95, w:0.18, d:0.18, h:1.5,  ni:0 },
+    { x:-0.85, z: 0.85, w:0.22, d:0.20, h:1.8,  ni:5 },
+    { x:-0.95, z: 0.00, w:0.20, d:0.24, h:2.2,  ni:2 },
+    // Mid ring (8 medium)
+    { x:-0.50, z:-0.50, w:0.17, d:0.17, h:1.2,  ni:5 },
+    { x: 0.00, z:-0.55, w:0.15, d:0.19, h:1.05, ni:0 },
+    { x: 0.50, z:-0.50, w:0.16, d:0.16, h:1.15, ni:3 },
+    { x: 0.55, z: 0.00, w:0.17, d:0.15, h:1.0,  ni:1 },
+    { x: 0.50, z: 0.50, w:0.16, d:0.17, h:1.25, ni:4 },
+    { x: 0.00, z: 0.55, w:0.14, d:0.14, h:0.95, ni:2 },
+    { x:-0.50, z: 0.50, w:0.16, d:0.15, h:1.1,  ni:0 },
+    { x:-0.55, z: 0.00, w:0.15, d:0.17, h:1.2,  ni:5 },
+    // Inner ring (8 small)
+    { x:-0.25, z:-0.30, w:0.12, d:0.12, h:0.65, ni:1 },
+    { x: 0.00, z:-0.28, w:0.11, d:0.14, h:0.7,  ni:3 },
+    { x: 0.28, z:-0.20, w:0.13, d:0.11, h:0.75, ni:4 },
+    { x: 0.28, z: 0.20, w:0.12, d:0.12, h:0.6,  ni:0 },
+    { x: 0.00, z: 0.30, w:0.11, d:0.13, h:0.7,  ni:2 },
+    { x:-0.28, z: 0.20, w:0.12, d:0.11, h:0.68, ni:5 },
+    { x:-0.28, z:-0.20, w:0.13, d:0.12, h:0.72, ni:1 },
+    // CENTRAL MEGASTRUCTURE
+    { x: 0.00, z: 0.00, w:0.24, d:0.24, h:3.5,  ni:1 },
+    // Low sprawl filler
+    { x:-0.62, z:-0.25, w:0.14, d:0.28, h:0.5,  ni:3 },
+    { x: 0.62, z: 0.25, w:0.14, d:0.26, h:0.45, ni:0 },
+    { x: 0.20, z: 0.70, w:0.18, d:0.12, h:0.4,  ni:4 },
+    { x:-0.20, z:-0.70, w:0.16, d:0.14, h:0.55, ni:2 },
   ];
 
-  ctx.save();
-  ctx.globalAlpha = 0.35;
-  ctx.strokeStyle = '#ff8800';
-  ctx.lineWidth = 1.5;
-  ctx.shadowBlur = 6; ctx.shadowColor = '#ff6600';
+  // Stagger grow-in
+  layout.forEach((cfg, i) => {
+    const neon = NEON_LIST[cfg.ni % NEON_LIST.length];
+    const bldg = makeBuilding(cfg.x, cfg.z, cfg.w, cfg.d, cfg.h, neon);
+    cityRoot.add(bldg);
+    growQueue.push({ mesh: bldg, delay: i * 100, startTime: null });
+  });
 
-  for (const [a, b] of connections) {
-    const pa = { x: (1-lms[a].x)*canvas.width, y: lms[a].y*canvas.height };
-    const pb = { x: (1-lms[b].x)*canvas.width, y: lms[b].y*canvas.height };
-    ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+  // Street lights in a ring
+  for (let i=0; i<16; i++) {
+    const a  = (i/16)*Math.PI*2;
+    const sr = 0.72 + (i%2)*0.08;
+    const poleMat = new THREE.MeshStandardMaterial({ color:0x222233, metalness:0.9, roughness:0.2 });
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.006,0.008,0.5,6), poleMat);
+    pole.position.set(Math.cos(a)*sr, 0.25, Math.sin(a)*sr);
+    cityRoot.add(pole);
+
+    const neon = NEON_LIST[i % NEON_LIST.length];
+    const streetLight = new THREE.PointLight(neon.hex, 0.9, 0.8);
+    streetLight.position.set(Math.cos(a)*sr, 0.52, Math.sin(a)*sr);
+    streetLight.userData.pulse = true;
+    streetLight.userData.base  = 0.9;
+    streetLight.userData.phase = Math.random()*Math.PI*2;
+    cityRoot.add(streetLight);
   }
 
-  for (let i = 0; i < 21; i++) {
-    const p = { x: (1-lms[i].x)*canvas.width, y: lms[i].y*canvas.height };
-    ctx.fillStyle = '#ffcc00';
-    ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI*2); ctx.fill();
+  // Ground holographic grid
+  const grid = new THREE.GridHelper(4, 24, 0x003355, 0x001122);
+  grid.position.set(0, 0.001, 0);
+  cityRoot.add(grid);
+
+  // Ground glow plane
+  const glowGeo = new THREE.CircleGeometry(2.2, 48);
+  glowGeo.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI/2));
+  const glowMat = new THREE.MeshBasicMaterial({
+    color:0x000833, transparent:true, opacity:0.7, depthWrite:false, side:THREE.DoubleSide
+  });
+  cityRoot.add(new THREE.Mesh(glowGeo, glowMat));
+
+  cityRoot.position.copy(origin);
+  scene.add(cityRoot);
+
+  // Rain
+  rainSystem = makeRain(origin);
+
+  // Flying vehicles (above the tallest buildings)
+  for (let i=0; i<10; i++) makeVehicle(origin, 2.0 + Math.random()*3.5);
+
+  // Stats
+  document.getElementById('stat-bldg').textContent = `BLDG: ${layout.length}`;
+  document.getElementById('stat-veh').textContent  = `VEHICLES: 10`;
+  document.getElementById('stat-pop').textContent  = `POP: ${(Math.floor(Math.random()*900)+100)}K`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ANIMATE THE WORLD
+// ═══════════════════════════════════════════════════════════════
+function animateWorld(t, delta) {
+  // ── Grow in buildings
+  for (const item of growQueue) {
+    if (item.startTime === null) item.startTime = t;
+    const elapsed = (t - item.startTime)*1000;
+    if (elapsed >= item.delay) {
+      const progress = Math.min(1, (elapsed - item.delay) / 900);
+      const eased = 1 - Math.pow(1-progress, 3); // ease-out cubic
+      item.mesh.scale.y = Math.max(0.001, eased);
+    }
   }
-  ctx.restore();
-}
 
-// ───────────────────────────────────────────────────────────────
-//  ANIMATION LOOP
-// ───────────────────────────────────────────────────────────────
-function loop() {
-  update();
-  draw();
-  requestAnimationFrame(loop);
-}
-
-// ───────────────────────────────────────────────────────────────
-//  MEDIAPIPE HANDS
-// ───────────────────────────────────────────────────────────────
-let mediapipeReady = false;
-
-function initMediaPipe() {
-  const hands = new Hands({
-    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-  });
-
-  hands.setOptions({
-    maxNumHands: 1,
-    modelComplexity: 1,
-    minDetectionConfidence: 0.7,
-    minTrackingConfidence: 0.6
-  });
-
-  hands.onResults((results) => {
-    if (!mediapipeReady) {
-      mediapipeReady = true;
-      hideLoading();
-    }
-
-    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-      handLandmarks = results.multiHandLandmarks[0];
-      handVisible   = true;
-    } else {
-      handLandmarks = null;
-      handVisible   = false;
-    }
-  });
-
-  // Webcam
-  navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, facingMode: 'user' } })
-    .then((stream) => {
-      video.srcObject = stream;
-      video.play();
-
-      const camera = new Camera(video, {
-        onFrame: async () => { await hands.send({ image: video }); },
-        width: 1280, height: 720
-      });
-      camera.start();
-    })
-    .catch((err) => {
-      console.error(err);
-      document.getElementById('loading-label').textContent = 'CAMERA ACCESS DENIED';
+  // ── Pulse lights & blink antenna tips
+  if (cityRoot) {
+    cityRoot.traverse(obj => {
+      if (!obj.isPointLight) return;
+      if (obj.userData.blink) {
+        obj.intensity = Math.sin(t*4 + obj.userData.phase) > 0.5 ? 3 : 0;
+      } else if (obj.userData.pulse) {
+        obj.intensity = obj.userData.base + Math.sin(t*1.8 + obj.userData.phase) * 0.35;
+      }
     });
-}
+  }
 
-// ───────────────────────────────────────────────────────────────
-//  LOADING SCREEN
-// ───────────────────────────────────────────────────────────────
-const loadingBar = document.getElementById('loading-bar');
-const loadingLabel = document.getElementById('loading-label');
-const loadingSteps = [
-  [10, 'BOOTING REPULSOR CORE...'],
-  [25, 'CALIBRATING NANO-ACTUATORS...'],
-  [45, 'LOADING SUIT INVENTORY...'],
-  [65, 'ACQUIRING CAMERA FEED...'],
-  [80, 'HAND RECOGNITION ONLINE...'],
-  [95, 'AWAITING SUIT LOCK...'],
-];
+  // ── Rain fall
+  if (rainSystem) {
+    const pa  = rainSystem.geometry.attributes.position;
+    const org = rainSystem.userData.origin;
+    for (let i=0; i<pa.count; i++) {
+      const ny = pa.getY(i) - 0.025;
+      if (ny < org.y - 0.05) {
+        const r2 = Math.sqrt(Math.random())*3.0, a2 = Math.random()*Math.PI*2;
+        pa.setX(i, org.x + Math.cos(a2)*r2);
+        pa.setY(i, org.y + 4 + Math.random()*2);
+        pa.setZ(i, org.z + Math.sin(a2)*r2);
+      } else {
+        pa.setY(i, ny);
+      }
+    }
+    pa.needsUpdate = true;
+  }
 
-let loadStep = 0;
-function animateLoading() {
-  if (loadStep < loadingSteps.length) {
-    const [pct, msg] = loadingSteps[loadStep];
-    loadingBar.style.width = pct + '%';
-    loadingLabel.textContent = msg;
-    loadStep++;
-    setTimeout(animateLoading, 400 + Math.random()*300);
+  // ── Flying vehicles orbit
+  for (const v of vehicles) {
+    v.userData.angle += v.userData.speed * delta;
+    const a = v.userData.angle, r = v.userData.r;
+    const org = v.userData.origin;
+    v.position.set(
+      org.x + Math.cos(a)*r,
+      org.y + v.userData.h + Math.sin(a*0.5 + v.userData.bob)*0.2,
+      org.z + Math.sin(a)*r
+    );
   }
 }
-animateLoading();
 
-function hideLoading() {
-  loadingBar.style.width = '100%';
-  loadingLabel.textContent = 'SUIT SYSTEMS NOMINAL';
-  setTimeout(() => {
-    const ls = document.getElementById('loading-screen');
-    ls.style.opacity = '0';
-    setTimeout(() => ls.style.display = 'none', 1000);
-    document.getElementById('jarvis-text').style.opacity = '1';
-    document.getElementById('status-msg').style.opacity = '1';
-    scatterParts();
-  }, 600);
+// ═══════════════════════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════════════════════
+function showNoAR(msg) {
+  console.warn('No AR:', msg);
+  document.getElementById('start-screen').style.display = 'none';
+  document.getElementById('no-ar').style.display = 'flex';
 }
-
-// ───────────────────────────────────────────────────────────────
-//  BOOT
-// ───────────────────────────────────────────────────────────────
-loop();
-setTimeout(initMediaPipe, 500);
 </script>
 </body>
 </html>
