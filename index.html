@@ -14,41 +14,66 @@ body{background:var(--dark);overflow:hidden;font-family:'Orbitron',sans-serif;co
 
 /* BOOT */
 #boot{background:radial-gradient(ellipse at 50% 65%,#150505 0%,#000 70%)}
-.arc-reactor{position:relative;width:130px;height:130px;margin-bottom:24px;flex-shrink:0}
+.arc-reactor{position:relative;width:120px;height:120px;margin-bottom:20px;flex-shrink:0}
 .arc-reactor svg{width:100%;height:100%;animation:spin 10s linear infinite}
-.arc-core{position:absolute;inset:24px;border-radius:50%;background:radial-gradient(circle,#aaefff 0%,#00aaff 40%,#003888 100%);box-shadow:0 0 30px 10px var(--glow-arc),0 0 80px 20px rgba(0,140,255,.25);animation:cpulse 2.2s ease-in-out infinite}
+.arc-core{position:absolute;inset:22px;border-radius:50%;background:radial-gradient(circle,#aaefff 0%,#00aaff 40%,#003888 100%);box-shadow:0 0 28px 10px var(--glow-arc),0 0 70px 18px rgba(0,140,255,.22);animation:cpulse 2.2s ease-in-out infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-@keyframes cpulse{0%,100%{box-shadow:0 0 30px 10px var(--glow-arc)}50%{box-shadow:0 0 50px 20px var(--glow-arc),0 0 120px 40px rgba(0,140,255,.5)}}
+@keyframes cpulse{0%,100%{box-shadow:0 0 28px 10px var(--glow-arc)}50%{box-shadow:0 0 48px 18px var(--glow-arc),0 0 110px 36px rgba(0,140,255,.45)}}
 .brand{font-size:8px;letter-spacing:8px;color:#3a3a3a;font-family:'Share Tech Mono',monospace;margin-bottom:3px}
-h1.logo{font-size:30px;font-weight:900;letter-spacing:3px;background:linear-gradient(135deg,var(--red),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:2px}
-.sub{font-size:8px;letter-spacing:5px;color:#2a2a2a;font-family:'Share Tech Mono',monospace;margin-bottom:32px}
-.btn{padding:12px 32px;background:transparent;border:1px solid;font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;letter-spacing:3px;cursor:pointer;transition:all .3s}
+h1.logo{font-size:28px;font-weight:900;letter-spacing:3px;background:linear-gradient(135deg,var(--red),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:2px}
+.sub{font-size:8px;letter-spacing:5px;color:#2a2a2a;font-family:'Share Tech Mono',monospace;margin-bottom:24px}
+
+/* URL INPUT AREA */
+.url-box{width:100%;max-width:360px;display:flex;flex-direction:column;gap:10px;margin-bottom:16px}
+.url-label{font-size:8px;letter-spacing:3px;color:#444;font-family:'Share Tech Mono',monospace}
+.url-label span{color:var(--arc)}
+#urlInput{
+  width:100%;padding:10px 14px;
+  background:#0a0a0a;border:1px solid #222;border-bottom:2px solid var(--red);
+  color:#ccc;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:1px;
+  outline:none;transition:border-color .3s;
+}
+#urlInput:focus{border-color:var(--arc);border-bottom-color:var(--arc)}
+#urlInput::placeholder{color:#2a2a2a}
+.or-row{display:flex;align-items:center;gap:10px;width:100%;max-width:360px}
+.or-line{flex:1;height:1px;background:#151515}
+.or-txt{font-size:8px;color:#222;font-family:'Share Tech Mono',monospace;letter-spacing:2px}
+/* FILE DROP */
+.file-drop{width:100%;max-width:360px;border:1px dashed #1e1e1e;padding:16px 18px;text-align:center;cursor:pointer;transition:border-color .3s;font-size:8px;font-family:'Share Tech Mono',monospace;color:#2e2e2e;letter-spacing:1px;position:relative;margin-bottom:16px}
+.file-drop:hover,.file-drop.drag{border-color:var(--red);color:var(--red)}
+.file-drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.file-drop span{pointer-events:none;display:block;line-height:2}
+
+.btn{padding:11px 30px;background:transparent;border:1px solid;font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;letter-spacing:3px;cursor:pointer;transition:all .3s;width:100%;max-width:360px}
 .btn-red{border-color:var(--red);color:var(--red)}
-.btn-red:hover,.btn-red:active{color:#fff;background:var(--red);box-shadow:0 0 28px var(--glow-red)}
-.btn:active{transform:scale(.96)}
+.btn-red:hover,.btn-red:active{color:#fff;background:var(--red);box-shadow:0 0 24px var(--glow-red)}
+.btn:active{transform:scale(.97)}
+.hint-links{font-size:7px;font-family:'Share Tech Mono',monospace;color:#252525;text-align:center;line-height:2.2;margin-top:10px;max-width:360px}
+.hint-links a{color:#333;text-decoration:none}
+.hint-links a:hover{color:var(--arc)}
 
 /* LOADING */
-#loading{background:#000;gap:18px}
+#loading{background:#000;gap:14px}
 .load-label{font-size:11px;letter-spacing:4px;color:var(--gold)}
-.load-file{font-size:9px;font-family:'Share Tech Mono',monospace;color:#333;letter-spacing:2px}
-.load-file span{color:var(--arc)}
-#loadBar{width:260px;height:2px;background:#111}
+.load-src{font-size:8px;font-family:'Share Tech Mono',monospace;color:#2a2a2a;max-width:320px;text-align:center;word-break:break-all;line-height:1.6}
+.load-src span{color:#444}
+#loadBar{width:280px;height:2px;background:#111}
 #loadFill{height:100%;background:linear-gradient(90deg,var(--red),var(--gold));width:0%;transition:width .25s}
 #loadMsg{font-size:9px;font-family:'Share Tech Mono',monospace;color:#444;letter-spacing:2px;text-align:center}
-#pieceInfo{font-size:8px;font-family:'Share Tech Mono',monospace;color:#2a2a2a;letter-spacing:1px;line-height:2.1;text-align:center}
+#pieceInfo{font-size:8px;font-family:'Share Tech Mono',monospace;color:#2a2a2a;letter-spacing:1px;line-height:2.1;text-align:center;max-width:340px}
 #pieceInfo span{color:var(--arc)}
-#loadErr{font-size:9px;font-family:'Share Tech Mono',monospace;color:var(--red);letter-spacing:1px;text-align:center;line-height:2;display:none}
+#loadErr{font-size:8px;font-family:'Share Tech Mono',monospace;color:var(--red);letter-spacing:1px;text-align:center;line-height:2.2;display:none;max-width:320px}
 
 /* HUD */
 #hud{position:fixed;inset:0;z-index:50;pointer-events:none;display:none}
-.hc{position:absolute;width:32px;height:32px;border-color:var(--red);border-style:solid;opacity:.35}
+.hc{position:absolute;width:30px;height:30px;border-color:var(--red);border-style:solid;opacity:.3}
 .hc.tl{top:12px;left:12px;border-width:2px 0 0 2px}
 .hc.tr{top:12px;right:12px;border-width:2px 2px 0 0}
 .hc.bl{bottom:12px;left:12px;border-width:0 0 2px 2px}
 .hc.br{bottom:12px;right:12px;border-width:0 2px 2px 0}
 .scan-ln{position:absolute;top:0;left:0;width:100%;height:2px;background:linear-gradient(90deg,transparent,var(--red),transparent);opacity:.1;animation:scn 5s linear infinite}
 @keyframes scn{from{top:0}to{top:100%}}
-#hud-label{position:absolute;top:16px;left:50%;transform:translateX(-50%);font-size:7px;letter-spacing:6px;color:#1e1e1e;font-family:'Share Tech Mono',monospace}
+#hud-label{position:absolute;top:16px;left:50%;transform:translateX(-50%);font-size:7px;letter-spacing:6px;color:#1a1a1a;font-family:'Share Tech Mono',monospace}
 #hud-dot{position:absolute;top:20px;right:16px;width:6px;height:6px;border-radius:50%;background:var(--arc);box-shadow:0 0 7px var(--glow-arc);animation:dblink 1.2s ease-in-out infinite}
 @keyframes dblink{0%,100%{opacity:1}50%{opacity:.1}}
 #status{position:absolute;bottom:36px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.72);border:1px solid rgba(196,30,30,.3);border-top:2px solid var(--red);padding:8px 20px;font-size:9px;letter-spacing:2px;color:var(--arc);text-shadow:0 0 7px var(--glow-arc);white-space:nowrap;font-family:'Share Tech Mono',monospace;pointer-events:none;animation:pb 2.5s infinite}
@@ -59,7 +84,6 @@ h1.logo{font-size:30px;font-weight:900;letter-spacing:3px;background:linear-grad
 #fallback h2{color:var(--red);font-size:15px;letter-spacing:2px;margin-bottom:14px}
 #fallback p{color:#3a3a3a;font-size:10px;font-family:'Share Tech Mono',monospace;line-height:2.2;text-align:center}
 #fallback .hi{color:var(--arc)}
-
 canvas{position:fixed!important;inset:0!important;z-index:1}
 </style>
 </head>
@@ -68,13 +92,13 @@ canvas{position:fixed!important;inset:0!important;z-index:1}
 <!-- BOOT -->
 <div id="boot" class="screen">
   <div class="arc-reactor">
-    <svg viewBox="0 0 130 130" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="65" cy="65" r="60" stroke="#111" stroke-width="1.5"/>
-      <circle cx="65" cy="65" r="60" stroke="url(#ag)" stroke-width="1.5" stroke-dasharray="170 207" stroke-linecap="round"/>
-      <circle cx="65" cy="65" r="48" stroke="#0a0a0a" stroke-width="1"/>
-      <circle cx="65" cy="65" r="48" stroke="#c41e1e" stroke-width="1" stroke-dasharray="55 247" stroke-linecap="round" opacity=".45"/>
+    <svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="60" cy="60" r="55" stroke="#111" stroke-width="1.5"/>
+      <circle cx="60" cy="60" r="55" stroke="url(#ag)" stroke-width="1.5" stroke-dasharray="155 191" stroke-linecap="round"/>
+      <circle cx="60" cy="60" r="44" stroke="#0a0a0a" stroke-width="1"/>
+      <circle cx="60" cy="60" r="44" stroke="#c41e1e" stroke-width="1" stroke-dasharray="50 227" stroke-linecap="round" opacity=".4"/>
       <defs>
-        <linearGradient id="ag" x1="0" y1="0" x2="130" y2="130">
+        <linearGradient id="ag" x1="0" y1="0" x2="120" y2="120">
           <stop offset="0%" stop-color="#4dd9ff"/>
           <stop offset="100%" stop-color="#0055ff"/>
         </linearGradient>
@@ -84,24 +108,42 @@ canvas{position:fixed!important;inset:0!important;z-index:1}
   </div>
   <div class="brand">STARK INDUSTRIES</div>
   <h1 class="logo">IRON MAN AR</h1>
-  <div class="sub">MARK L · NANO GAUNTLET · v8.1</div>
+  <div class="sub">MARK L · NANO GAUNTLET · v8.2</div>
+
+  <!-- URL input -->
+  <div class="url-box">
+    <div class="url-label">PASTE <span>GOOGLE DRIVE</span> OR <span>DROPBOX</span> LINK TO .GLB</div>
+    <input id="urlInput" type="url" placeholder="https://drive.google.com/file/d/..." spellcheck="false" autocomplete="off"/>
+  </div>
+
+  <!-- OR file -->
+  <div class="or-row">
+    <div class="or-line"></div><div class="or-txt">OR LOAD LOCAL FILE</div><div class="or-line"></div>
+  </div>
+  <div class="file-drop" id="dropZone" style="margin-top:10px">
+    <input type="file" id="fileInput" accept=".glb,.gltf">
+    <span>DROP .GLB HERE / TAP TO BROWSE</span>
+  </div>
+
   <button class="btn btn-red" id="bootBtn">⚡ INITIALIZE SYSTEM</button>
+
+  <div class="hint-links">
+    FREE MODELS: &nbsp;
+    <a href="https://sketchfab.com/3d-models/iron-man-mark-85-8da781aa74024366844b36444c650d69" target="_blank">Sketchfab Mk85</a> &nbsp;·&nbsp;
+    <a href="https://sketchfab.com/3d-models/ironman-hand-d95dca0a4fbe411aa3b083d66344d63c" target="_blank">Ironman Hand</a><br>
+    UPLOAD TO GOOGLE DRIVE → SHARE → "Anyone with link" → PASTE ABOVE
+  </div>
 </div>
 
 <!-- LOADING -->
 <div id="loading" class="screen hidden">
   <div class="load-label">LOADING NANO-SUIT</div>
-  <div class="load-file">FILE: <span>ironman.glb</span></div>
+  <div class="load-src" id="loadSrc"></div>
   <div id="loadBar"><div id="loadFill"></div></div>
-  <div id="loadMsg">FETCHING MODEL...</div>
+  <div id="loadMsg">INITIALIZING...</div>
   <div id="pieceInfo"></div>
-  <div id="loadErr">
-    ⚠ COULD NOT LOAD ironman.glb<br>
-    Make sure ironman.glb is in the<br>
-    SAME FOLDER as this HTML file<br>
-    and you are serving over HTTP/HTTPS
-  </div>
-  <button class="btn btn-red hidden" id="startArBtn" style="margin-top:8px">⚡ LAUNCH AR</button>
+  <div id="loadErr"></div>
+  <button class="btn btn-red hidden" id="startArBtn" style="margin-top:12px;display:none">⚡ LAUNCH AR</button>
 </div>
 
 <!-- HUD -->
@@ -120,7 +162,7 @@ canvas{position:fixed!important;inset:0!important;z-index:1}
   <p>WebXR requires:<br>
   <span class="hi">Android Chrome + ARCore</span><br>
   <span class="hi">iOS 16+ Safari + ARKit</span><br><br>
-  Serve this file over HTTPS on mobile.</p>
+  Open on a supported mobile device.</p>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
@@ -131,17 +173,14 @@ canvas{position:fixed!important;inset:0!important;z-index:1}
 'use strict';
 
 /* ── STATE ── */
-const ST={BOOT:'boot',LOAD:'load',SCAN:'scan',RESTING:'rest',LIFTING:'lift',HOVERING:'hover',FLYING:'fly',ATTACHED:'att'};
+const ST={BOOT:'boot',LOAD:'load',SCAN:'scan',RESTING:'rest',LIFTING:'lift',FLYING:'fly',ATTACHED:'att'};
 let appState=ST.BOOT;
 
-/* ── THREE GLOBALS ── */
-let scene,camera,renderer,clock;
-let reticle,arcLight,rimLight;
+/* ── THREE ── */
+let scene,camera,renderer,clock,reticle,arcLight,rimLight;
 let xrSession=null,hitSrc=null,hitReq=false,refSpace=null;
 let handPos=new THREE.Vector3(0,0,-0.4);
-let masterGroup=null;
-let pieces=[];
-let floorY=0;
+let masterGroup=null, pieces=[], floorY=0;
 const HOVER_H=1.05;
 
 /* ── PARTICLES ── */
@@ -149,23 +188,115 @@ const PC=120;
 let pPos,pVel,pLife,pOn,pMesh;
 
 const $=id=>document.getElementById(id);
-function setStatus(t){$('status').textContent=t}
+function ss(t){$('status').textContent=t}
+function showScreen(id){
+  ['boot','loading','fallback'].forEach(s=>{const e=$(s);if(e)e.classList.add('hidden')});
+  if(id!=='__none__'){const e=$(id);if(e)e.classList.remove('hidden')}
+}
 
-/* ────────────────────────────────────────
-   BOOT → LOAD ironman.glb automatically
-──────────────────────────────────────── */
+/* ─────────────────────────────────────
+   URL CONVERSION HELPERS
+───────────────────────────────────── */
+function toDirectURL(raw){
+  raw=raw.trim();
+
+  // Google Drive share link → direct download
+  // https://drive.google.com/file/d/FILE_ID/view?usp=sharing
+  const gdMatch=raw.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if(gdMatch){
+    // Use the CORS proxy approach via a public proxy for Google Drive
+    const fileId=gdMatch[1];
+    // direct download link (works for files shared "anyone with link")
+    return `https://drive.google.com/uc?export=download&id=${fileId}`;
+  }
+
+  // Dropbox: change ?dl=0 → ?dl=1  or  www.dropbox → dl.dropboxusercontent
+  if(raw.includes('dropbox.com')){
+    return raw.replace('?dl=0','?dl=1').replace('?dl=0','').replace(/(&|\?)dl=0/,'$1dl=1')
+              .replace('www.dropbox.com','dl.dropboxusercontent.com');
+  }
+
+  // OneDrive embed → download
+  if(raw.includes('1drv.ms')||raw.includes('onedrive.live.com')){
+    // OneDrive direct: replace embed with download
+    return raw.replace('embed','download');
+  }
+
+  // Already a direct link
+  return raw;
+}
+
+/* ─────────────────────────────────────
+   BOOT BUTTON
+───────────────────────────────────── */
 $('bootBtn').addEventListener('click',()=>{
-  showScreen('loading');
-  appState=ST.LOAD;
-  initThree();
-  fetchAndLoadGLB();
+  const urlVal=$('urlInput').value.trim();
+  const fileEl=$('fileInput');
+
+  if(urlVal){
+    showScreen('loading');
+    initThree();
+    const direct=toDirectURL(urlVal);
+    $('loadSrc').innerHTML=`SOURCE: <span>URL</span>`;
+    fetchFromURL(direct);
+  } else if(fileEl.files && fileEl.files[0]){
+    showScreen('loading');
+    initThree();
+    $('loadSrc').innerHTML=`SOURCE: <span>${fileEl.files[0].name}</span>`;
+    readFile(fileEl.files[0]);
+  } else {
+    // Flash the input
+    $('urlInput').style.borderBottomColor='var(--gold)';
+    setTimeout(()=>$('urlInput').style.borderBottomColor='var(--red)',600);
+    $('urlInput').placeholder='← PASTE GOOGLE DRIVE LINK OR DROP A FILE';
+  }
 });
 
-function fetchAndLoadGLB(){
-  $('loadMsg').textContent='FETCHING ironman.glb...';
-  $('loadFill').style.width='10%';
+// Also allow pressing Enter in URL field
+$('urlInput').addEventListener('keydown',e=>{ if(e.key==='Enter') $('bootBtn').click(); });
 
-  fetch('./ironman.glb')
+// File drop on boot screen
+const dz=$('dropZone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag')});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+dz.addEventListener('drop',e=>{
+  e.preventDefault();dz.classList.remove('drag');
+  const f=e.dataTransfer.files[0];
+  if(f) { $('fileInput').files; showScreen('loading'); initThree(); $('loadSrc').innerHTML=`SOURCE: <span>${f.name}</span>`; readFile(f); }
+});
+$('fileInput').addEventListener('change',e=>{
+  const f=e.target.files[0];
+  if(f){ showScreen('loading'); initThree(); $('loadSrc').innerHTML=`SOURCE: <span>${f.name}</span>`; readFile(f); }
+});
+
+/* ─────────────────────────────────────
+   FETCH FROM URL
+───────────────────────────────────── */
+function fetchFromURL(url){
+  $('loadMsg').textContent='FETCHING MODEL...';
+  $('loadFill').style.width='5%';
+
+  // For Google Drive we need to handle the redirect/virus warning
+  // Use a CORS proxy if direct fetch fails
+  attemptFetch(url)
+    .catch(()=>{
+      // Try cors-anywhere proxy as fallback
+      const proxy='https://corsproxy.io/?'+encodeURIComponent(url);
+      $('loadMsg').textContent='USING PROXY...';
+      return attemptFetch(proxy);
+    })
+    .then(buffer=>{
+      $('loadFill').style.width='70%';
+      $('loadMsg').textContent='PARSING GEOMETRY...';
+      parseModel(buffer);
+    })
+    .catch(err=>{
+      showErr('FETCH FAILED: '+err.message+'<br>Make sure sharing is set to "Anyone with link"<br>or try uploading a local file instead.');
+    });
+}
+
+function attemptFetch(url){
+  return fetch(url,{mode:'cors'})
     .then(res=>{
       if(!res.ok) throw new Error('HTTP '+res.status);
       const total=+res.headers.get('Content-Length')||0;
@@ -174,33 +305,45 @@ function fetchAndLoadGLB(){
       const chunks=[];
       function read(){
         return reader.read().then(({done,value})=>{
-          if(done){
-            const blob=new Blob(chunks);
-            return blob.arrayBuffer();
-          }
-          chunks.push(value);
-          loaded+=value.length;
-          if(total) $('loadFill').style.width=(10+loaded/total*55)+'%';
+          if(done){return new Blob(chunks).arrayBuffer()}
+          chunks.push(value);loaded+=value.length;
+          if(total) $('loadFill').style.width=(5+loaded/total*60)+'%';
           return read();
         });
       }
       return read();
-    })
-    .then(buffer=>{
-      $('loadFill').style.width='70%';
-      $('loadMsg').textContent='PARSING GEOMETRY...';
-      parseModel(buffer);
-    })
-    .catch(err=>{
-      console.error(err);
-      $('loadErr').style.display='block';
-      $('loadMsg').textContent='';
     });
 }
 
-/* ── THREE INIT ── */
+/* ─────────────────────────────────────
+   READ LOCAL FILE
+───────────────────────────────────── */
+function readFile(file){
+  $('loadMsg').textContent='READING FILE...';
+  $('loadFill').style.width='10%';
+  const r=new FileReader();
+  r.onprogress=e=>{if(e.lengthComputable)$('loadFill').style.width=(10+e.loaded/e.total*55)+'%'};
+  r.onload=e=>{
+    $('loadFill').style.width='70%';
+    $('loadMsg').textContent='PARSING GEOMETRY...';
+    parseModel(e.target.result);
+  };
+  r.onerror=()=>showErr('FILE READ ERROR');
+  r.readAsArrayBuffer(file);
+}
+
+function showErr(msg){
+  $('loadErr').innerHTML=msg;
+  $('loadErr').style.display='block';
+  $('loadMsg').textContent='';
+  $('loadFill').style.background='var(--red)';
+}
+
+/* ─────────────────────────────────────
+   THREE.JS INIT
+───────────────────────────────────── */
 function initThree(){
-  if(clock) return; // already init
+  if(clock) return;
   clock=new THREE.Clock();
   scene=new THREE.Scene();
   camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,0.01,40);
@@ -219,20 +362,15 @@ function initThree(){
   scene.add(new THREE.AmbientLight(0xfff0e0,.8));
   const sun=new THREE.DirectionalLight(0xfffaf0,2.8);
   sun.position.set(3,6,4); sun.castShadow=true;
-  sun.shadow.mapSize.set(2048,2048);
-  scene.add(sun);
-  const fill=new THREE.DirectionalLight(0x8888ff,.5);
-  fill.position.set(-3,2,-3); scene.add(fill);
+  sun.shadow.mapSize.set(2048,2048); scene.add(sun);
+  scene.add(Object.assign(new THREE.DirectionalLight(0x8888ff,.5),{position:{x:-3,y:2,z:-3}}));
 
   arcLight=new THREE.PointLight(0x4dd9ff,6,1.5); arcLight.visible=false; scene.add(arcLight);
   rimLight=new THREE.PointLight(0xff3300,3,.8);  rimLight.visible=false; scene.add(rimLight);
 
-  buildReticle();
-  buildParticles();
-
+  buildReticle(); buildParticles();
   window.addEventListener('resize',()=>{
-    camera.aspect=innerWidth/innerHeight;
-    camera.updateProjectionMatrix();
+    camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
     renderer.setSize(innerWidth,innerHeight);
   });
 }
@@ -257,38 +395,29 @@ function buildReticle(){
 /* ── PARTICLES ── */
 function buildParticles(){
   const geo=new THREE.BufferGeometry();
-  pPos=new Float32Array(PC*3).fill(9999);
-  pVel=new Float32Array(PC*3);
-  pLife=new Float32Array(PC).fill(0);
-  pOn=new Uint8Array(PC).fill(0);
+  pPos=new Float32Array(PC*3).fill(9999); pVel=new Float32Array(PC*3);
+  pLife=new Float32Array(PC).fill(0); pOn=new Uint8Array(PC).fill(0);
   geo.setAttribute('position',new THREE.BufferAttribute(pPos,3));
-  pMesh=new THREE.Points(geo,new THREE.PointsMaterial({
-    color:0x66eeff,size:.009,transparent:true,opacity:.75,
-    blending:THREE.AdditiveBlending,depthWrite:false
-  }));
+  pMesh=new THREE.Points(geo,new THREE.PointsMaterial({color:0x66eeff,size:.009,transparent:true,opacity:.75,blending:THREE.AdditiveBlending,depthWrite:false}));
   scene.add(pMesh);
 }
-function burst(org,n){for(let i=0;i<n;i++)spawnOne(org)}
-function spawnOne(org){
+function burst(org,n){for(let i=0;i<n;i++)_sp(org)}
+function _sp(org){
   for(let i=0;i<PC;i++){
     if(pOn[i]) continue;
     const x=i*3,y=x+1,z=x+2;
     pPos[x]=org.x; pPos[y]=org.y; pPos[z]=org.z;
-    pVel[x]=(Math.random()-.5)*.07;
-    pVel[y]=Math.random()*.1+.015;
-    pVel[z]=(Math.random()-.5)*.07;
-    pLife[i]=.6+Math.random()*.8;
-    pOn[i]=1; return;
+    pVel[x]=(Math.random()-.5)*.07; pVel[y]=Math.random()*.1+.015; pVel[z]=(Math.random()-.5)*.07;
+    pLife[i]=.6+Math.random()*.8; pOn[i]=1; return;
   }
 }
-function tickParticles(dt){
+function tickP(dt){
   let d=false;
   for(let i=0;i<PC;i++){
     if(!pOn[i]) continue; d=true;
     const x=i*3,y=x+1,z=x+2;
     pPos[x]+=pVel[x]; pPos[y]+=pVel[y]; pPos[z]+=pVel[z];
-    pVel[y]-=dt*.28;
-    pLife[i]-=dt;
+    pVel[y]-=dt*.28; pLife[i]-=dt;
     if(pLife[i]<=0||pPos[y]<floorY){pPos[x]=pPos[y]=pPos[z]=9999; pOn[i]=0;}
   }
   if(d) pMesh.geometry.attributes.position.needsUpdate=true;
@@ -298,38 +427,29 @@ function tickParticles(dt){
 function parseModel(buffer){
   const draco=new THREE.DRACOLoader();
   draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/');
-  const loader=new THREE.GLTFLoader();
-  loader.setDRACOLoader(draco);
-
+  const loader=new THREE.GLTFLoader(); loader.setDRACOLoader(draco);
   loader.parse(buffer,'',gltf=>{
     $('loadFill').style.width='90%';
     $('loadMsg').textContent='SEPARATING SUIT PIECES...';
     buildPieces(gltf);
     $('loadFill').style.width='100%';
     $('loadMsg').textContent='NANO-SUIT READY ✓';
-    const btn=$('startArBtn');
-    btn.classList.remove('hidden'); btn.style.display='block';
-  },err=>{
-    console.error(err);
-    $('loadErr').style.display='block';
-    $('loadMsg').textContent='PARSE ERROR';
-  });
+    const b=$('startArBtn'); b.style.display='block'; b.classList.remove('hidden');
+  },err=>{ showErr('PARSE ERROR: '+err.message); console.error(err); });
 }
 
-/* ── BUILD SEPARATE PIECES ── */
+/* ── BUILD PIECES ── */
 function buildPieces(gltf){
   if(masterGroup){scene.remove(masterGroup); pieces=[];}
   masterGroup=new THREE.Group(); masterGroup.visible=false; scene.add(masterGroup);
 
-  const rawMeshes=[];
-  gltf.scene.traverse(o=>{
-    if(o.isMesh){ o.castShadow=true; rawMeshes.push(o); }
-  });
-  if(!rawMeshes.length){ $('loadMsg').textContent='NO MESHES IN MODEL'; return; }
+  const raw=[];
+  gltf.scene.traverse(o=>{ if(o.isMesh){o.castShadow=true; raw.push(o);} });
+  if(!raw.length){showErr('NO MESHES FOUND IN MODEL'); return;}
 
-  /* ── Auto-scale to 22 cm ── */
+  // Scale to 22cm
   const tmpG=new THREE.Group();
-  rawMeshes.forEach(m=>{
+  raw.forEach(m=>{
     const wp=new THREE.Vector3(),wq=new THREE.Quaternion(),ws=new THREE.Vector3();
     m.getWorldPosition(wp); m.getWorldQuaternion(wq); m.getWorldScale(ws);
     m.position.copy(wp); m.quaternion.copy(wq); m.scale.copy(ws);
@@ -337,300 +457,214 @@ function buildPieces(gltf){
   });
   const box=new THREE.Box3().setFromObject(tmpG);
   const sz=box.getSize(new THREE.Vector3());
-  const mx=Math.max(sz.x,sz.y,sz.z)||1;
-  const SC=0.22/mx;
+  const SC=0.22/Math.max(sz.x,sz.y,sz.z,0.001);
   const ctr=box.getCenter(new THREE.Vector3());
 
-  /* ── Bucket by name keywords ── */
+  // Name-based bucketing
   const KW={
-    thumb:  ['thumb','pollex'],
-    index:  ['index','pointer','fore','first'],
-    middle: ['middle','mid','second'],
-    ring:   ['ring','third'],
-    pinky:  ['pinky','little','pink','fourth','fifth'],
-    palm:   ['palm','hand','back','wrist','gaunt','repulsor','plate','body','glove','base','main','knuckle','dorsal','armor','iron','mark']
+    thumb:['thumb','pollex'],
+    index:['index','pointer','fore','first'],
+    middle:['middle','mid','second'],
+    ring:['ring','third'],
+    pinky:['pinky','little','pink','fourth','fifth'],
+    palm:['palm','hand','back','wrist','gaunt','repulsor','plate','body','glove','base','main','knuckle','dorsal','armor','iron','mark','suit']
   };
   const fingerAny=['finger','digit','phalanx','phal','nail','tip','prox','dist','inter'];
-  const buckets={thumb:[],index:[],middle:[],ring:[],pinky:[],palm:[]};
+  const B={thumb:[],index:[],middle:[],ring:[],pinky:[],palm:[]};
 
-  rawMeshes.forEach(m=>{
-    const n=(m.name||'').toLowerCase();
-    let placed=false;
+  raw.forEach(m=>{
+    const n=(m.name||'').toLowerCase(); let ok=false;
     for(const[k,kws] of Object.entries(KW)){
-      if(kws.some(w=>n.includes(w))){ buckets[k].push(m); placed=true; break; }
+      if(kws.some(w=>n.includes(w))){B[k].push(m);ok=true;break;}
     }
-    if(!placed){
-      if(fingerAny.some(w=>n.includes(w))) buckets.middle.push(m);
-      else buckets.palm.push(m);
-    }
+    if(!ok){ if(fingerAny.some(w=>n.includes(w))) B.middle.push(m); else B.palm.push(m); }
   });
 
-  /* ── Fallback: positional X-axis split if everything went to palm ── */
-  if(buckets.palm.length===rawMeshes.length && rawMeshes.length>2){
-    const sorted=[...rawMeshes].sort((a,b)=>{
-      return new THREE.Box3().setFromObject(a).getCenter(new THREE.Vector3()).x -
-             new THREE.Box3().setFromObject(b).getCenter(new THREE.Vector3()).x;
-    });
-    const chunk=Math.ceil(sorted.length/6);
-    ['pinky','ring','middle','index','thumb','palm'].forEach((k,i)=>{
-      buckets[k]=sorted.slice(i*chunk,(i+1)*chunk)||[];
-    });
+  // Positional fallback
+  if(B.palm.length===raw.length && raw.length>2){
+    const sx=[...raw].sort((a,b)=>new THREE.Box3().setFromObject(a).getCenter(new THREE.Vector3()).x-new THREE.Box3().setFromObject(b).getCenter(new THREE.Vector3()).x);
+    const c=Math.ceil(sx.length/6);
+    ['pinky','ring','middle','index','thumb','palm'].forEach((k,i)=>{B[k]=sx.slice(i*c,(i+1)*c)||[];});
   }
 
-  const LABELS={thumb:'THUMB',index:'INDEX FINGER',middle:'MIDDLE FINGER',ring:'RING FINGER',pinky:'PINKY FINGER',palm:'PALM / WRIST'};
-  let info='<span style="color:#555">SUIT COMPONENTS DETECTED:</span><br><br>';
+  const LBL={thumb:'THUMB',index:'INDEX FINGER',middle:'MIDDLE FINGER',ring:'RING FINGER',pinky:'PINKY FINGER',palm:'PALM / WRIST'};
+  let info='<span style="color:#555">SUIT COMPONENTS:</span><br><br>';
 
-  Object.entries(buckets).forEach(([key,meshList])=>{
-    if(!meshList.length) return;
-
+  Object.entries(B).forEach(([key,ml])=>{
+    if(!ml.length) return;
     const grp=new THREE.Group();
-    meshList.forEach(m=>{
-      m.position.sub(ctr).multiplyScalar(SC);
-      m.scale.multiplyScalar(SC);
-      grp.add(m);
-    });
-
-    /* Anchor group at its bounding center */
-    const bx=new THREE.Box3().setFromObject(grp);
-    const bc=bx.getCenter(new THREE.Vector3());
-    grp.position.copy(bc);
-    meshList.forEach(m=>m.position.sub(bc));
-
+    ml.forEach(m=>{m.position.sub(ctr).multiplyScalar(SC); m.scale.multiplyScalar(SC); grp.add(m);});
+    const bx=new THREE.Box3().setFromObject(grp), bc=bx.getCenter(new THREE.Vector3());
+    grp.position.copy(bc); ml.forEach(m=>m.position.sub(bc));
     masterGroup.add(grp);
-    pieces.push({
-      group:grp, key, label:LABELS[key]||key,
-      liftT:0, flyT:0, pieceState:'ground',
-      hoverY:0, hoverPhase:Math.random()*Math.PI*2
-    });
-
-    info+=`<span>◈ ${LABELS[key]||key}</span> — ${meshList.length} mesh${meshList.length>1?'es':''}<br>`;
+    pieces.push({group:grp,key,label:LBL[key]||key,liftT:0,flyT:0,pieceState:'ground',hoverY:0,hoverPhase:Math.random()*Math.PI*2});
+    info+=`<span>◈ ${LBL[key]||key}</span> — ${ml.length} mesh${ml.length>1?'es':''}<br>`;
   });
-
   $('pieceInfo').innerHTML=info;
 }
 
 /* ── START AR ── */
-$('startArBtn').addEventListener('click', startAR);
-
+$('startArBtn').addEventListener('click',startAR);
 async function startAR(){
-  if(!navigator.xr){ showScreen('fallback'); return; }
+  if(!navigator.xr){showScreen('fallback');return;}
   const ok=await navigator.xr.isSessionSupported('immersive-ar').catch(()=>false);
-  if(!ok){ showScreen('fallback'); return; }
-
+  if(!ok){showScreen('fallback');return;}
   try{
     xrSession=await navigator.xr.requestSession('immersive-ar',{
       requiredFeatures:['hit-test'],
       optionalFeatures:['hand-tracking','dom-overlay'],
       domOverlay:{root:$('hud')}
     });
-  }catch(e){ alert('AR error: '+e.message); return; }
-
-  showScreen('__none__');
-  $('hud').style.display='block';
+  }catch(e){alert('AR error: '+e.message);return;}
+  showScreen('__none__'); $('hud').style.display='block';
   renderer.xr.setReferenceSpaceType('local');
   await renderer.xr.setSession(xrSession);
   xrSession.addEventListener('end',onEnd);
   xrSession.addEventListener('select',onTap);
-  appState=ST.SCAN;
-  setStatus('▶ POINT AT FLOOR — TAP TO DEPLOY');
+  appState=ST.SCAN; ss('▶ POINT AT FLOOR — TAP TO DEPLOY');
   renderer.setAnimationLoop(onFrame);
 }
-
 function onEnd(){
-  xrSession=null; hitSrc=null; hitReq=false; appState=ST.BOOT;
-  $('hud').style.display='none';
-  showScreen('boot');
+  xrSession=null;hitSrc=null;hitReq=false;appState=ST.BOOT;
+  $('hud').style.display='none'; showScreen('boot');
   renderer.setAnimationLoop(null);
   if(masterGroup) masterGroup.visible=false;
   if(reticle) reticle.visible=false;
 }
+function onTap(){if(appState===ST.SCAN&&reticle.visible)placeGauntlet();}
 
-function onTap(){ if(appState===ST.SCAN && reticle.visible) placeGauntlet(); }
-
-/* ── AR FRAME LOOP ── */
+/* ── AR LOOP ── */
 function onFrame(ts,frame){
   if(!frame) return;
   const dt=Math.min(clock.getDelta(),.1);
   const ses=renderer.xr.getSession();
 
-  /* Hit-test source setup */
   if(!hitReq){
-    ses.requestReferenceSpace('viewer').then(vs=>{
-      ses.requestHitTestSource({space:vs}).then(s=>{hitSrc=s;}).catch(()=>{});
-    }).catch(()=>{});
-    ses.addEventListener('end',()=>{hitReq=false; hitSrc=null;});
+    ses.requestReferenceSpace('viewer').then(vs=>ses.requestHitTestSource({space:vs}).then(s=>{hitSrc=s;}).catch(()=>{})).catch(()=>{});
+    ses.addEventListener('end',()=>{hitReq=false;hitSrc=null;});
     hitReq=true;
   }
   refSpace=renderer.xr.getReferenceSpace();
 
-  /* Hand tracking */
   let ah=null;
-  for(const s of ses.inputSources){ if(s.hand){ah={hand:s.hand}; break;} }
+  for(const s of ses.inputSources){if(s.hand){ah=s.hand;break;}}
 
-  if(ah && refSpace){
+  if(ah&&refSpace){
     try{
-      const wj=ah.hand.get('wrist');
-      if(wj){
-        const wp=frame.getJointPose(wj,refSpace);
-        if(wp) handPos.set(wp.transform.position.x,wp.transform.position.y,wp.transform.position.z);
-      }
+      const wj=ah.get('wrist');
+      if(wj){const wp=frame.getJointPose(wj,refSpace);if(wp)handPos.set(wp.transform.position.x,wp.transform.position.y,wp.transform.position.z);}
     }catch(_){}
   } else {
-    /* No hand tracking → project 60cm forward from camera */
     const d=new THREE.Vector3(0,-.06,-.62).applyQuaternion(camera.quaternion);
     handPos.copy(camera.position).add(d);
   }
 
-  /* Reticle hit test */
-  if(hitSrc && appState===ST.SCAN){
+  if(hitSrc&&appState===ST.SCAN){
     const hits=frame.getHitTestResults(hitSrc);
-    if(hits.length){
-      const pose=hits[0].getPose(refSpace);
-      if(pose){ reticle.visible=true; reticle.matrix.fromArray(pose.transform.matrix); setStatus('▶ SURFACE LOCKED — TAP TO DEPLOY SUIT'); }
-    } else { reticle.visible=false; setStatus('▶ SCANNING FOR SURFACE...'); }
+    if(hits.length){const pose=hits[0].getPose(refSpace);if(pose){reticle.visible=true;reticle.matrix.fromArray(pose.transform.matrix);ss('▶ SURFACE LOCKED — TAP TO DEPLOY');}}
+    else{reticle.visible=false;ss('▶ SCANNING FOR SURFACE...');}
   }
 
-  /* Open-hand detection → trigger lift */
-  if(appState===ST.RESTING && ah && refSpace){
+  if(appState===ST.RESTING&&ah&&refSpace){
     try{
       const tips=['index-finger-tip','middle-finger-tip','ring-finger-tip','pinky-finger-tip'];
       let sp=0,n=0;
       for(const tn of tips){
-        const j=ah.hand.get(tn); if(!j) continue;
-        const p=frame.getJointPose(j,refSpace); if(!p) continue;
-        sp+=new THREE.Vector3(p.transform.position.x,p.transform.position.y,p.transform.position.z).distanceTo(handPos);
-        n++;
+        const j=ah.get(tn);if(!j)continue;
+        const p=frame.getJointPose(j,refSpace);if(!p)continue;
+        sp+=new THREE.Vector3(p.transform.position.x,p.transform.position.y,p.transform.position.z).distanceTo(handPos);n++;
       }
-      if(n>0 && sp/n>.062) startLifting();
+      if(n>0&&sp/n>.062) startLifting();
     }catch(_){}
   }
 
-  updatePieces(dt);
-  tickParticles(dt);
-  if(masterGroup && arcLight) arcLight.position.copy(masterGroup.position);
+  updatePieces(dt); tickP(dt);
+  if(masterGroup&&arcLight) arcLight.position.copy(masterGroup.position);
   rimLight.position.copy(handPos);
   renderer.render(scene,camera);
 }
 
-/* ── PLACE GAUNTLET ── */
+/* ── PLACE ── */
 function placeGauntlet(){
-  const p=new THREE.Vector3();
-  p.setFromMatrixPosition(reticle.matrix);
-  floorY=p.y;
-  masterGroup.position.copy(p);
-  masterGroup.visible=true;
-  reticle.visible=false;
-  arcLight.visible=true; rimLight.visible=true;
-
-  const spread=.09;
+  const p=new THREE.Vector3(); p.setFromMatrixPosition(reticle.matrix);
+  floorY=p.y; masterGroup.position.copy(p); masterGroup.visible=true;
+  reticle.visible=false; arcLight.visible=true; rimLight.visible=true;
   pieces.forEach((pc,i)=>{
     const a=(i/pieces.length)*Math.PI*2;
-    pc.group.position.set(Math.cos(a)*spread*.5,.003,Math.sin(a)*spread*.5);
-    pc.group.rotation.set(-Math.PI/2+(Math.random()-.5)*.25, Math.random()*Math.PI*2, (Math.random()-.5)*.15);
+    pc.group.position.set(Math.cos(a)*.045,.003,Math.sin(a)*.045);
+    pc.group.rotation.set(-Math.PI/2+(Math.random()-.5)*.25,Math.random()*Math.PI*2,(Math.random()-.5)*.15);
     pc.pieceState='ground'; pc.liftT=0; pc.flyT=0;
     pc.hoverY=floorY+HOVER_H+(i*.035);
   });
-
-  appState=ST.RESTING;
-  setStatus('◈ SUIT DEPLOYED — OPEN HAND TO ACTIVATE');
-  /* Fallback auto-activate after 8s if device has no hand tracking */
-  setTimeout(()=>{ if(appState===ST.RESTING) startLifting(); },8000);
+  appState=ST.RESTING; ss('◈ SUIT DEPLOYED — OPEN HAND TO ACTIVATE');
+  setTimeout(()=>{if(appState===ST.RESTING)startLifting();},8000);
 }
 
-/* ── ACTIVATE — staggered lift ── */
+/* ── ACTIVATE ── */
 function startLifting(){
   if(appState!==ST.RESTING) return;
-  appState=ST.LIFTING;
-  setStatus('⚡ NANO-TECH ACTIVATED — ASSEMBLING');
+  appState=ST.LIFTING; ss('⚡ NANO-TECH ACTIVATED — ASSEMBLING');
   pieces.forEach((pc,i)=>{
-    setTimeout(()=>{
-      pc.pieceState='lifting'; pc.liftT=0;
-      burst(masterGroup.position.clone().add(pc.group.position),14);
-    },i*200);
+    setTimeout(()=>{pc.pieceState='lifting';pc.liftT=0;burst(masterGroup.position.clone().add(pc.group.position),14);},i*200);
   });
-  const flyAt=pieces.length*200+2400;
-  setTimeout(()=>{ if(appState===ST.LIFTING||appState===ST.HOVERING) beginFly(); },flyAt);
+  setTimeout(()=>{if(appState===ST.LIFTING||appState==='hover')beginFly();},pieces.length*200+2400);
 }
-
 function beginFly(){
-  appState=ST.FLYING;
-  setStatus('⚡ ATTACHING TO HAND...');
-  pieces.forEach((pc,i)=>{
-    setTimeout(()=>{ pc.pieceState='flying'; pc.flyT=0; },i*130);
-  });
+  appState=ST.FLYING; ss('⚡ ATTACHING TO HAND...');
+  pieces.forEach((pc,i)=>setTimeout(()=>{pc.pieceState='flying';pc.flyT=0;},i*130));
 }
 
-/* ── PER-PIECE ANIMATION ── */
+/* ── PIECE ANIMATION ── */
 function updatePieces(dt){
   if(!masterGroup) return;
   let allAtt=true;
-
   pieces.forEach((pc,idx)=>{
     const g=pc.group;
-
     if(pc.pieceState==='ground'){
-      g.rotation.z+=Math.sin(performance.now()*.001+idx)*.0004;
-      allAtt=false;
-
+      g.rotation.z+=Math.sin(performance.now()*.001+idx)*.0004; allAtt=false;
     } else if(pc.pieceState==='lifting'){
-      pc.liftT+=dt*.5;
-      const t=easeOut(Math.min(pc.liftT,1));
-      const tY=pc.hoverY-masterGroup.position.y;
-      g.position.y=THREE.MathUtils.lerp(.003,tY,t);
+      pc.liftT+=dt*.5; const t=eo(Math.min(pc.liftT,1));
+      g.position.y=THREE.MathUtils.lerp(.003,pc.hoverY-masterGroup.position.y,t);
       g.rotation.x=THREE.MathUtils.lerp(-Math.PI/2,0,t);
       g.rotation.y+=dt*2*(1-t*.65);
-      const ba=(idx/pieces.length)*Math.PI*2, tr=.065;
+      const ba=(idx/pieces.length)*Math.PI*2,tr=.065;
       g.position.x=THREE.MathUtils.lerp(g.position.x,Math.cos(ba)*tr,dt*2.5);
       g.position.z=THREE.MathUtils.lerp(g.position.z,Math.sin(ba)*tr,dt*2.5);
       if(Math.random()<.15) burst(masterGroup.position.clone().add(g.position),2);
-      if(pc.liftT>=1){ pc.pieceState='hovering'; pc.hoverPhase+=idx*.9; }
+      if(pc.liftT>=1){pc.pieceState='hovering';pc.hoverPhase+=idx*.9;}
       allAtt=false;
-
     } else if(pc.pieceState==='hovering'){
       const ph=performance.now()*.001*1.9+pc.hoverPhase;
       g.position.y=(pc.hoverY-masterGroup.position.y)+Math.sin(ph)*.024;
-      g.rotation.y+=dt*.75;
-      allAtt=false;
-
+      g.rotation.y+=dt*.75; allAtt=false;
     } else if(pc.pieceState==='flying'){
       pc.flyT+=dt*1.2;
       const tgt=handPos.clone().sub(masterGroup.position);
-      const a=(idx/pieces.length)*Math.PI*2, r=.04;
+      const a=(idx/pieces.length)*Math.PI*2,r=.04;
       tgt.x+=Math.cos(a)*r*(1-Math.min(pc.flyT,1));
       tgt.z+=Math.sin(a)*r*(1-Math.min(pc.flyT,1));
-      g.position.lerp(tgt, dt*5*(1+Math.min(pc.flyT,1)*2));
+      g.position.lerp(tgt,dt*5*(1+Math.min(pc.flyT,1)*2));
       g.rotation.y+=dt*(3.5-pc.flyT*2);
       g.rotation.x=THREE.MathUtils.lerp(g.rotation.x,0,dt*5);
       if(Math.random()<.12) burst(masterGroup.position.clone().add(g.position),1);
-      if(g.position.distanceTo(tgt)<.028||pc.flyT>=2){
-        pc.pieceState='attached'; g.position.copy(tgt);
-      }
-      allAtt=(allAtt && pc.pieceState==='attached');
-
+      if(g.position.distanceTo(tgt)<.028||pc.flyT>=2){pc.pieceState='attached';g.position.copy(tgt);}
+      allAtt=(allAtt&&pc.pieceState==='attached');
     } else if(pc.pieceState==='attached'){
       const tgt=handPos.clone().sub(masterGroup.position);
-      const a=(idx/pieces.length)*Math.PI*2, r=.038+idx*.004;
+      const a=(idx/pieces.length)*Math.PI*2,r=.038+idx*.004;
       tgt.x+=Math.cos(a)*r; tgt.z+=Math.sin(a)*r;
       g.position.lerp(tgt,.22);
       g.rotation.y+=dt*.1;
       g.rotation.x=THREE.MathUtils.lerp(g.rotation.x,0,dt*3);
     }
   });
-
-  if(appState===ST.FLYING && allAtt){
-    appState=ST.ATTACHED;
-    setStatus('✓ MARK L ONLINE — REPULSORS CHARGED');
-    setTimeout(()=>{ $('status').style.display='none'; },5000);
+  if(appState===ST.FLYING&&allAtt){
+    appState=ST.ATTACHED; ss('✓ MARK L ONLINE — REPULSORS CHARGED');
+    setTimeout(()=>{$('status').style.display='none';},5000);
   }
   if(appState===ST.ATTACHED) masterGroup.position.lerp(handPos,.2);
 }
-
-function easeOut(t){ return 1-Math.pow(1-t,3); }
-
-function showScreen(id){
-  ['boot','loading','fallback'].forEach(s=>{ const el=$(s); if(el) el.classList.add('hidden'); });
-  if(id!=='__none__'){ const el=$(id); if(el) el.classList.remove('hidden'); }
-}
+function eo(t){return 1-Math.pow(1-t,3);}
 </script>
 </body>
 </html>
