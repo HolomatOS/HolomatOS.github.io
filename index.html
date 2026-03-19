@@ -355,8 +355,10 @@ function initThree(){
   scene.add(new THREE.AmbientLight(0x002211,.8));
   const key=new THREE.DirectionalLight(0x00ff88,2.5);
   key.position.set(2,3,2); key.castShadow=true; scene.add(key);
-  scene.add(Object.assign(new THREE.DirectionalLight(0x0044ff,1),{position:{x:-2,y:1,z:1}}));
-  scene.add(Object.assign(new THREE.DirectionalLight(0xffffff,.5),{position:{x:0,y:-2,z:2}}));
+  const fill=new THREE.DirectionalLight(0x0044ff,1);
+  fill.position.set(-2,1,1); scene.add(fill);
+  const bot=new THREE.DirectionalLight(0xffffff,.5);
+  bot.position.set(0,-2,2); scene.add(bot);
 
   // Orbs
   spawnOrbs();
