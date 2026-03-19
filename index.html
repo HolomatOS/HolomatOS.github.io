@@ -3,148 +3,163 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>TELEKINESIS</title>
+<title>AIR DRAW AR</title>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{
-  --grn:#00ff88;--grn2:rgba(0,255,136,.15);
-  --red:#ff2244;--gold:#ffcc00;--dark:#000;
-  --ggrn:rgba(0,255,136,.8);
-}
-body{background:#000;overflow:hidden;font-family:'Share Tech Mono',monospace;touch-action:none}
+body{background:#000;overflow:hidden;touch-action:none;font-family:'Share Tech Mono',monospace}
 
-/* Video feed */
+/* Camera */
 #vid{
   position:fixed;inset:0;width:100%;height:100%;
   object-fit:cover;z-index:0;
-  transform:scaleX(-1); /* mirror selfie cam */
+  transform:scaleX(-1);
 }
 
-/* 2D joint overlay canvas (green dots) */
+/* Joint overlay */
 #dotCanvas{
   position:fixed;inset:0;width:100%;height:100%;
   z-index:2;pointer-events:none;
   transform:scaleX(-1);
 }
 
-/* Three.js canvas */
+/* Three canvas */
 #threeCanvas{
   position:fixed;inset:0;width:100%;height:100%;
   z-index:3;pointer-events:none;
 }
 
-/* UI */
+/* SCREENS */
 .screen{
   position:fixed;inset:0;z-index:20;
   display:flex;flex-direction:column;
   align-items:center;justify-content:center;
-  padding:24px;gap:16px;text-align:center;
+  gap:14px;padding:28px;text-align:center;
 }
 .screen.hidden{display:none!important}
 
 /* BOOT */
-#boot{background:radial-gradient(ellipse at 50% 50%,#050f05 0%,#000 70%)}
-.tk-logo{
-  font-family:'Bebas Neue',sans-serif;
-  font-size:64px;letter-spacing:8px;
-  background:linear-gradient(180deg,#00ff88 0%,#00aa55 60%,#003322 100%);
+#boot{background:radial-gradient(ellipse at 50% 45%,#050510 0%,#000 70%)}
+.logo{
+  font-family:'Bebas Neue',sans-serif;font-size:58px;
+  letter-spacing:6px;line-height:1;
+  background:linear-gradient(180deg,#fff 0%,#88aaff 50%,#2244cc 100%);
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-  line-height:1;margin-bottom:-8px;
-  filter:drop-shadow(0 0 20px rgba(0,255,136,.5));
-  animation:glow 3s ease-in-out infinite;
+  filter:drop-shadow(0 0 24px rgba(100,140,255,.6));
+  animation:glo 3s ease-in-out infinite;
 }
-@keyframes glow{0%,100%{filter:drop-shadow(0 0 20px rgba(0,255,136,.4))}50%{filter:drop-shadow(0 0 40px rgba(0,255,136,.9))}}
-.tk-sub{font-size:9px;letter-spacing:6px;color:#1a3326;margin-bottom:8px}
-.tk-desc{font-size:8px;color:#0a1f14;letter-spacing:1px;line-height:2.4;margin-bottom:4px}
-.tk-desc span{color:#004422}
+@keyframes glo{0%,100%{filter:drop-shadow(0 0 18px rgba(100,140,255,.5))}50%{filter:drop-shadow(0 0 40px rgba(100,140,255,1))}}
+.tagline{font-size:8px;letter-spacing:5px;color:#1a1a44;margin-bottom:4px}
+.instructions{
+  font-size:8px;color:#111133;letter-spacing:1px;line-height:2.6;
+  border:1px solid #0a0a22;padding:14px 20px;max-width:320px;
+}
+.instructions b{color:#2233aa}
 .go-btn{
-  padding:14px 44px;background:transparent;
-  border:1px solid var(--grn);color:var(--grn);
-  font-family:'Share Tech Mono',monospace;font-size:11px;
+  padding:13px 40px;background:transparent;
+  border:1px solid #3355ff;color:#4466ff;
+  font-family:'Share Tech Mono',monospace;font-size:10px;
   letter-spacing:4px;cursor:pointer;transition:all .3s;
-  box-shadow:0 0 20px rgba(0,255,136,.1);
   -webkit-appearance:none;
 }
-.go-btn:hover,.go-btn:active{
-  background:var(--grn);color:#000;
-  box-shadow:0 0 40px rgba(0,255,136,.5);
-}
+.go-btn:hover,.go-btn:active{color:#fff;background:#3355ff;box-shadow:0 0 32px rgba(50,80,255,.6)}
 .go-btn:active{transform:scale(.96)}
-#bootErr{font-size:8px;color:var(--red);letter-spacing:1px;display:none;margin-top:4px;line-height:2}
+#bootErr{font-size:8px;color:#ff3344;letter-spacing:1px;display:none;margin-top:4px;line-height:2}
 
 /* LOADING */
 #loading{background:rgba(0,0,0,.95)}
-.ld-title{font-size:12px;letter-spacing:5px;color:var(--grn)}
-.bar-wrap{width:260px;height:2px;background:#0a1f0a}
-.bar-fill{height:100%;background:linear-gradient(90deg,#003322,var(--grn));width:0%;transition:width .3s}
-.ld-msg{font-size:8px;color:#1a3326;letter-spacing:2px}
+.ld-title{font-size:11px;letter-spacing:5px;color:#4466ff}
+.bar-wrap{width:260px;height:2px;background:#0a0a1a}
+.bar-fill{height:100%;background:linear-gradient(90deg,#0011aa,#4466ff);width:0%;transition:width .3s}
+.ld-msg{font-size:8px;color:#1a1a44;letter-spacing:2px}
 
 /* HUD */
 #hud{position:fixed;inset:0;z-index:10;pointer-events:none;display:none}
 
-/* Corners */
-.hc{position:absolute;width:28px;height:28px;border-color:var(--grn);border-style:solid;opacity:.35}
-.hc.tl{top:12px;left:12px;border-width:2px 0 0 2px}
-.hc.tr{top:12px;right:12px;border-width:2px 2px 0 0}
-.hc.bl{bottom:12px;left:12px;border-width:0 0 2px 2px}
-.hc.br{bottom:12px;right:12px;border-width:0 2px 2px 0}
-
-/* Scan line */
-.sln{position:absolute;top:0;left:0;width:100%;height:1px;background:linear-gradient(90deg,transparent,var(--grn),transparent);opacity:.08;animation:sc 4s linear infinite}
-@keyframes sc{from{top:0}to{top:100%}}
+.hc{position:absolute;width:26px;height:26px;border-style:solid;opacity:.3}
+.hc.tl{top:12px;left:12px;border-color:#4466ff;border-width:2px 0 0 2px}
+.hc.tr{top:12px;right:12px;border-color:#4466ff;border-width:2px 2px 0 0}
+.hc.bl{bottom:12px;left:12px;border-color:#4466ff;border-width:0 0 2px 2px}
+.hc.br{bottom:12px;right:12px;border-color:#4466ff;border-width:0 2px 2px 0}
 
 /* Status */
 #status{
+  position:absolute;bottom:90px;left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,.82);border-top:2px solid #4466ff;
+  border:1px solid rgba(50,80,255,.25);border-top-width:2px;
+  padding:7px 16px;font-size:8px;letter-spacing:3px;
+  color:#4466ff;text-shadow:0 0 8px rgba(68,102,255,.8);
+  white-space:nowrap;animation:bp 2.5s infinite;
+}
+@keyframes bp{0%,100%{border-top-color:#4466ff}50%{border-top-color:#aabbff}}
+
+/* Brush indicator */
+#brushDot{
+  position:absolute;width:20px;height:20px;
+  border-radius:50%;pointer-events:none;
+  border:2px solid #fff;
+  box-shadow:0 0 10px currentColor;
+  transition:background .15s,transform .1s;
+  display:none;
+  z-index:12;
+}
+
+/* Color palette */
+#palette{
   position:absolute;bottom:28px;left:50%;transform:translateX(-50%);
-  background:rgba(0,0,0,.8);border:1px solid rgba(0,255,136,.2);
-  border-top:2px solid var(--grn);
-  padding:8px 18px;font-size:8px;letter-spacing:3px;
-  color:var(--grn);text-shadow:0 0 8px var(--ggrn);
-  white-space:nowrap;
+  display:flex;gap:10px;align-items:center;
+}
+.pal-swatch{
+  width:26px;height:26px;border-radius:50%;
+  border:2px solid rgba(255,255,255,.15);
+  cursor:pointer;transition:all .2s;pointer-events:auto;
+}
+.pal-swatch.active{
+  transform:scale(1.35);
+  border-color:#fff;
+  box-shadow:0 0 12px currentColor;
 }
 
-/* Grip indicator */
-#gripBar{
-  position:absolute;top:18px;left:50%;transform:translateX(-50%);
-  display:flex;gap:3px;align-items:center;opacity:0;transition:opacity .3s;
+/* Tool buttons */
+#tools{
+  position:absolute;top:16px;right:16px;
+  display:flex;flex-direction:column;gap:8px;
+  pointer-events:auto;
 }
-#gripBar span{font-size:7px;letter-spacing:3px;color:var(--grn);margin-right:6px}
-.grip-pip{width:8px;height:8px;border-radius:50%;background:#0a1f0a;border:1px solid var(--grn);transition:background .15s}
-.grip-pip.on{background:var(--grn);box-shadow:0 0 6px var(--ggrn)}
-
-/* Lock indicator */
-#lockRing{
-  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-  width:60px;height:60px;border-radius:50%;
-  border:2px solid var(--grn);opacity:0;
-  box-shadow:0 0 20px rgba(0,255,136,.4);
-  pointer-events:none;transition:opacity .2s;
+.tool-btn{
+  width:38px;height:38px;
+  background:rgba(0,0,0,.75);border:1px solid rgba(50,80,255,.3);
+  color:#4466ff;font-size:14px;cursor:pointer;
   display:flex;align-items:center;justify-content:center;
+  transition:all .2s;
 }
-#lockRing.visible{opacity:1}
-#lockRing::after{content:'LOCK';font-size:7px;letter-spacing:2px;color:var(--grn)}
+.tool-btn:active{background:#3355ff;color:#fff}
 
-/* Throw streak */
-#throwFX{
-  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-  font-family:'Bebas Neue',sans-serif;font-size:44px;letter-spacing:6px;
-  color:var(--grn);opacity:0;pointer-events:none;white-space:nowrap;
-  text-shadow:0 0 30px var(--ggrn);transition:opacity .1s;
+/* Gesture badge */
+#gesture{
+  position:absolute;top:16px;left:50%;transform:translateX(-50%);
+  font-size:8px;letter-spacing:3px;
+  padding:5px 12px;border:1px solid rgba(50,80,255,.2);
+  background:rgba(0,0,0,.7);color:rgba(68,102,255,.7);
+  transition:color .2s,border-color .2s;
+}
+#gesture.drawing{color:#00ff88;border-color:rgba(0,255,136,.4);text-shadow:0 0 8px rgba(0,255,136,.8)}
+#gesture.paused{color:#ffcc00;border-color:rgba(255,204,0,.3)}
+
+/* Stroke count */
+#strokeCount{
+  position:absolute;bottom:66px;right:16px;
+  font-size:7px;letter-spacing:2px;color:rgba(68,102,255,.5);
 }
 
-/* Score */
-#score{
-  position:absolute;top:14px;right:52px;
-  font-size:9px;letter-spacing:2px;color:var(--grn);
-  text-shadow:0 0 8px var(--ggrn);
+/* World lock indicator */
+#worldLock{
+  position:absolute;top:16px;left:16px;
+  font-size:7px;letter-spacing:2px;color:rgba(68,102,255,.4);
+  display:flex;align-items:center;gap:5px;
 }
-
-/* Dot label */
-#dotLabel{
-  position:absolute;bottom:58px;left:50%;transform:translateX(-50%);
-  font-size:7px;letter-spacing:3px;color:rgba(0,255,136,.4);
-}
+#lockDot{width:5px;height:5px;border-radius:50%;background:#4466ff;box-shadow:0 0 6px #4466ff;animation:ld 1.5s ease-in-out infinite}
+@keyframes ld{0%,100%{opacity:.3}50%{opacity:1}}
 </style>
 </head>
 <body>
@@ -155,15 +170,18 @@ body{background:#000;overflow:hidden;font-family:'Share Tech Mono',monospace;tou
 
 <!-- BOOT -->
 <div id="boot" class="screen">
-  <div class="tk-logo">TELE<br>KINESIS</div>
-  <div class="tk-sub">HAND TRACKING · PHYSICS · AR</div>
-  <div class="tk-desc">
-    <span>POINT</span> finger at an orb to target it<br>
-    <span>CLOSE FIST</span> to grab and hold it<br>
-    <span>FLICK</span> your hand to throw it<br>
-    21 landmarks · green joint overlay
+  <div class="logo">AIR<br>DRAW</div>
+  <div class="tagline">AUGMENTED REALITY · WORLD-LOCKED</div>
+  <div class="instructions">
+    <b>☝ INDEX FINGER OUT</b> → draw in the air<br>
+    <b>✋ OPEN PALM</b> → pause drawing<br>
+    <b>🤏 PINCH</b> thumb+index → next color<br>
+    <b>✊ FIST</b> → undo last stroke<br>
+    <br>
+    Drawings stay <b>fixed in space</b><br>
+    Move phone around — they don't move
   </div>
-  <button class="go-btn" id="startBtn">⚡ ACTIVATE POWER</button>
+  <button class="go-btn" id="startBtn">✦ START DRAWING</button>
   <div id="bootErr"></div>
 </div>
 
@@ -178,23 +196,27 @@ body{background:#000;overflow:hidden;font-family:'Share Tech Mono',monospace;tou
 <div id="hud">
   <div class="hc tl"></div><div class="hc tr"></div>
   <div class="hc bl"></div><div class="hc br"></div>
-  <div class="sln"></div>
-  <div id="gripBar">
-    <span>GRIP</span>
-    <div class="grip-pip" id="gp0"></div>
-    <div class="grip-pip" id="gp1"></div>
-    <div class="grip-pip" id="gp2"></div>
-    <div class="grip-pip" id="gp3"></div>
-    <div class="grip-pip" id="gp4"></div>
+
+  <div id="worldLock"><div id="lockDot"></div>WORLD LOCKED</div>
+
+  <div id="gesture">SHOW HAND</div>
+  <div id="brushDot"></div>
+
+  <div id="tools">
+    <div class="tool-btn" id="undoBtn" title="Undo">↩</div>
+    <div class="tool-btn" id="clearBtn" title="Clear all">✕</div>
   </div>
-  <div id="lockRing"></div>
-  <div id="throwFX">THROWN!</div>
-  <div id="score">THROWS: 0</div>
-  <div id="status">SHOW YOUR HAND</div>
-  <div id="dotLabel">● 21 LANDMARKS ACTIVE</div>
+
+  <div id="status">☝ POINT INDEX FINGER TO DRAW</div>
+
+  <div id="palette">
+    <!-- swatches injected by JS -->
+  </div>
+
+  <div id="strokeCount">STROKES: 0</div>
 </div>
 
-<!-- TensorFlow.js + HandPose -->
+<!-- TF.js -->
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.2.0/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection@2.0.0/dist/hand-pose-detection.js"></script>
 <!-- Three.js -->
@@ -203,9 +225,9 @@ body{background:#000;overflow:hidden;font-family:'Share Tech Mono',monospace;tou
 <script>
 'use strict';
 
-/* ══════════════════════════
+/* ════════════════════════════
    HELPERS
-══════════════════════════ */
+════════════════════════════ */
 const $=id=>document.getElementById(id);
 function ss(t){$('status').textContent=t}
 function showScreen(id){
@@ -214,129 +236,108 @@ function showScreen(id){
 }
 function setBar(p,m){$('barFill').style.width=p+'%';if(m)$('ldMsg').textContent=m}
 
-/* ══════════════════════════
-   JOINT NAMES (21 landmarks)
-   TF HandPose uses MediaPipe convention
-══════════════════════════ */
-const JOINT_NAMES=[
-  'wrist',
-  'thumb_cmc','thumb_mcp','thumb_ip','thumb_tip',
-  'index_finger_mcp','index_finger_pip','index_finger_dip','index_finger_tip',
-  'middle_finger_mcp','middle_finger_pip','middle_finger_dip','middle_finger_tip',
-  'ring_finger_mcp','ring_finger_pip','ring_finger_dip','ring_finger_tip',
-  'pinky_finger_mcp','pinky_finger_pip','pinky_finger_dip','pinky_finger_tip',
+/* ════════════════════════════
+   COLORS
+════════════════════════════ */
+const COLORS=[
+  {hex:'#ff2244',three:0xff2244,name:'RED'},
+  {hex:'#ff8800',three:0xff8800,name:'ORANGE'},
+  {hex:'#ffee00',three:0xffee00,name:'YELLOW'},
+  {hex:'#00ff88',three:0x00ff88,name:'GREEN'},
+  {hex:'#00ccff',three:0x00ccff,name:'CYAN'},
+  {hex:'#4466ff',three:0x4466ff,name:'BLUE'},
+  {hex:'#cc44ff',three:0xcc44ff,name:'PURPLE'},
+  {hex:'#ffffff',three:0xffffff,name:'WHITE'},
 ];
-// Bone connections for skeleton lines
-const BONES=[
-  [0,1],[1,2],[2,3],[3,4],           // thumb
-  [0,5],[5,6],[6,7],[7,8],           // index
-  [0,9],[9,10],[10,11],[11,12],      // middle
-  [0,13],[13,14],[14,15],[15,16],    // ring
-  [0,17],[17,18],[18,19],[19,20],    // pinky
-  [5,9],[9,13],[13,17],              // palm cross
-];
+let colorIdx=4; // start cyan
 
-/* ══════════════════════════
-   STATE
-══════════════════════════ */
-let detector=null;
-let latestKP=null;       // 21 keypoints [{x,y,z,score,name},...]
-let handVisible=false;
-let lostFrames=0;
+function buildPalette(){
+  const pal=$('palette');
+  pal.innerHTML='';
+  COLORS.forEach((c,i)=>{
+    const sw=document.createElement('div');
+    sw.className='pal-swatch'+(i===colorIdx?' active':'');
+    sw.style.background=c.hex;
+    sw.style.boxShadow=`0 0 8px ${c.hex}`;
+    sw.addEventListener('click',()=>setColor(i));
+    pal.appendChild(sw);
+  });
+}
+function setColor(i){
+  colorIdx=i%COLORS.length;
+  buildPalette();
+  currentStrokeColor=COLORS[colorIdx].three;
+  ss('COLOR: '+COLORS[colorIdx].name);
+}
+let currentStrokeColor=COLORS[colorIdx].three;
 
-// Grip detection
-let gripScore=0;          // 0-5 fingers curled
-let isGripping=false;
-let gripFrames=0;
+/* ════════════════════════════
+   DEVICE ORIENTATION — world locking
+════════════════════════════ */
+let deviceQuat=new THREE.Quaternion();
+let deviceQuatInv=new THREE.Quaternion();
+let orientationReady=false;
 
-// Telekinesis
-let lockedOrb=null;       // which orb is targeted
-let heldOrb=null;         // which orb is grabbed
-let prevIndexPos=null;    // for throw velocity
-let throwVel=new THREE.Vector3();
-let throwCount=0;
+// Euler from device orientation event
+let devAlpha=0,devBeta=0,devGamma=0;
 
-// Index fingertip 3D position (projected)
-let indexTip3D=new THREE.Vector3();
+function initOrientation(){
+  if(typeof DeviceOrientationEvent==='undefined'){
+    console.warn('No DeviceOrientationEvent');
+    orientationReady=true; return;
+  }
 
-/* ══════════════════════════
+  // iOS 13+ needs permission
+  if(typeof DeviceOrientationEvent.requestPermission==='function'){
+    DeviceOrientationEvent.requestPermission()
+      .then(r=>{ if(r==='granted') listenOrientation(); })
+      .catch(()=>{ orientationReady=true; });
+  } else {
+    listenOrientation();
+  }
+}
+
+function listenOrientation(){
+  window.addEventListener('deviceorientation',e=>{
+    devAlpha=e.alpha||0;
+    devBeta =e.beta ||0;
+    devGamma=e.gamma||0;
+    // Build quaternion from Euler (ZXY order for device orientation)
+    const euler=new THREE.Euler(
+      THREE.MathUtils.degToRad(devBeta),
+      THREE.MathUtils.degToRad(devAlpha),
+      THREE.MathUtils.degToRad(-devGamma),
+      'ZXY'
+    );
+    deviceQuat.setFromEuler(euler);
+    deviceQuatInv.copy(deviceQuat).invert();
+    orientationReady=true;
+  },{passive:true});
+}
+
+/* Convert a camera-relative position to world-locked position */
+function camToWorld(v){
+  return v.clone().applyQuaternion(deviceQuatInv);
+}
+/* Convert world-locked position back to camera-relative for rendering */
+function worldToCam(v){
+  return v.clone().applyQuaternion(deviceQuat);
+}
+
+/* ════════════════════════════
    THREE.JS
-══════════════════════════ */
+════════════════════════════ */
 let scene,camera,renderer,clock;
-const orbs=[];           // physics objects
-const ORB_COUNT=7;
+const strokeGroups=[];   // array of {worldPoints:Vector3[], color, mesh}
+let currentWorldPoints=[];  // points in world space for current stroke
+let isDrawing=false;
+let lastAddTime=0;
+const MIN_DIST=0.006;  // min distance between stroke points
 
-/* ══════════════════════════
-   DOT CANVAS
-══════════════════════════ */
-const dotCanvas=$('dotCanvas');
-const dotCtx=dotCanvas.getContext('2d');
-
-function resizeDotCanvas(){
-  dotCanvas.width=innerWidth;
-  dotCanvas.height=innerHeight;
-}
-window.addEventListener('resize',resizeDotCanvas);
-resizeDotCanvas();
-
-function drawJoints(kp){
-  const W=innerWidth,H=innerHeight;
-  dotCtx.clearRect(0,0,W,H);
-  if(!kp||kp.length<21) return;
-
-  // Draw skeleton bones first (under dots)
-  dotCtx.strokeStyle='rgba(0,255,136,0.35)';
-  dotCtx.lineWidth=1.5;
-  dotCtx.beginPath();
-  BONES.forEach(([a,b])=>{
-    const pA=kp[a],pB=kp[b];
-    if(!pA||!pB) return;
-    dotCtx.moveTo(pA.x*W, pA.y*H);
-    dotCtx.lineTo(pB.x*W, pB.y*H);
-  });
-  dotCtx.stroke();
-
-  // Draw each joint as a green circle
-  kp.forEach((p,i)=>{
-    if(!p) return;
-    const x=p.x*W, y=p.y*H;
-    const isSpecial = i===8; // index fingertip
-    const r = isSpecial ? 7 : i===0 ? 6 : 4;
-
-    // Outer glow
-    const grd=dotCtx.createRadialGradient(x,y,0,x,y,r*3);
-    grd.addColorStop(0,'rgba(0,255,136,.25)');
-    grd.addColorStop(1,'rgba(0,255,136,0)');
-    dotCtx.fillStyle=grd;
-    dotCtx.beginPath();
-    dotCtx.arc(x,y,r*3,0,Math.PI*2);
-    dotCtx.fill();
-
-    // Main dot
-    dotCtx.beginPath();
-    dotCtx.arc(x,y,r,0,Math.PI*2);
-    dotCtx.fillStyle=isSpecial?'#ffffff':'#00ff88';
-    dotCtx.fill();
-
-    // Border
-    dotCtx.strokeStyle=isSpecial?'#00ff88':'rgba(0,255,136,.6)';
-    dotCtx.lineWidth=1;
-    dotCtx.stroke();
-
-    // Joint number label
-    dotCtx.fillStyle='rgba(0,255,136,.5)';
-    dotCtx.font='8px Share Tech Mono';
-    dotCtx.fillText(i, x+r+2, y-r);
-  });
-}
-
-/* ══════════════════════════
-   THREE.JS INIT
-══════════════════════════ */
 function initThree(){
   clock=new THREE.Clock();
   scene=new THREE.Scene();
-  camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,0.001,50);
+  camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,0.001,30);
   camera.position.set(0,0,0);
 
   renderer=new THREE.WebGLRenderer({
@@ -346,388 +347,472 @@ function initThree(){
   });
   renderer.setPixelRatio(Math.min(devicePixelRatio,2));
   renderer.setSize(innerWidth,innerHeight);
-  renderer.setClearColor(0x000000,0);
-  renderer.shadowMap.enabled=true;
-  renderer.toneMapping=THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure=1.4;
+  renderer.setClearColor(0,0);
 
-  // Lighting
-  scene.add(new THREE.AmbientLight(0x002211,.8));
-  const key=new THREE.DirectionalLight(0x00ff88,2.5);
-  key.position.set(2,3,2); key.castShadow=true; scene.add(key);
-  const fill=new THREE.DirectionalLight(0x0044ff,1);
-  fill.position.set(-2,1,1); scene.add(fill);
-  const bot=new THREE.DirectionalLight(0xffffff,.5);
-  bot.position.set(0,-2,2); scene.add(bot);
-
-  // Orbs
-  spawnOrbs();
+  // Lights
+  scene.add(new THREE.AmbientLight(0xffffff,1.2));
+  const d1=new THREE.DirectionalLight(0xffffff,1.5);
+  d1.position.set(0,1,1); scene.add(d1);
+  const d2=new THREE.DirectionalLight(0x8899ff,.8);
+  d2.position.set(-1,0,-1); scene.add(d2);
 
   window.addEventListener('resize',()=>{
     camera.aspect=innerWidth/innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth,innerHeight);
-    resizeDotCanvas();
+    resizeDot();
   });
 }
 
-/* ══════════════════════════
-   ORB OBJECTS
-══════════════════════════ */
-const orbMats=[
-  new THREE.MeshStandardMaterial({color:0x00ff88,metalness:.9,roughness:.1,emissive:new THREE.Color(0x003311),emissiveIntensity:.5}),
-  new THREE.MeshStandardMaterial({color:0x0088ff,metalness:.9,roughness:.1,emissive:new THREE.Color(0x001133),emissiveIntensity:.5}),
-  new THREE.MeshStandardMaterial({color:0xff4400,metalness:.9,roughness:.1,emissive:new THREE.Color(0x330800),emissiveIntensity:.5}),
-  new THREE.MeshStandardMaterial({color:0xffcc00,metalness:.9,roughness:.1,emissive:new THREE.Color(0x332200),emissiveIntensity:.5}),
-  new THREE.MeshStandardMaterial({color:0xff00aa,metalness:.9,roughness:.1,emissive:new THREE.Color(0x330022),emissiveIntensity:.5}),
-];
+/* ════════════════════════════
+   STROKE BUILDING
+   Each stroke = a tube built from 3D points
+════════════════════════════ */
+function addStrokePoint(camRelPos){
+  // Convert to world space (world-locked)
+  const worldPos=camToWorld(camRelPos);
 
-function spawnOrbs(){
-  orbs.length=0;
-  // Remove old
-  scene.children.filter(c=>c.userData.isOrb).forEach(c=>scene.remove(c));
+  if(currentWorldPoints.length>0){
+    const last=currentWorldPoints[currentWorldPoints.length-1];
+    if(worldPos.distanceTo(last)<MIN_DIST) return; // skip too-close points
+  }
 
-  for(let i=0;i<ORB_COUNT;i++){
-    const geo=new THREE.IcosahedronGeometry(.04+Math.random()*.025,3);
-    const mat=orbMats[i%orbMats.length].clone();
-    const mesh=new THREE.Mesh(geo,mat);
-    mesh.castShadow=true;
-    mesh.userData.isOrb=true;
-    mesh.userData.vel=new THREE.Vector3(
-      (Math.random()-.5)*.002,
-      (Math.random()-.5)*.001,
-      (Math.random()-.5)*.001
-    );
-    mesh.userData.spin=new THREE.Vector3(
-      (Math.random()-.5)*.03,
-      (Math.random()-.5)*.03,
-      (Math.random()-.5)*.03
-    );
-    mesh.userData.locked=false;
-    mesh.userData.held=false;
-    mesh.userData.baseEmissive=mat.emissive.clone();
-    mesh.userData.baseColor=mat.color.clone();
+  currentWorldPoints.push(worldPos);
 
-    // Spread orbs in a field in front of camera
-    mesh.position.set(
-      (Math.random()-.5)*.8,
-      (Math.random()-.5)*.5,
-      -1.2-Math.random()*.6
-    );
-    scene.add(mesh);
-    orbs.push(mesh);
+  // Need at least 2 points to draw
+  if(currentWorldPoints.length<2) return;
 
-    // Point light per orb (soft glow)
-    const pl=new THREE.PointLight(mat.color,1.5,.25);
-    mesh.add(pl);
+  // Rebuild stroke mesh from world points
+  const strokeIdx=strokeGroups.length; // current stroke
+  rebuildCurrentStroke();
+}
+
+let currentStrokeMesh=null;
+
+function rebuildCurrentStroke(){
+  if(currentWorldPoints.length<2) return;
+
+  // Remove old mesh for this stroke
+  if(currentStrokeMesh){ scene.remove(currentStrokeMesh); currentStrokeMesh=null; }
+
+  // Convert world points → camera-relative for rendering
+  const camPoints=currentWorldPoints.map(p=>worldToCam(p));
+
+  const curve=new THREE.CatmullRomCurve3(camPoints, false, 'chordal', .5);
+  const tubeSegs=Math.max(3,camPoints.length*3);
+  const geo=new THREE.TubeGeometry(curve, tubeSegs, 0.004, 6, false);
+  const mat=new THREE.MeshStandardMaterial({
+    color:currentStrokeColor,
+    metalness:.3,roughness:.4,
+    emissive:new THREE.Color(currentStrokeColor),
+    emissiveIntensity:.4,
+  });
+  currentStrokeMesh=new THREE.Mesh(geo,mat);
+  currentStrokeMesh.castShadow=true;
+  scene.add(currentStrokeMesh);
+}
+
+function commitStroke(){
+  if(currentWorldPoints.length<2){ currentWorldPoints=[]; return; }
+
+  // Save the stroke
+  strokeGroups.push({
+    worldPoints:[...currentWorldPoints],
+    color:currentStrokeColor,
+    mesh:currentStrokeMesh,
+  });
+  currentStrokeMesh=null;
+  currentWorldPoints=[];
+  updateStrokeCount();
+}
+
+function undoStroke(){
+  if(strokeGroups.length===0){ ss('NOTHING TO UNDO'); return; }
+  const last=strokeGroups.pop();
+  if(last.mesh) scene.remove(last.mesh);
+  // Also remove current stroke if mid-draw
+  if(currentStrokeMesh){ scene.remove(currentStrokeMesh); currentStrokeMesh=null; }
+  currentWorldPoints=[];
+  updateStrokeCount();
+  ss('UNDONE');
+}
+
+function clearAll(){
+  strokeGroups.forEach(s=>{ if(s.mesh) scene.remove(s.mesh); });
+  strokeGroups.length=0;
+  if(currentStrokeMesh){ scene.remove(currentStrokeMesh); currentStrokeMesh=null; }
+  currentWorldPoints=[];
+  updateStrokeCount();
+  ss('CLEARED');
+}
+
+function updateStrokeCount(){
+  $('strokeCount').textContent='STROKES: '+strokeGroups.length;
+}
+
+/* ════════════════════════════
+   RE-RENDER ALL STROKES (world-locked update)
+   Called every frame to re-project world→camera
+════════════════════════════ */
+function updateAllStrokes(){
+  strokeGroups.forEach(sg=>{
+    if(!sg.mesh||sg.worldPoints.length<2) return;
+    // Re-project world points to current camera-relative positions
+    const camPoints=sg.worldPoints.map(p=>worldToCam(p));
+    const curve=new THREE.CatmullRomCurve3(camPoints, false,'chordal',.5);
+    const segs=Math.max(3,camPoints.length*3);
+    // Update geometry (dispose old, create new)
+    sg.mesh.geometry.dispose();
+    sg.mesh.geometry=new THREE.TubeGeometry(curve,segs,0.004,6,false);
+  });
+
+  // Also update current stroke in progress
+  if(currentWorldPoints.length>=2&&currentStrokeMesh){
+    const camPoints=currentWorldPoints.map(p=>worldToCam(p));
+    const curve=new THREE.CatmullRomCurve3(camPoints,false,'chordal',.5);
+    const segs=Math.max(3,camPoints.length*3);
+    currentStrokeMesh.geometry.dispose();
+    currentStrokeMesh.geometry=new THREE.TubeGeometry(curve,segs,0.004,6,false);
   }
 }
 
-/* ══════════════════════════
-   GRIP DETECTION
-   Count how many fingers are curled
-══════════════════════════ */
-function detectGrip(kp){
-  if(!kp||kp.length<21) return 0;
-  const wrist=kp[0];
-  const tips=[4,8,12,16,20];
-  const mcps=[2,5,9,13,17];
-  let curled=0;
-  tips.forEach((tip,i)=>{
-    const t=kp[tip],m=kp[mcps[i]];
-    if(!t||!m) return;
-    const dTip=Math.hypot(t.x-wrist.x,t.y-wrist.y);
-    const dMCP=Math.hypot(m.x-wrist.x,m.y-wrist.y);
-    if(dTip<dMCP*.85) curled++;
+/* ════════════════════════════
+   DOT CANVAS — green joints
+════════════════════════════ */
+const dotCanvas=$('dotCanvas');
+const dotCtx=dotCanvas.getContext('2d');
+function resizeDot(){ dotCanvas.width=innerWidth; dotCanvas.height=innerHeight; }
+resizeDot();
+
+const BONES=[
+  [0,1],[1,2],[2,3],[3,4],
+  [0,5],[5,6],[6,7],[7,8],
+  [0,9],[9,10],[10,11],[11,12],
+  [0,13],[13,14],[14,15],[15,16],
+  [0,17],[17,18],[18,19],[19,20],
+  [5,9],[9,13],[13,17],
+];
+
+function drawJoints(kp,drawMode){
+  const W=innerWidth,H=innerHeight;
+  dotCtx.clearRect(0,0,W,H);
+  if(!kp||kp.length<21) return;
+
+  // Skeleton bones
+  dotCtx.strokeStyle='rgba(0,255,136,0.3)';
+  dotCtx.lineWidth=1.5;
+  dotCtx.beginPath();
+  BONES.forEach(([a,b])=>{
+    const A=kp[a],B=kp[b];
+    if(!A||!B) return;
+    dotCtx.moveTo(A.x*W,A.y*H);
+    dotCtx.lineTo(B.x*W,B.y*H);
   });
-  return curled; // 0=open, 5=full fist
+  dotCtx.stroke();
+
+  // Joints
+  kp.forEach((p,i)=>{
+    if(!p) return;
+    const x=p.x*W, y=p.y*H;
+    const isTip=i===8;
+    const isWrist=i===0;
+    const r=isTip?8:isWrist?6:4;
+    const col=isTip?(drawMode?'#ffffff':'#00ff88'):'#00ff88';
+
+    // Glow
+    const gr=dotCtx.createRadialGradient(x,y,0,x,y,r*3.5);
+    gr.addColorStop(0,'rgba(0,255,136,.2)');
+    gr.addColorStop(1,'rgba(0,255,136,0)');
+    dotCtx.fillStyle=gr;
+    dotCtx.beginPath(); dotCtx.arc(x,y,r*3.5,0,Math.PI*2); dotCtx.fill();
+
+    // Dot
+    dotCtx.beginPath(); dotCtx.arc(x,y,r,0,Math.PI*2);
+    dotCtx.fillStyle=col; dotCtx.fill();
+    dotCtx.strokeStyle='rgba(0,255,136,.5)';
+    dotCtx.lineWidth=1; dotCtx.stroke();
+
+    // Number
+    dotCtx.fillStyle='rgba(0,255,136,.45)';
+    dotCtx.font='bold 7px Share Tech Mono';
+    dotCtx.fillText(i,x+r+1,y-r+1);
+  });
 }
 
-/* ══════════════════════════
-   INDEX FINGERTIP → 3D
-   Project 2D landmark to 3D world space
-══════════════════════════ */
+/* ════════════════════════════
+   GESTURE DETECTION
+════════════════════════════ */
+// Returns: 'draw' | 'pause' | 'pinch' | 'fist'
+let prevGesture='pause';
+let pinchCooldown=0;
+let fistCooldown=0;
+
+function getGesture(kp){
+  if(!kp||kp.length<21) return 'none';
+  const w=kp[0];
+
+  // Helper: distance finger tip to wrist
+  const tipDist=i=>Math.hypot(kp[i].x-w.x,kp[i].y-w.y);
+  const mcpDist=i=>Math.hypot(kp[i].x-w.x,kp[i].y-w.y);
+
+  // Check each finger extended (tip farther from wrist than MCP)
+  const fingerExtended=[
+    // index (5→8)
+    tipDist(8)>mcpDist(5)*1.15,
+    // middle (9→12)
+    tipDist(12)>mcpDist(9)*1.15,
+    // ring (13→16)
+    tipDist(16)>mcpDist(13)*1.15,
+    // pinky (17→20)
+    tipDist(20)>mcpDist(17)*1.15,
+  ];
+  const extCount=fingerExtended.filter(Boolean).length;
+
+  // Pinch: thumb tip (4) close to index tip (8)
+  const pinchDist=Math.hypot(kp[4].x-kp[8].x,kp[4].y-kp[8].y);
+  const isPinch=pinchDist<0.045;
+
+  // Fist: no fingers extended + thumb curled
+  const isFist=extCount===0&&tipDist(4)<mcpDist(2)*1.1;
+
+  // Draw: only index extended, others curled
+  const indexOnly=fingerExtended[0]&&!fingerExtended[1]&&!fingerExtended[2]&&!fingerExtended[3];
+
+  // Open palm: 3+ extended
+  const isOpen=extCount>=3;
+
+  if(isPinch) return 'pinch';
+  if(isFist)  return 'fist';
+  if(indexOnly) return 'draw';
+  if(isOpen)  return 'pause';
+  return 'pause';
+}
+
+/* ════════════════════════════
+   INDEX FINGERTIP → 3D CAMERA SPACE
+════════════════════════════ */
 function estimateDepth(kp){
-  const iMCP=kp[5],pMCP=kp[17];
-  if(!iMCP||!pMCP) return 0.8;
-  const dx=(iMCP.x-pMCP.x)*innerWidth;
-  const dy=(iMCP.y-pMCP.y)*innerHeight;
-  const knucklePx=Math.sqrt(dx*dx+dy*dy);
-  if(knucklePx<5) return 0.8;
+  const iM=kp[5],pM=kp[17];
+  if(!iM||!pM) return 0.7;
+  const px=Math.hypot((iM.x-pM.x)*innerWidth,(iM.y-pM.y)*innerHeight);
+  if(px<5) return 0.7;
   const fovR=camera.fov*Math.PI/180;
-  const focalPx=innerHeight/(2*Math.tan(fovR/2));
-  return Math.max(.25,Math.min((0.07*focalPx)/knucklePx,2.0));
+  const focal=innerHeight/(2*Math.tan(fovR/2));
+  return Math.max(.18,Math.min((0.07*focal)/px,1.8));
 }
 
-function kp2D_to_3D(kp2d,depth){
-  // kp2d.x,y are 0-1 normalized (mirrored by CSS on front cam)
-  // we un-mirror here because dotCanvas is also mirrored
-  const ndcX=-(kp2d.x*2-1); // un-mirror
-  const ndcY=-(kp2d.y*2-1);
+function fingerTip3D(kp){
+  const tip=kp[8]; if(!tip) return null;
+  const depth=estimateDepth(kp);
+  // un-mirror X (video is mirrored via CSS)
+  const ndcX=-(tip.x*2-1);
+  const ndcY=-(tip.y*2-1);
   const v=new THREE.Vector3(ndcX,ndcY,.5).unproject(camera);
   const dir=v.sub(camera.position).normalize();
   return camera.position.clone().add(dir.multiplyScalar(depth));
 }
 
-/* ══════════════════════════
-   TARGETING — raycast from index tip toward orbs
-══════════════════════════ */
-const raycaster=new THREE.Raycaster();
-raycaster.params.Points={threshold:.06};
-
-function findTargetOrb(kp,depth){
-  const tip=kp[8]; // index fingertip
-  const pip=kp[7]; // index DIP (one joint back)
-  if(!tip||!pip) return null;
-
-  const tipPos=kp2D_to_3D(tip,depth);
-  const pipPos=kp2D_to_3D(pip,depth*1.1);
-  const dir=new THREE.Vector3().subVectors(tipPos,pipPos).normalize();
-
-  raycaster.set(tipPos,dir);
-  raycaster.far=3;
-  const hits=raycaster.intersectObjects(orbs);
-  return hits.length>0?hits[0].object:null;
+/* ════════════════════════════
+   BRUSH DOT on screen
+════════════════════════════ */
+function updateBrushDot(kp,drawing){
+  const bd=$('brushDot');
+  if(!kp||kp.length<9){bd.style.display='none';return;}
+  const tip=kp[8];
+  // mirror-corrected screen x
+  const sx=(1-tip.x)*innerWidth;
+  const sy=tip.y*innerHeight;
+  bd.style.display='block';
+  bd.style.left=(sx-10)+'px';
+  bd.style.top=(sy-10)+'px';
+  bd.style.background=drawing?COLORS[colorIdx].hex:'transparent';
+  bd.style.borderColor=COLORS[colorIdx].hex;
+  bd.style.boxShadow=`0 0 12px ${COLORS[colorIdx].hex}`;
+  bd.style.transform=drawing?'scale(1.3)':'scale(1)';
 }
 
-/* ══════════════════════════
-   THROW FLASH
-══════════════════════════ */
-function showThrow(){
-  const el=$('throwFX');
-  el.style.opacity='1';
-  setTimeout(()=>el.style.opacity='0',400);
-  throwCount++;
-  $('score').textContent='THROWS: '+throwCount;
-}
-
-/* ══════════════════════════
-   MAIN LOOP
-══════════════════════════ */
+/* ════════════════════════════
+   HAND DETECTION
+════════════════════════════ */
+let detector=null;
+let latestKP=null;
 let detecting=false;
+let handLost=0;
 const vid=$('vid');
 
-async function mainLoop(){
+/* ════════════════════════════
+   MAIN LOOP
+════════════════════════════ */
+function mainLoop(){
+  requestAnimationFrame(mainLoop);
   const dt=Math.min(clock.getDelta(),.05);
 
-  // Run hand detection (throttle to every other frame for perf)
+  // Hand detection (every frame, async)
   if(detector&&!detecting&&vid.readyState>=2){
     detecting=true;
     detector.estimateHands(vid,{flipHorizontal:true}).then(hands=>{
       detecting=false;
       if(hands&&hands.length>0){
         latestKP=hands[0].keypoints;
-        handVisible=true; lostFrames=0;
+        handLost=0;
       } else {
-        lostFrames++;
-        if(lostFrames>10){handVisible=false;latestKP=null;}
+        handLost++;
+        if(handLost>12) latestKP=null;
       }
     }).catch(()=>{detecting=false;});
   }
 
   const kp=latestKP;
+  const gesture=getGesture(kp);
+  const geo=$('gesture');
+  const drawMode=gesture==='draw';
 
-  // Draw green joint dots & skeleton on dotCanvas
-  drawJoints(kp);
+  // Draw green joint dots
+  drawJoints(kp,drawMode);
+  updateBrushDot(kp,drawMode);
 
-  if(handVisible&&kp){
-    const depth=estimateDepth(kp);
-    const tip3D=kp2D_to_3D(kp[8],depth);
-    indexTip3D.copy(tip3D);
-
-    // Grip score
-    const gs=detectGrip(kp);
-    gripScore=gs;
-
-    // Grip pip display
-    $('gripBar').style.opacity='1';
-    for(let i=0;i<5;i++){
-      $('gp'+i).classList.toggle('on',i<gs);
-    }
-
-    // Grip state transitions
-    if(gs>=4&&!isGripping){
-      gripFrames++;
-      if(gripFrames>4){
-        isGripping=true;
-        // Grab locked orb
-        if(lockedOrb&&!heldOrb){
-          heldOrb=lockedOrb;
-          heldOrb.userData.held=true;
-          heldOrb.material.emissiveIntensity=2.5;
-          ss('◈ OBJECT SEIZED');
-        }
-      }
-    } else if(gs<3){
-      if(isGripping&&heldOrb){
-        // Release = throw
-        heldOrb.userData.vel.copy(throwVel).multiplyScalar(12);
-        heldOrb.userData.held=false;
-        heldOrb.material.emissiveIntensity=.5;
-        showThrow();
-        ss('⚡ THROWN — '+Math.round(throwVel.length()*100)+' km/h');
-        heldOrb=null;
-        lockedOrb=null;
-      }
-      isGripping=false; gripFrames=0;
-    }
-
-    // While holding: track velocity for throw
-    if(heldOrb){
-      const newPos=tip3D.clone();
-      if(prevIndexPos){
-        throwVel.subVectors(newPos,prevIndexPos).divideScalar(dt);
-      }
-      prevIndexPos=newPos.clone();
-      // Move held orb to fingertip
-      heldOrb.position.lerp(tip3D,.35);
-    } else {
-      prevIndexPos=tip3D.clone();
-      // Find target orb when not gripping
-      if(!isGripping){
-        const tgt=findTargetOrb(kp,depth);
-        if(tgt!==lockedOrb){
-          if(lockedOrb){
-            lockedOrb.userData.locked=false;
-            lockedOrb.material.color.copy(lockedOrb.userData.baseColor);
-            lockedOrb.material.emissiveIntensity=.5;
-          }
-          lockedOrb=tgt;
-          if(lockedOrb){
-            lockedOrb.userData.locked=true;
-            lockedOrb.material.color.set(0xffffff);
-            lockedOrb.material.emissiveIntensity=1.5;
-            ss('▶ TARGET LOCKED — CLOSE FIST TO GRAB');
-          } else {
-            ss('POINT FINGER AT ORB');
-          }
-        }
-      }
-    }
-
-    // Lock ring follows locked orb
-    if(lockedOrb&&!heldOrb){
-      const projected=lockedOrb.position.clone().project(camera);
-      const lx=(projected.x*.5+.5)*innerWidth;
-      const ly=(-.5*projected.y+.5)*innerHeight;
-      const lr=$('lockRing');
-      lr.style.left=lx+'px'; lr.style.top=ly+'px';
-      lr.style.transform='translate(-50%,-50%)';
-      lr.classList.add('visible');
-    } else {
-      $('lockRing').classList.remove('visible');
-    }
-
+  // Gesture badge
+  if(!kp){
+    geo.className=''; geo.textContent='SHOW HAND';
+  } else if(drawMode){
+    geo.className='drawing'; geo.textContent='✦ DRAWING';
+  } else if(gesture==='fist'){
+    geo.className='paused'; geo.textContent='✊ FIST';
+  } else if(gesture==='pinch'){
+    geo.className='paused'; geo.textContent='🤏 PINCH';
   } else {
-    $('gripBar').style.opacity='0';
-    $('lockRing').classList.remove('visible');
-    if(!handVisible) ss('SHOW YOUR HAND TO CAMERA');
-    drawJoints(null);
-    // Release held orb if hand disappears
-    if(heldOrb){heldOrb.userData.held=false;heldOrb.material.emissiveIntensity=.5;heldOrb=null;}
-    if(lockedOrb){lockedOrb.material.color.copy(lockedOrb.userData.baseColor);lockedOrb.material.emissiveIntensity=.5;lockedOrb=null;}
+    geo.className='paused'; geo.textContent='✋ PAUSE';
   }
 
-  // Physics update for all orbs
-  orbs.forEach(orb=>{
-    if(orb.userData.held) return;
+  // Handle gestures
+  if(kp){
+    if(gesture==='pinch'&&pinchCooldown<=0){
+      pinchCooldown=30;
+      // Commit current stroke first
+      if(isDrawing){commitStroke();isDrawing=false;}
+      setColor(colorIdx+1);
+    }
+    if(gesture==='fist'&&fistCooldown<=0){
+      fistCooldown=30;
+      if(isDrawing){commitStroke();isDrawing=false;}
+      undoStroke();
+    }
+    if(pinchCooldown>0) pinchCooldown--;
+    if(fistCooldown>0)  fistCooldown--;
 
-    // Apply velocity
-    orb.position.add(orb.userData.vel);
-
-    // Spin
-    orb.rotation.x+=orb.userData.spin.x;
-    orb.rotation.y+=orb.userData.spin.y;
-    orb.rotation.z+=orb.userData.spin.z;
-
-    // Friction
-    orb.userData.vel.multiplyScalar(.97);
-    orb.userData.spin.multiplyScalar(.99);
-
-    // Gentle float drift
-    orb.userData.vel.y+=Math.sin(clock.elapsedTime*.5+orb.position.x*10)*.00003;
-
-    // Boundary bounce — keep orbs in view
-    const b={x:[-1.0,1.0],y:[-.7,.7],z:[-2.2,-.4]};
-    ['x','y','z'].forEach(ax=>{
-      if(orb.position[ax]<b[ax][0]){orb.position[ax]=b[ax][0];orb.userData.vel[ax]*=-.7;}
-      if(orb.position[ax]>b[ax][1]){orb.position[ax]=b[ax][1];orb.userData.vel[ax]*=-.7;}
-    });
-
-    // Telekinesis ambient pull toward index when close
-    if(handVisible&&latestKP&&!isGripping&&!heldOrb){
-      const dist=orb.position.distanceTo(indexTip3D);
-      if(dist<.25&&dist>.05){
-        const pull=new THREE.Vector3().subVectors(indexTip3D,orb.position).normalize();
-        orb.userData.vel.addScaledVector(pull,.0003);
+    if(drawMode){
+      const tip3D=fingerTip3D(kp);
+      if(tip3D){
+        if(!isDrawing){
+          // Start new stroke
+          isDrawing=true;
+          currentWorldPoints=[];
+          currentStrokeColor=COLORS[colorIdx].three;
+          ss('✦ DRAWING IN AIR...');
+        }
+        addStrokePoint(tip3D);
+      }
+    } else {
+      if(isDrawing){
+        commitStroke();
+        isDrawing=false;
+        ss('☝ POINT INDEX FINGER TO DRAW');
       }
     }
-  });
+  } else {
+    if(isDrawing){commitStroke();isDrawing=false;}
+    ss('SHOW YOUR HAND TO CAMERA');
+  }
+
+  // World-lock: re-project all strokes every frame
+  if(orientationReady) updateAllStrokes();
 
   renderer.render(scene,camera);
-  requestAnimationFrame(mainLoop);
 }
 
-/* ══════════════════════════
-   LAUNCH
-══════════════════════════ */
+/* ════════════════════════════
+   BUTTONS
+════════════════════════════ */
+$('undoBtn').addEventListener('click',()=>{
+  if(isDrawing){commitStroke();isDrawing=false;}
+  undoStroke();
+});
+$('clearBtn').addEventListener('click',()=>{
+  if(isDrawing){commitStroke();isDrawing=false;}
+  clearAll();
+});
+
+/* ════════════════════════════
+   START
+════════════════════════════ */
 $('startBtn').addEventListener('click',async()=>{
   $('startBtn').textContent='LOADING...';
   $('startBtn').disabled=true;
   showScreen('loading');
 
   try{
-    setBar(10,'INITIALIZING THREE.JS...');
+    setBar(5,'INITIALIZING 3D ENGINE...');
     initThree();
-    setBar(25,'THREE.JS READY');
+    buildPalette();
+    setBar(15,'3D ENGINE READY');
 
-    setBar(35,'STARTING CAMERA...');
-    const stream=await navigator.mediaDevices.getUserMedia({
-      video:{
-        facingMode:{ideal:'user'}, // front cam for selfie mode
-        width:{ideal:1280},height:{ideal:720}
-      },
-      audio:false
-    });
+    setBar(20,'REQUESTING ORIENTATION...');
+    initOrientation();
+
+    setBar(30,'STARTING CAMERA...');
+    let stream;
+    try{
+      // Try rear camera first (better for pointing at drawing space)
+      stream=await navigator.mediaDevices.getUserMedia({
+        video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},
+        audio:false
+      });
+      vid.style.transform='none'; // no mirror for rear cam
+      // Rear cam: dotCanvas also un-mirrored
+      $('dotCanvas').style.transform='none';
+    }catch(e){
+      // Fall back to front cam
+      stream=await navigator.mediaDevices.getUserMedia({
+        video:{width:{ideal:1280},height:{ideal:720}},
+        audio:false
+      });
+      // Front cam stays mirrored (default CSS)
+    }
     vid.srcObject=stream;
     await vid.play();
-    setBar(55,'CAMERA READY');
+    setBar(50,'CAMERA READY');
 
-    setBar(65,'LOADING TENSORFLOW...');
+    setBar(60,'LOADING TENSORFLOW.JS...');
     await tf.ready();
-    setBar(75,'TF READY · LOADING HANDPOSE MODEL...');
+    setBar(72,'TF READY');
 
-    // Load MediaPipe HandPose via TF.js
-    const model=handPoseDetection.SupportedModels.MediaPipeHands;
-    const detectorConfig={
-      runtime:'tfjs',        // pure JS, no WASM conflicts
-      modelType:'full',      // full = more accurate
-      maxHands:1,
-    };
-    detector=await handPoseDetection.createDetector(model,detectorConfig);
-    setBar(95,'MODEL LOADED');
+    setBar(78,'LOADING HAND TRACKING MODEL...');
+    detector=await handPoseDetection.createDetector(
+      handPoseDetection.SupportedModels.MediaPipeHands,
+      {runtime:'tfjs', modelType:'full', maxHands:1}
+    );
+    setBar(95,'WARMING UP MODEL...');
+    // Warm up (prevents first-frame lag)
+    if(vid.readyState>=2) await detector.estimateHands(vid,{flipHorizontal:true});
 
-    // Warm up
-    setBar(98,'WARMING UP...');
-    await detector.estimateHands(vid,{flipHorizontal:true});
-
-    setBar(100,'READY');
+    setBar(100,'READY TO DRAW');
     setTimeout(()=>{
       showScreen('__none__');
       $('hud').style.display='block';
-      ss('SHOW YOUR HAND TO CAMERA');
+      ss('☝ POINT INDEX FINGER TO DRAW');
       mainLoop();
     },500);
 
   }catch(e){
     console.error(e);
     const msg=e.message||String(e);
-    $('bootErr').textContent=msg.includes('camera')||msg.includes('Permission')
-      ?'CAMERA PERMISSION DENIED — please allow camera access'
+    $('bootErr').textContent=
+      msg.toLowerCase().includes('permission')||msg.toLowerCase().includes('denied')
+      ?'CAMERA PERMISSION DENIED — tap allow when prompted'
       :'ERROR: '+msg;
     $('bootErr').style.display='block';
     showScreen('boot');
-    $('startBtn').textContent='⚡ ACTIVATE POWER';
+    $('startBtn').textContent='✦ START DRAWING';
     $('startBtn').disabled=false;
   }
 });
