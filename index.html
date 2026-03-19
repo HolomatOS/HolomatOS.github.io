@@ -8,22 +8,61 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#000;overflow:hidden;touch-action:none;font-family:'Share Tech Mono',monospace}
-#vid{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;transform:scaleX(-1)}
-#dotCanvas{position:fixed;inset:0;width:100%;height:100%;z-index:2;pointer-events:none;transform:scaleX(-1)}
-#threeCanvas{position:fixed;inset:0;width:100%;height:100%;z-index:3;pointer-events:none}
-.screen{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:28px;text-align:center}
+
+/* Camera feed (for MediaPipe — hidden once AR starts) */
+#vid{
+  position:fixed;inset:0;width:100%;height:100%;
+  object-fit:cover;z-index:0;
+  transform:scaleX(-1);
+  display:none; /* hidden — AR session shows real camera */
+}
+
+/* Joint overlay canvas */
+#dotCanvas{
+  position:fixed;inset:0;width:100%;height:100%;
+  z-index:4;pointer-events:none;
+}
+
+/* Three.js canvas (AR strokes only — transparent bg) */
+#threeCanvas{
+  position:fixed;inset:0;z-index:3;pointer-events:none;
+}
+
+/* SCREENS */
+.screen{
+  position:fixed;inset:0;z-index:20;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  gap:14px;padding:28px;text-align:center;
+}
 .screen.hidden{display:none!important}
 
 /* BOOT */
 #boot{background:radial-gradient(ellipse at 50% 45%,#050510 0%,#000 70%)}
-.logo{font-family:'Bebas Neue',sans-serif;font-size:58px;letter-spacing:6px;line-height:1;background:linear-gradient(180deg,#fff 0%,#88aaff 50%,#2244cc 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 24px rgba(100,140,255,.6));animation:glo 3s ease-in-out infinite}
+.logo{
+  font-family:'Bebas Neue',sans-serif;font-size:58px;
+  letter-spacing:6px;line-height:1;
+  background:linear-gradient(180deg,#fff 0%,#88aaff 50%,#2244cc 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 0 24px rgba(100,140,255,.6));
+  animation:glo 3s ease-in-out infinite;
+}
 @keyframes glo{0%,100%{filter:drop-shadow(0 0 18px rgba(100,140,255,.5))}50%{filter:drop-shadow(0 0 40px rgba(100,140,255,1))}}
 .tagline{font-size:8px;letter-spacing:5px;color:#1a1a44}
-.instructions{font-size:8px;color:#111133;letter-spacing:1px;line-height:2.6;border:1px solid #0a0a22;padding:14px 20px;max-width:320px}
+.instructions{
+  font-size:8px;color:#111133;letter-spacing:1px;line-height:2.6;
+  border:1px solid #0a0a22;padding:14px 20px;max-width:320px;
+}
 .instructions b{color:#3355cc}
-.go-btn{padding:13px 40px;background:transparent;border:1px solid #3355ff;color:#4466ff;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:4px;cursor:pointer;transition:all .3s;-webkit-appearance:none}
+.go-btn{
+  padding:13px 40px;background:transparent;
+  border:1px solid #3355ff;color:#4466ff;
+  font-family:'Share Tech Mono',monospace;font-size:10px;
+  letter-spacing:4px;cursor:pointer;transition:all .3s;
+  -webkit-appearance:none;
+}
 .go-btn:active{color:#fff;background:#3355ff;transform:scale(.96)}
-#bootErr{font-size:8px;color:#ff3344;letter-spacing:1px;display:none;margin-top:4px;line-height:2}
+#bootErr{font-size:8px;color:#ff3344;letter-spacing:1px;display:none;margin-top:4px;line-height:2;max-width:300px}
 
 /* LOADING */
 #loading{background:rgba(0,0,0,.97)}
@@ -32,45 +71,87 @@ body{background:#000;overflow:hidden;touch-action:none;font-family:'Share Tech M
 .bar-fill{height:100%;background:linear-gradient(90deg,#0011aa,#4466ff);width:0%;transition:width .3s}
 .ld-msg{font-size:8px;color:#1a1a44;letter-spacing:2px}
 
-/* HUD */
-#hud{position:fixed;inset:0;z-index:10;pointer-events:none;display:none}
-.hc{position:absolute;width:26px;height:26px;border-style:solid;opacity:.3}
+/* HUD — shown inside AR via dom-overlay */
+#hud{
+  position:fixed;inset:0;z-index:10;
+  pointer-events:none;display:none;
+}
+.hc{position:absolute;width:26px;height:26px;border-style:solid;opacity:.28}
 .hc.tl{top:12px;left:12px;border-color:#4466ff;border-width:2px 0 0 2px}
 .hc.tr{top:12px;right:12px;border-color:#4466ff;border-width:2px 2px 0 0}
 .hc.bl{bottom:12px;left:12px;border-color:#4466ff;border-width:0 0 2px 2px}
 .hc.br{bottom:12px;right:12px;border-color:#4466ff;border-width:0 2px 2px 0}
-#status{position:absolute;bottom:90px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.82);border:1px solid rgba(50,80,255,.25);border-top:2px solid #4466ff;padding:7px 16px;font-size:8px;letter-spacing:3px;color:#4466ff;text-shadow:0 0 8px rgba(68,102,255,.8);white-space:nowrap}
-#gesture{position:absolute;top:16px;left:50%;transform:translateX(-50%);font-size:8px;letter-spacing:3px;padding:5px 12px;border:1px solid rgba(50,80,255,.2);background:rgba(0,0,0,.7);color:rgba(68,102,255,.7);transition:color .2s}
+
+#status{
+  position:absolute;bottom:90px;left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,.82);border:1px solid rgba(50,80,255,.25);
+  border-top:2px solid #4466ff;padding:7px 16px;
+  font-size:8px;letter-spacing:3px;color:#4466ff;
+  text-shadow:0 0 8px rgba(68,102,255,.8);white-space:nowrap;
+}
+#gesture{
+  position:absolute;top:16px;left:50%;transform:translateX(-50%);
+  font-size:8px;letter-spacing:3px;padding:5px 12px;
+  border:1px solid rgba(50,80,255,.2);background:rgba(0,0,0,.7);
+  color:rgba(68,102,255,.7);transition:color .2s;
+}
 #gesture.drawing{color:#00ff88;border-color:rgba(0,255,136,.4);text-shadow:0 0 8px rgba(0,255,136,.8)}
 #gesture.paused{color:#ffcc00;border-color:rgba(255,204,0,.3)}
-#brushDot{position:absolute;width:20px;height:20px;border-radius:50%;pointer-events:none;border:2px solid #fff;display:none;z-index:12;transition:transform .1s}
-#tools{position:absolute;top:16px;right:16px;display:flex;flex-direction:column;gap:8px;pointer-events:auto}
-.tool-btn{width:38px;height:38px;background:rgba(0,0,0,.75);border:1px solid rgba(50,80,255,.3);color:#4466ff;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+
+#brushDot{
+  position:absolute;width:20px;height:20px;border-radius:50%;
+  pointer-events:none;border:2px solid #fff;display:none;z-index:12;
+  transition:transform .1s;
+}
+#tools{
+  position:absolute;top:16px;right:16px;
+  display:flex;flex-direction:column;gap:8px;pointer-events:auto;
+}
+.tool-btn{
+  width:38px;height:38px;background:rgba(0,0,0,.75);
+  border:1px solid rgba(50,80,255,.3);color:#4466ff;
+  font-size:14px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
 .tool-btn:active{background:#3355ff;color:#fff}
-#palette{position:absolute;bottom:28px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center}
-.pal-swatch{width:26px;height:26px;border-radius:50%;border:2px solid rgba(255,255,255,.15);cursor:pointer;transition:all .2s;pointer-events:auto}
+#palette{
+  position:absolute;bottom:28px;left:50%;transform:translateX(-50%);
+  display:flex;gap:10px;align-items:center;pointer-events:auto;
+}
+.pal-swatch{
+  width:26px;height:26px;border-radius:50%;
+  border:2px solid rgba(255,255,255,.15);cursor:pointer;transition:all .2s;
+}
 .pal-swatch.active{transform:scale(1.35);border-color:#fff}
 #strokeCount{position:absolute;bottom:66px;right:16px;font-size:7px;letter-spacing:2px;color:rgba(68,102,255,.5)}
-#worldLock{position:absolute;top:16px;left:16px;font-size:7px;letter-spacing:2px;color:rgba(68,102,255,.4);display:flex;align-items:center;gap:5px}
+#worldMode{
+  position:absolute;top:16px;left:16px;
+  font-size:7px;letter-spacing:2px;color:rgba(68,102,255,.45);
+  display:flex;align-items:center;gap:5px;
+}
 #lockDot{width:5px;height:5px;border-radius:50%;background:#4466ff;box-shadow:0 0 6px #4466ff;animation:ld 1.5s ease-in-out infinite}
 @keyframes ld{0%,100%{opacity:.3}50%{opacity:1}}
 </style>
 </head>
 <body>
 
+<!-- Hidden video feed for MediaPipe -->
 <video id="vid" playsinline autoplay muted></video>
+<!-- Joint overlay -->
 <canvas id="dotCanvas"></canvas>
+<!-- Three.js (strokes only) -->
 <canvas id="threeCanvas"></canvas>
 
 <!-- BOOT -->
 <div id="boot" class="screen">
   <div class="logo">AIR<br>DRAW</div>
-  <div class="tagline">MEDIAPIPE · WORLD-LOCKED AR</div>
+  <div class="tagline">ARCORE 6DOF · MEDIAPIPE HANDS</div>
   <div class="instructions">
     <b>☝ INDEX ONLY</b> → draw in the air<br>
     <b>✋ OPEN PALM</b> → pause / lift brush<br>
     <b>🤏 PINCH</b> thumb+index → next color<br>
-    <b>✊ FIST</b> → undo last stroke
+    <b>✊ FIST</b> → undo last stroke<br><br>
+    ARCore locks drawings to <b>real 3D space</b>
   </div>
   <button class="go-btn" id="startBtn">✦ START DRAWING</button>
   <div id="bootErr"></div>
@@ -83,11 +164,11 @@ body{background:#000;overflow:hidden;touch-action:none;font-family:'Share Tech M
   <div class="ld-msg" id="ldMsg">LOADING...</div>
 </div>
 
-<!-- HUD -->
+<!-- HUD (dom-overlay inside AR) -->
 <div id="hud">
   <div class="hc tl"></div><div class="hc tr"></div>
   <div class="hc bl"></div><div class="hc br"></div>
-  <div id="worldLock"><div id="lockDot"></div>WORLD LOCKED</div>
+  <div id="worldMode"><div id="lockDot"></div>ARCORE LOCKED</div>
   <div id="gesture">SHOW HAND</div>
   <div id="brushDot"></div>
   <div id="tools">
@@ -108,6 +189,9 @@ body{background:#000;overflow:hidden;touch-action:none;font-family:'Share Tech M
 <script>
 'use strict';
 
+/* ════════════════════════════
+   HELPERS
+════════════════════════════ */
 const $=id=>document.getElementById(id);
 function ss(t){$('status').textContent=t}
 function showScreen(id){
@@ -116,7 +200,9 @@ function showScreen(id){
 }
 function setBar(p,m){$('barFill').style.width=p+'%';if(m)$('ldMsg').textContent=m}
 
-/* ── COLORS ── */
+/* ════════════════════════════
+   COLORS
+════════════════════════════ */
 const COLORS=[
   {hex:'#ff2244',three:0xff2244,name:'RED'},
   {hex:'#ff8800',three:0xff8800,name:'ORANGE'},
@@ -148,53 +234,32 @@ function setColor(i){
   ss('COLOR: '+COLORS[colorIdx].name);
 }
 
-/* ── DEVICE ORIENTATION (world locking) ── */
-let devQuat=new THREE.Quaternion();
-let devQuatInv=new THREE.Quaternion();
-let orientReady=false;
-
-function initOrientation(){
-  const listen=()=>{
-    window.addEventListener('deviceorientation',e=>{
-      if(!e.alpha&&!e.beta&&!e.gamma) return;
-      const euler=new THREE.Euler(
-        THREE.MathUtils.degToRad(e.beta||0),
-        THREE.MathUtils.degToRad(e.alpha||0),
-        THREE.MathUtils.degToRad(-(e.gamma||0)),
-        'ZXY'
-      );
-      devQuat.setFromEuler(euler);
-      devQuatInv.copy(devQuat).invert();
-      orientReady=true;
-    },{passive:true});
-  };
-  if(typeof DeviceOrientationEvent!=='undefined'&&
-     typeof DeviceOrientationEvent.requestPermission==='function'){
-    DeviceOrientationEvent.requestPermission()
-      .then(r=>{if(r==='granted')listen();else orientReady=true;})
-      .catch(()=>{orientReady=true;});
-  } else { listen(); }
-}
-
-function camToWorld(v){ return v.clone().applyQuaternion(devQuatInv); }
-function worldToCam(v){ return v.clone().applyQuaternion(devQuat); }
-
-/* ── THREE.JS ── */
+/* ════════════════════════════
+   THREE.JS
+════════════════════════════ */
 let scene,camera,renderer,clock;
 
 function initThree(){
   clock=new THREE.Clock();
   scene=new THREE.Scene();
+  // Camera will be driven by ARCore viewer pose
   camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,0.001,30);
 
-  renderer=new THREE.WebGLRenderer({canvas:$('threeCanvas'),antialias:true,alpha:true});
+  renderer=new THREE.WebGLRenderer({
+    canvas:$('threeCanvas'),
+    antialias:true,alpha:true,
+    powerPreference:'high-performance',
+  });
   renderer.setPixelRatio(Math.min(devicePixelRatio,2));
   renderer.setSize(innerWidth,innerHeight);
-  renderer.setClearColor(0,0);
+  renderer.setClearColor(0,0); // fully transparent — AR passthrough shows real world
+  renderer.xr.enabled=true;
 
   scene.add(new THREE.AmbientLight(0xffffff,1.2));
-  const d1=new THREE.DirectionalLight(0xffffff,1.5); d1.position.set(0,1,1); scene.add(d1);
-  const d2=new THREE.DirectionalLight(0x8899ff,.8); d2.position.set(-1,0,-1); scene.add(d2);
+  const d1=new THREE.DirectionalLight(0xffffff,1.5);
+  d1.position.set(0,1,1); scene.add(d1);
+  const d2=new THREE.DirectionalLight(0x8899ff,.8);
+  d2.position.set(-1,0,-1); scene.add(d2);
 
   window.addEventListener('resize',()=>{
     camera.aspect=innerWidth/innerHeight;
@@ -204,31 +269,59 @@ function initThree(){
   });
 }
 
-/* ── STROKES ── */
+/* ════════════════════════════
+   ARCORE WORLD-LOCKED DRAWING
+   
+   Key concept:
+   - ARCore gives us viewerPose.transform.matrix (4×4) every frame
+   - This is the camera's position+orientation in WORLD space (6DOF SLAM)
+   - We store stroke points directly in WORLD space
+   - Three.js scene is in WORLD space (driven by ARCore camera pose)
+   - So strokes automatically stay world-locked — no re-projection needed!
+════════════════════════════ */
+
+// ARCore session + reference space
+let xrSession=null;
+let xrRefSpace=null;  // 'local' space — origin at session start
+
+// Current camera world matrix (from ARCore, updated every frame)
+const camWorldMat=new THREE.Matrix4();
+const camWorldPos=new THREE.Vector3();
+const camWorldQuat=new THREE.Quaternion();
+
+/* Convert a camera-space Vector3 to world-space using current ARCore pose */
+function camSpaceToWorld(v){
+  return v.clone().applyMatrix4(camWorldMat);
+}
+
+/* ════════════════════════════
+   STROKES
+   Points stored directly in WORLD space
+   Three.js scene IS world space (ARCore drives camera)
+════════════════════════════ */
 const strokeGroups=[];
 let currentWorldPts=[];
 let currentMesh=null;
 let isDrawing=false;
-const MIN_DIST=0.005;
+const MIN_DIST=0.004;
 
-function addPoint(camPos){
-  const wPos=camToWorld(camPos);
-  if(currentWorldPts.length>0&&wPos.distanceTo(currentWorldPts[currentWorldPts.length-1])<MIN_DIST) return;
-  currentWorldPts.push(wPos);
-  if(currentWorldPts.length<2) return;
-  rebuildCurrent();
+function addPoint(worldPos){
+  if(currentWorldPts.length>0&&
+     worldPos.distanceTo(currentWorldPts[currentWorldPts.length-1])<MIN_DIST) return;
+  currentWorldPts.push(worldPos.clone());
+  if(currentWorldPts.length>=2) rebuildCurrent();
 }
 
 function rebuildCurrent(){
   if(currentMesh){scene.remove(currentMesh);currentMesh=null;}
   if(currentWorldPts.length<2) return;
-  const pts=currentWorldPts.map(p=>worldToCam(p));
   try{
-    const curve=new THREE.CatmullRomCurve3(pts,false,'chordal',.5);
-    const geo=new THREE.TubeGeometry(curve,Math.max(3,pts.length*3),.004,6,false);
+    const curve=new THREE.CatmullRomCurve3(currentWorldPts,false,'chordal',.5);
+    const segs=Math.max(3,currentWorldPts.length*3);
+    const geo=new THREE.TubeGeometry(curve,segs,.004,6,false);
     const mat=new THREE.MeshStandardMaterial({
       color:currentColor,metalness:.3,roughness:.4,
-      emissive:new THREE.Color(currentColor),emissiveIntensity:.5
+      emissive:new THREE.Color(currentColor),emissiveIntensity:.5,
     });
     currentMesh=new THREE.Mesh(geo,mat);
     scene.add(currentMesh);
@@ -236,7 +329,7 @@ function rebuildCurrent(){
 }
 
 function commitStroke(){
-  if(currentWorldPts.length<2){currentWorldPts=[];return;}
+  if(currentWorldPts.length<2){currentWorldPts=[];if(currentMesh){scene.remove(currentMesh);currentMesh=null;}return;}
   strokeGroups.push({worldPts:[...currentWorldPts],color:currentColor,mesh:currentMesh});
   currentMesh=null; currentWorldPts=[];
   $('strokeCount').textContent='STROKES: '+strokeGroups.length;
@@ -261,27 +354,9 @@ function clearAll(){
   ss('CLEARED');
 }
 
-function updateAllStrokes(){
-  strokeGroups.forEach(sg=>{
-    if(!sg.mesh||sg.worldPts.length<2) return;
-    const pts=sg.worldPts.map(p=>worldToCam(p));
-    try{
-      const curve=new THREE.CatmullRomCurve3(pts,false,'chordal',.5);
-      sg.mesh.geometry.dispose();
-      sg.mesh.geometry=new THREE.TubeGeometry(curve,Math.max(3,pts.length*3),.004,6,false);
-    }catch(e){}
-  });
-  if(currentWorldPts.length>=2&&currentMesh){
-    const pts=currentWorldPts.map(p=>worldToCam(p));
-    try{
-      const curve=new THREE.CatmullRomCurve3(pts,false,'chordal',.5);
-      currentMesh.geometry.dispose();
-      currentMesh.geometry=new THREE.TubeGeometry(curve,Math.max(3,pts.length*3),.004,6,false);
-    }catch(e){}
-  }
-}
-
-/* ── DOT CANVAS ── */
+/* ════════════════════════════
+   DOT CANVAS — green joints overlay
+════════════════════════════ */
 const dotCanvas=$('dotCanvas');
 const dotCtx=dotCanvas.getContext('2d');
 function resizeDot(){dotCanvas.width=innerWidth;dotCanvas.height=innerHeight;}
@@ -308,15 +383,16 @@ function drawJoints(lms,drawing){
   BONES.forEach(([a,b])=>{
     const A=lms[a],B=lms[b];
     if(!A||!B) return;
-    dotCtx.moveTo(A.x*W,A.y*H);
-    dotCtx.lineTo(B.x*W,B.y*H);
+    // Mirror X to match front cam
+    dotCtx.moveTo((1-A.x)*W, A.y*H);
+    dotCtx.lineTo((1-B.x)*W, B.y*H);
   });
   dotCtx.stroke();
 
-  // Dots
+  // Joints
   lms.forEach((p,i)=>{
     if(!p) return;
-    const x=p.x*W, y=p.y*H;
+    const x=(1-p.x)*W, y=p.y*H; // mirror X
     const isTip=i===8, isWrist=i===0;
     const r=isTip?8:isWrist?6:4;
     const col=isTip?(drawing?'#ffffff':'#00ff88'):'#00ff88';
@@ -330,15 +406,17 @@ function drawJoints(lms,drawing){
     dotCtx.beginPath();dotCtx.arc(x,y,r,0,Math.PI*2);
     dotCtx.fillStyle=col;dotCtx.fill();
     dotCtx.strokeStyle='rgba(0,255,136,.5)';dotCtx.lineWidth=1;dotCtx.stroke();
-    // Number label
+    // Number
     dotCtx.fillStyle='rgba(0,255,136,.45)';
     dotCtx.font='bold 7px Share Tech Mono';
     dotCtx.fillText(i,x+r+2,y-r);
   });
 }
 
-/* ── GESTURE ── */
-let pinchCD=0,fistCD=0;
+/* ════════════════════════════
+   GESTURE DETECTION
+════════════════════════════ */
+let pinchCD=0, fistCD=0;
 
 function getGesture(lms){
   if(!lms||lms.length<21) return 'none';
@@ -360,32 +438,58 @@ function getGesture(lms){
   return 'pause';
 }
 
-/* ── DEPTH + 3D projection ── */
+/* ════════════════════════════
+   FINGERTIP → WORLD POSITION
+   
+   1. Get 2D landmark (normalized screen coords) from MediaPipe
+   2. Estimate depth from apparent hand size
+   3. Unproject to camera-space 3D point
+   4. Transform to world space using ARCore camera pose matrix
+════════════════════════════ */
 function estimateDepth(lms){
   const iM=lms[5],pM=lms[17];
-  if(!iM||!pM) return 0.7;
+  if(!iM||!pM) return 0.5;
   const px=Math.hypot((iM.x-pM.x)*innerWidth,(iM.y-pM.y)*innerHeight);
-  if(px<5) return 0.7;
-  const fovR=camera.fov*Math.PI/180;
+  if(px<5) return 0.5;
+  const fovR=60*Math.PI/180; // use fixed 60 deg — matches camera approx
   const focal=innerHeight/(2*Math.tan(fovR/2));
-  return Math.max(.18,Math.min((0.07*focal)/px,1.8));
+  return Math.max(.15,Math.min((0.07*focal)/px,1.5));
 }
 
-function lm3D(lm,depth){
-  const ndcX=-(lm.x*2-1); // un-mirror
-  const ndcY=-(lm.y*2-1);
-  const v=new THREE.Vector3(ndcX,ndcY,.5).unproject(camera);
-  const dir=v.sub(camera.position).normalize();
-  return camera.position.clone().add(dir.multiplyScalar(depth));
+function fingertipWorldPos(lms){
+  const tip=lms[8]; if(!tip) return null;
+  const depth=estimateDepth(lms);
+
+  // Landmark coords: x,y are 0-1 normalized (front cam, mirrored)
+  // Convert to NDC: un-mirror X, flip Y for WebGL
+  const ndcX=tip.x*2-1;   // no flip — MediaPipe flipHorizontal:true already mirrors
+  const ndcY=-(tip.y*2-1);
+
+  // Unproject into camera-space at given depth
+  // Using manual unproject because we're driving camera manually from ARCore
+  const fovR=60*Math.PI/180;
+  const aspect=innerWidth/innerHeight;
+  const tanHalfFov=Math.tan(fovR/2);
+  const camX=ndcX*tanHalfFov*aspect*depth;
+  const camY=ndcY*tanHalfFov*depth;
+  const camZ=-depth; // -Z is forward in camera space
+
+  // Camera-space point
+  const camPt=new THREE.Vector3(camX,camY,camZ);
+
+  // Transform to world space using ARCore camera matrix
+  return camSpaceToWorld(camPt);
 }
 
-/* ── MEDIAPIPE ── */
+/* ════════════════════════════
+   MEDIAPIPE
+════════════════════════════ */
 let latestLms=null;
 let handLost=0;
 const vid=$('vid');
 
 function initMediaPipe(onReady){
-  setBar(60,'LOADING MEDIAPIPE MODEL...');
+  setBar(55,'LOADING MEDIAPIPE MODEL...');
 
   const hands=new Hands({
     locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${f}`
@@ -406,131 +510,213 @@ function initMediaPipe(onReady){
     }
   });
 
-  setBar(80,'STARTING CAMERA FEED...');
+  setBar(75,'STARTING MEDIAPIPE CAMERA...');
   const mpCam=new Camera(vid,{
     onFrame:async()=>{ await hands.send({image:vid}); },
     width:640, height:480,
   });
-  mpCam.start().then(()=>{
-    setBar(100,'READY');
-    setTimeout(onReady,500);
-  }).catch(e=>{
-    throw new Error('Camera failed: '+e.message);
+  mpCam.start()
+    .then(()=>{ setBar(90,'MEDIAPIPE READY'); onReady(); })
+    .catch(e=>{ throw new Error('MediaPipe camera failed: '+e.message); });
+}
+
+/* ════════════════════════════
+   ARCORE AR SESSION
+   
+   - Start immersive-ar with local reference space
+   - Each frame get viewer pose (camera in world space)
+   - Use that matrix to:
+     a) Drive Three.js camera (so strokes render correctly in world space)
+     b) Convert fingertip from camera-space to world-space for storage
+════════════════════════════ */
+async function startARSession(){
+  setBar(92,'STARTING ARCORE SESSION...');
+
+  const session=await navigator.xr.requestSession('immersive-ar',{
+    requiredFeatures:['local'],
+    optionalFeatures:['dom-overlay'],
+    domOverlay:{root:$('hud')},
+  });
+
+  xrSession=session;
+  renderer.xr.setReferenceSpaceType('local');
+  await renderer.xr.setSession(session);
+
+  // Get reference space
+  xrRefSpace=await session.requestReferenceSpace('local');
+
+  session.addEventListener('end',()=>{
+    xrSession=null; xrRefSpace=null;
+    $('hud').style.display='none';
+    showScreen('boot');
+    renderer.setAnimationLoop(null);
+    clearAll();
+  });
+
+  setBar(100,'ARCORE READY');
+  return session;
+}
+
+/* ════════════════════════════
+   MAIN AR FRAME LOOP
+════════════════════════════ */
+function startARLoop(){
+  showScreen('__none__');
+  $('hud').style.display='block';
+  ss('☝ POINT INDEX FINGER TO DRAW');
+
+  renderer.setAnimationLoop((timestamp,frame)=>{
+    if(!frame) return;
+    const dt=Math.min(clock.getDelta(),.05);
+
+    // ── Get ARCore camera pose ──
+    // This is the accurate 6DOF world-locked camera transform
+    const viewerPose=frame.getViewerPose(xrRefSpace);
+    if(viewerPose){
+      const xrView=viewerPose.views[0];
+      const xrCamMatrix=xrView.transform.matrix;
+
+      // Load ARCore camera matrix into Three.js camera
+      camera.matrix.fromArray(xrCamMatrix);
+      camera.matrix.decompose(camera.position,camera.quaternion,camera.scale);
+      camera.updateMatrixWorld(true);
+
+      // Also store it for world-space conversions
+      camWorldMat.fromArray(xrCamMatrix);
+
+      // Update projection matrix from ARCore
+      camera.projectionMatrix.fromArray(xrView.projectionMatrix);
+      camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+    }
+
+    // ── Hand tracking ──
+    const lms=latestLms;
+    const gesture=getGesture(lms);
+    const drawing=gesture==='draw';
+
+    // Draw green joints on overlay canvas
+    drawJoints(lms,drawing);
+
+    // Brush dot
+    const bd=$('brushDot');
+    if(lms&&lms[8]){
+      const tip=lms[8];
+      const sx=(1-tip.x)*innerWidth;
+      const sy=tip.y*innerHeight;
+      bd.style.display='block';
+      bd.style.left=(sx-10)+'px';
+      bd.style.top=(sy-10)+'px';
+      bd.style.background=drawing?COLORS[colorIdx].hex:'transparent';
+      bd.style.borderColor=COLORS[colorIdx].hex;
+      bd.style.boxShadow=`0 0 12px ${COLORS[colorIdx].hex}`;
+      bd.style.transform=drawing?'scale(1.4)':'scale(1)';
+    } else { bd.style.display='none'; }
+
+    // Gesture label
+    const geo=$('gesture');
+    if(!lms){ geo.className='';geo.textContent='SHOW HAND'; }
+    else if(drawing){ geo.className='drawing';geo.textContent='✦ DRAWING'; }
+    else if(gesture==='fist'){ geo.className='paused';geo.textContent='✊ FIST'; }
+    else if(gesture==='pinch'){ geo.className='paused';geo.textContent='🤏 PINCH'; }
+    else{ geo.className='paused';geo.textContent='✋ PAUSE'; }
+
+    // Cooldowns
+    if(pinchCD>0) pinchCD--;
+    if(fistCD>0)  fistCD--;
+
+    if(lms){
+      if(gesture==='pinch'&&pinchCD===0){
+        pinchCD=35;
+        if(isDrawing){commitStroke();isDrawing=false;}
+        setColor(colorIdx+1);
+      }
+      if(gesture==='fist'&&fistCD===0){
+        fistCD=35;
+        if(isDrawing){commitStroke();isDrawing=false;}
+        undoStroke();
+      }
+
+      if(drawing&&viewerPose){
+        // Convert fingertip to world space using ARCore pose
+        const worldPt=fingertipWorldPos(lms);
+        if(worldPt){
+          if(!isDrawing){
+            isDrawing=true;
+            currentWorldPts=[];
+            currentColor=COLORS[colorIdx].three;
+            ss('✦ DRAWING IN SPACE...');
+          }
+          addPoint(worldPt);
+        }
+      } else {
+        if(isDrawing){commitStroke();isDrawing=false;ss('☝ POINT INDEX FINGER TO DRAW');}
+      }
+    } else {
+      if(isDrawing){commitStroke();isDrawing=false;}
+      ss('SHOW YOUR HAND TO CAMERA');
+    }
+
+    // ── Render Three.js scene ──
+    // Since Three.js camera is driven by ARCore pose,
+    // all world-space strokes automatically appear at correct positions
+    renderer.render(scene,camera);
   });
 }
 
-/* ── MAIN LOOP ── */
-function mainLoop(){
-  requestAnimationFrame(mainLoop);
-  const dt=Math.min(clock.getDelta(),.05);
-  const lms=latestLms;
-  const gesture=getGesture(lms);
-  const drawing=gesture==='draw';
+/* ════════════════════════════
+   BUTTONS
+════════════════════════════ */
+$('undoBtn').addEventListener('click',()=>{ if(isDrawing){commitStroke();isDrawing=false;} undoStroke(); });
+$('clearBtn').addEventListener('click',()=>{ if(isDrawing){commitStroke();isDrawing=false;} clearAll(); });
 
-  drawJoints(lms,drawing);
-
-  // Brush dot on screen
-  const bd=$('brushDot');
-  if(lms&&lms[8]){
-    const tip=lms[8];
-    const sx=(1-tip.x)*innerWidth; // mirror-corrected
-    const sy=tip.y*innerHeight;
-    bd.style.display='block';
-    bd.style.left=(sx-10)+'px';
-    bd.style.top=(sy-10)+'px';
-    bd.style.background=drawing?COLORS[colorIdx].hex:'transparent';
-    bd.style.borderColor=COLORS[colorIdx].hex;
-    bd.style.boxShadow=`0 0 12px ${COLORS[colorIdx].hex}`;
-    bd.style.transform=drawing?'scale(1.4)':'scale(1)';
-  } else { bd.style.display='none'; }
-
-  // Gesture label
-  const geo=$('gesture');
-  if(!lms){ geo.className='';geo.textContent='SHOW HAND'; }
-  else if(drawing){ geo.className='drawing';geo.textContent='✦ DRAWING'; }
-  else if(gesture==='fist'){ geo.className='paused';geo.textContent='✊ FIST'; }
-  else if(gesture==='pinch'){ geo.className='paused';geo.textContent='🤏 PINCH'; }
-  else{ geo.className='paused';geo.textContent='✋ PAUSE'; }
-
-  // Cooldowns
-  if(pinchCD>0) pinchCD--;
-  if(fistCD>0)  fistCD--;
-
-  if(lms){
-    if(gesture==='pinch'&&pinchCD===0){
-      pinchCD=35;
-      if(isDrawing){commitStroke();isDrawing=false;}
-      setColor(colorIdx+1);
-    }
-    if(gesture==='fist'&&fistCD===0){
-      fistCD=35;
-      if(isDrawing){commitStroke();isDrawing=false;}
-      undoStroke();
-    }
-
-    if(drawing){
-      const depth=estimateDepth(lms);
-      const tip3d=lm3D(lms[8],depth);
-      if(!isDrawing){
-        isDrawing=true;
-        currentWorldPts=[];
-        currentColor=COLORS[colorIdx].three;
-        ss('✦ DRAWING...');
-      }
-      addPoint(tip3d);
-    } else {
-      if(isDrawing){ commitStroke(); isDrawing=false; ss('☝ POINT INDEX FINGER TO DRAW'); }
-    }
-  } else {
-    if(isDrawing){ commitStroke(); isDrawing=false; }
-    ss('SHOW YOUR HAND TO CAMERA');
-  }
-
-  if(orientReady) updateAllStrokes();
-  renderer.render(scene,camera);
-}
-
-/* ── BUTTONS ── */
-$('undoBtn').addEventListener('click',()=>{if(isDrawing){commitStroke();isDrawing=false;}undoStroke();});
-$('clearBtn').addEventListener('click',()=>{if(isDrawing){commitStroke();isDrawing=false;}clearAll();});
-
-/* ── START ── */
+/* ════════════════════════════
+   START BUTTON
+════════════════════════════ */
 $('startBtn').addEventListener('click',async()=>{
   $('startBtn').textContent='LOADING...';
   $('startBtn').disabled=true;
   showScreen('loading');
 
   try{
-    setBar(5,'SETTING UP 3D...');
+    setBar(5,'SETTING UP 3D ENGINE...');
     initThree();
     buildPalette();
-    setBar(15,'REQUESTING ORIENTATION...');
-    initOrientation();
-    setBar(25,'REQUESTING CAMERA...');
+    setBar(15,'3D ENGINE READY');
 
-    // Request camera first so MediaPipe can use it
+    setBar(20,'CHECKING ARCORE...');
+    if(!navigator.xr){
+      throw new Error('WebXR not available. Open in Chrome on Android.');
+    }
+    const arSupported=await navigator.xr.isSessionSupported('immersive-ar').catch(()=>false);
+    if(!arSupported){
+      throw new Error('ARCore not available on this device/browser. Needs Android Chrome + ARCore.');
+    }
+    setBar(30,'ARCORE SUPPORTED ✓');
+
+    setBar(35,'REQUESTING CAMERA FOR MEDIAPIPE...');
+    // Start getUserMedia so MediaPipe can use it alongside ARCore
     const stream=await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:{ideal:'user'},width:{ideal:1280},height:{ideal:720}},
-      audio:false
+      video:{facingMode:{ideal:'environment'},width:{ideal:640},height:{ideal:480}},
+      audio:false,
     });
     vid.srcObject=stream;
     await vid.play();
     setBar(50,'CAMERA READY');
 
-    initMediaPipe(()=>{
-      showScreen('__none__');
-      $('hud').style.display='block';
-      ss('☝ POINT INDEX FINGER TO DRAW');
-      mainLoop();
+    // Start MediaPipe on the video stream
+    await new Promise((resolve,reject)=>{
+      initMediaPipe(resolve);
     });
+
+    // Start ARCore session
+    await startARSession();
+
+    // All systems go — start the AR loop
+    startARLoop();
 
   }catch(e){
     console.error(e);
-    $('bootErr').textContent=
-      (e.message||'').toLowerCase().includes('permission')||
-      (e.message||'').toLowerCase().includes('denied')
-      ?'CAMERA PERMISSION DENIED'
-      :'ERROR: '+(e.message||e);
+    $('bootErr').textContent='ERROR: '+(e.message||String(e));
     $('bootErr').style.display='block';
     showScreen('boot');
     $('startBtn').textContent='✦ START DRAWING';
