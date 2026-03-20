@@ -6,284 +6,332 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#000000">
 <title>J.A.R.V.I.S</title>
-
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.1.5/dist/mindar-image.prod.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.1.5/dist/mindar-image-three.prod.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js" crossorigin="anonymous"></script>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
-
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;
   font-family:'Share Tech Mono',monospace;color:#00f5ff;}
 
+/* MindAR owns this — camera always visible inside */
 #container{position:fixed;inset:0;z-index:1;}
 #container canvas,#container video{
   position:fixed!important;top:0!important;left:0!important;
   width:100%!important;height:100%!important;object-fit:cover!important;
 }
 
-/* ── PERMISSION ── */
-#perm-screen{
-  position:fixed;inset:0;z-index:999;background:rgba(0,4,14,0.97);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  padding:32px 24px;text-align:center;
+/* ═══════════════════════════════════════════════════
+   LAUNCH PAGE — PORTRAIT, full screen
+═══════════════════════════════════════════════════ */
+#launch-page{
+  position:fixed;inset:0;z-index:900;
+  background:#000a12;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  padding:32px 24px;
+  /* scanlines */
+  background-image:repeating-linear-gradient(
+    0deg,transparent,transparent 3px,rgba(0,245,255,0.012) 3px,rgba(0,245,255,0.012) 4px
+  );
 }
-.perm-icon{font-size:56px;margin-bottom:20px;}
-.p-title{font-family:'Rajdhani',sans-serif;font-size:26px;letter-spacing:6px;color:#fff;margin-bottom:10px;}
-.p-desc{font-size:11px;color:#00f5ff66;line-height:2;margin-bottom:36px;max-width:280px;}
-.big-btn{
-  width:100%;max-width:340px;height:68px;
-  background:transparent;border:1.5px solid #00f5ff;border-radius:16px;
-  color:#00f5ff;font-family:'Share Tech Mono',monospace;
-  font-size:14px;letter-spacing:5px;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;gap:12px;
+.lp-logo{
+  font-family:'Rajdhani',sans-serif;font-size:48px;font-weight:700;
+  letter-spacing:16px;color:#00f5ff;
+  text-shadow:0 0 30px #00f5ffaa,0 0 60px #00f5ff44;
+  margin-bottom:4px;text-align:center;
 }
-.big-btn:active{background:rgba(0,245,255,0.1);}
-.p-note{font-size:9px;color:#00f5ff33;margin-top:14px;line-height:1.8;max-width:260px;}
+.lp-sub{font-size:10px;letter-spacing:5px;color:#00f5ff44;margin-bottom:48px;text-align:center;}
 
-/* ── COMPILE ── */
-#compile-screen{
-  position:fixed;inset:0;z-index:950;background:rgba(0,4,14,0.97);
-  display:none;flex-direction:column;align-items:center;justify-content:center;
-  padding:32px 24px;text-align:center;
+.lp-step{
+  width:100%;max-width:340px;
+  background:rgba(0,30,50,0.6);border:1px solid rgba(0,245,255,0.15);
+  border-radius:12px;padding:14px 18px;margin-bottom:12px;
+  display:flex;align-items:center;gap:14px;
 }
-.c-title{font-family:'Rajdhani',sans-serif;font-size:22px;letter-spacing:4px;color:#00f5ff;margin-bottom:6px;}
-.c-sub{font-size:10px;color:#00f5ff55;letter-spacing:2px;margin-bottom:32px;line-height:1.8;}
-.prog-wrap{width:100%;max-width:300px;background:rgba(0,245,255,0.08);
-  border:1px solid rgba(0,245,255,0.2);border-radius:8px;height:8px;overflow:hidden;margin-bottom:12px;}
-#prog-bar{height:100%;background:#00f5ff;width:0%;transition:width 0.3s;border-radius:8px;}
-#prog-txt{font-size:12px;color:#00f5ff66;letter-spacing:2px;}
+.lp-num{font-family:'Rajdhani',sans-serif;font-size:28px;font-weight:700;color:#00f5ff;min-width:28px;}
+.lp-txt{}
+.lp-t{font-size:11px;letter-spacing:2px;color:#fff;margin-bottom:2px;}
+.lp-d{font-size:10px;color:#00f5ff55;line-height:1.6;}
 
-/* ── SETUP ── */
-#setup{
-  position:fixed;inset:0;z-index:800;
-  display:none;flex-direction:column;align-items:center;
-  background:linear-gradient(180deg,rgba(0,5,15,0.82) 0%,rgba(0,8,20,0.76) 55%,rgba(0,4,12,0.9) 100%);
-  padding:max(env(safe-area-inset-top,0px),14px) 20px 175px;overflow-y:auto;
-}
-.logo{font-family:'Rajdhani',sans-serif;font-size:36px;font-weight:700;
-  letter-spacing:14px;color:#00f5ff;text-shadow:0 0 24px #00f5ffaa,0 0 50px #00f5ff44;
-  margin-top:14px;margin-bottom:2px;text-align:center;}
-.logo-s{font-size:9px;letter-spacing:5px;color:#00f5ff44;margin-bottom:18px;text-align:center;}
-.status-bar{
-  display:flex;align-items:center;gap:10px;
-  background:rgba(0,0,0,0.55);border:1px solid rgba(0,245,255,0.2);
-  border-radius:10px;padding:11px 16px;font-size:10px;letter-spacing:2px;
-  margin-bottom:14px;width:100%;max-width:400px;
-  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
-}
-.ldot{width:9px;height:9px;border-radius:50%;background:#ff4455;flex-shrink:0;animation:blink 1s ease-in-out infinite;}
-.ldot.on{background:#00ff88;animation:none;}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:0.15}}
-
-/* Marker tabs */
-.marker-tabs{
-  width:100%;max-width:400px;display:flex;gap:8px;margin-bottom:10px;
-}
-.mtab{
-  flex:1;padding:10px 6px;
-  background:rgba(0,0,0,0.45);border:1px solid rgba(0,245,255,0.15);
-  border-radius:10px;font-size:9px;letter-spacing:2px;color:#00f5ff77;
-  cursor:pointer;text-align:center;
-}
-.mtab.active{border-color:#00f5ff;color:#00f5ff;background:rgba(0,245,255,0.08);}
-
-.hiro-card{
-  width:100%;max-width:400px;
-  background:rgba(0,0,0,0.55);border:1px solid rgba(0,245,255,0.14);
-  border-radius:14px;padding:16px;margin-bottom:14px;
-  display:flex;gap:16px;align-items:center;
-  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
-}
-.marker-thumb{width:90px;height:90px;flex-shrink:0;border-radius:8px;image-rendering:pixelated;}
-.hi-t{font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:500;
-  letter-spacing:2px;color:#fff;margin-bottom:4px;}
-.hi-d{font-size:10px;color:#00f5ff66;line-height:1.75;}
-.hi-d span{color:#00ff88;}
-
-/* Which marker badge */
-#which-badge{
-  display:inline-block;font-size:9px;letter-spacing:2px;padding:3px 10px;
-  border-radius:20px;margin-bottom:8px;
-  background:rgba(0,245,255,0.1);color:#00f5ff;
-}
-
-.steps-card{
-  width:100%;max-width:400px;
-  background:rgba(0,0,0,0.55);border:1px solid rgba(0,245,255,0.12);
-  border-radius:14px;overflow:hidden;margin-bottom:14px;
-  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
-}
-.s-row{display:flex;gap:14px;padding:14px 16px;border-bottom:1px solid rgba(0,245,255,0.07);}
-.s-row:last-child{border-bottom:none;}
-.s-n{font-family:'Rajdhani',sans-serif;font-size:24px;font-weight:700;
-  color:#00f5ff;line-height:1;min-width:22px;}
-.s-t{font-size:11px;letter-spacing:2px;color:#fff;margin-bottom:3px;}
-.s-d{font-size:10px;color:#00f5ff55;line-height:1.65;}
-
-/* ── BOTTOM BUTTONS ── */
-#bottom-btns{
-  position:fixed;bottom:0;left:0;width:100%;z-index:810;
-  display:none;flex-direction:column;gap:10px;
-  padding:16px 20px calc(max(env(safe-area-inset-bottom,0px),12px) + 10px);
-  background:linear-gradient(0deg,rgba(0,3,10,0.98) 0%,rgba(0,3,10,0.85) 68%,transparent 100%);
-}
-#btn-launch{
-  width:100%;height:64px;
+#btn-start{
+  margin-top:8px;width:100%;max-width:340px;height:64px;
   background:transparent;border:1.5px solid #00f5ff;border-radius:16px;
   color:#00f5ff;font-family:'Share Tech Mono',monospace;
   font-size:15px;letter-spacing:5px;cursor:pointer;
   display:flex;align-items:center;justify-content:center;gap:12px;
   position:relative;overflow:hidden;
 }
-#btn-launch::before{
+#btn-start::before{
   content:'';position:absolute;top:0;left:-110%;width:100%;height:100%;
   background:linear-gradient(90deg,transparent,rgba(0,245,255,0.16),transparent);
   animation:shine 2.6s ease-in-out infinite;
 }
 @keyframes shine{to{left:210%;}}
-#btn-launch:active{background:rgba(0,245,255,0.1);box-shadow:0 0 26px rgba(0,245,255,0.28);}
-#btn-launch:disabled{opacity:0.35;pointer-events:none;}
-#btn-save{
+#btn-start:active{background:rgba(0,245,255,0.1);}
+
+/* ═══════════════════════════════════════════════════
+   IMAGE UPLOAD PAGE — PORTRAIT
+═══════════════════════════════════════════════════ */
+#upload-page{
+  position:fixed;inset:0;z-index:890;
+  background:rgba(0,5,15,0.97);
+  display:none;flex-direction:column;
+  align-items:center;justify-content:flex-start;
+  padding:max(env(safe-area-inset-top,0px),20px) 20px 160px;
+  overflow-y:auto;
+}
+.up-title{font-family:'Rajdhani',sans-serif;font-size:22px;letter-spacing:4px;
+  color:#fff;margin-bottom:4px;margin-top:8px;}
+.up-sub{font-size:10px;color:#00f5ff55;letter-spacing:2px;margin-bottom:24px;}
+
+/* Upload zone */
+#upload-zone{
+  width:100%;max-width:380px;
+  border:2px dashed rgba(0,245,255,0.3);border-radius:16px;
+  padding:28px 20px;margin-bottom:16px;
+  display:flex;flex-direction:column;align-items:center;gap:14px;
+  cursor:pointer;transition:border-color 0.2s;
+  background:rgba(0,245,255,0.02);
+}
+#upload-zone.has-image{border-color:#00f5ff;border-style:solid;}
+#upload-zone:active{background:rgba(0,245,255,0.05);}
+#preview-img{
+  width:100%;max-height:220px;object-fit:contain;
+  border-radius:8px;display:none;
+}
+.uz-icon{font-size:40px;}
+.uz-t{font-size:12px;letter-spacing:2px;color:#00f5ff;}
+.uz-d{font-size:10px;color:#00f5ff44;text-align:center;line-height:1.7;}
+#file-input{display:none;}
+
+/* Tips */
+.tips-card{
+  width:100%;max-width:380px;
+  background:rgba(0,245,255,0.04);border:1px solid rgba(0,245,255,0.12);
+  border-radius:12px;padding:14px 16px;margin-bottom:14px;
+}
+.tip-title{font-size:10px;letter-spacing:3px;color:#00f5ff55;margin-bottom:10px;}
+.tip-row{display:flex;gap:8px;align-items:flex-start;margin:5px 0;font-size:11px;color:#00f5ff88;line-height:1.5;}
+.tip-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:4px;}
+.tip-g{background:#1D9E75;}.tip-r{background:#E24B4A;}
+
+/* Bottom buttons for upload page */
+#upload-btns{
+  position:fixed;bottom:0;left:0;width:100%;z-index:895;
+  display:none;flex-direction:column;gap:10px;
+  padding:14px 20px calc(max(env(safe-area-inset-bottom,0px),12px) + 8px);
+  background:linear-gradient(0deg,rgba(0,3,10,0.98) 0%,rgba(0,3,10,0.85) 65%,transparent 100%);
+}
+#btn-compile{
+  width:100%;height:64px;
+  background:transparent;border:1.5px solid #00f5ff;border-radius:16px;
+  color:#00f5ff;font-family:'Share Tech Mono',monospace;
+  font-size:14px;letter-spacing:4px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:12px;
+  position:relative;overflow:hidden;opacity:0.35;pointer-events:none;
+}
+#btn-compile.ready{opacity:1;pointer-events:all;}
+#btn-compile.ready::before{
+  content:'';position:absolute;top:0;left:-110%;width:100%;height:100%;
+  background:linear-gradient(90deg,transparent,rgba(0,245,255,0.16),transparent);
+  animation:shine 2.6s ease-in-out infinite;
+}
+#btn-compile:active{background:rgba(0,245,255,0.1);}
+#btn-retake{
   width:100%;height:50px;
   background:rgba(0,0,0,0.5);border:1px solid rgba(0,245,255,0.18);
   border-radius:14px;color:#00f5ff77;font-family:'Share Tech Mono',monospace;
   font-size:11px;letter-spacing:3px;cursor:pointer;
 }
-#btn-save:active{background:rgba(0,245,255,0.07);}
+#btn-retake:active{background:rgba(0,245,255,0.07);}
 
-/* ── HUD ── */
-#hud{position:fixed;inset:0;z-index:10;pointer-events:none;display:none;}
+/* ═══════════════════════════════════════════════════
+   COMPILE SCREEN
+═══════════════════════════════════════════════════ */
+#compile-screen{
+  position:fixed;inset:0;z-index:960;background:rgba(0,4,14,0.97);
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  padding:32px 24px;text-align:center;
+}
+.c-title{font-family:'Rajdhani',sans-serif;font-size:22px;letter-spacing:4px;color:#00f5ff;margin-bottom:6px;}
+.c-sub{font-size:10px;color:#00f5ff55;letter-spacing:2px;margin-bottom:10px;line-height:1.8;}
+#compile-thumb{width:120px;height:120px;object-fit:cover;border-radius:10px;margin-bottom:24px;border:1px solid rgba(0,245,255,0.3);}
+.prog-wrap{width:100%;max-width:300px;background:rgba(0,245,255,0.08);
+  border:1px solid rgba(0,245,255,0.2);border-radius:8px;height:8px;overflow:hidden;margin-bottom:12px;}
+#prog-bar{height:100%;background:#00f5ff;width:0%;transition:width 0.3s;border-radius:8px;}
+#prog-txt{font-size:12px;color:#00f5ff66;letter-spacing:2px;}
+
+/* ═══════════════════════════════════════════════════
+   AR HUD — LANDSCAPE
+   Everything except the launch page is landscape
+═══════════════════════════════════════════════════ */
+#hud{
+  position:fixed;inset:0;z-index:10;
+  pointer-events:none;display:none;
+}
+/* scanlines */
 #hud::after{
   content:'';position:absolute;inset:0;
   background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,245,255,0.01) 3px,rgba(0,245,255,0.01) 4px);
   pointer-events:none;
 }
+/* Landscape: brand on LEFT, status on RIGHT, both along long axis */
 #hud-top{
   position:absolute;top:0;left:0;right:0;
-  padding:max(env(safe-area-inset-top,0px),12px) 18px 10px;
+  padding:10px 20px;
   display:flex;justify-content:space-between;align-items:center;
   background:linear-gradient(180deg,rgba(0,4,12,0.82) 0%,transparent 100%);
 }
-.hbrand{font-family:'Rajdhani',sans-serif;font-size:17px;font-weight:700;
+.hbrand{font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;
   letter-spacing:7px;color:#00f5ff;text-shadow:0 0 14px #00f5ff55;}
-#hud-zoom{font-size:9px;letter-spacing:2px;color:#00ff88;
+#hud-zoom{font-size:8px;letter-spacing:2px;color:#00ff88;
   background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.2);
-  border-radius:20px;padding:2px 9px;}
-#hud-st{font-size:9px;letter-spacing:2px;color:#00f5ff66;}
-.brk{position:absolute;width:24px;height:24px;border-color:#00f5ff33;border-style:solid;}
-.brk-tl{top:12px;left:12px;border-width:1.5px 0 0 1.5px;}
-.brk-tr{top:12px;right:12px;border-width:1.5px 1.5px 0 0;}
-.brk-bl{bottom:86px;left:12px;border-width:0 0 1.5px 1.5px;}
-.brk-br{bottom:86px;right:12px;border-width:0 1.5px 1.5px 0;}
+  border-radius:20px;padding:2px 8px;}
+#hud-st{font-size:8px;letter-spacing:2px;color:#00f5ff66;}
+
+/* Corner brackets — landscape positions */
+.brk{position:absolute;width:22px;height:22px;border-color:#00f5ff33;border-style:solid;}
+.brk-tl{top:10px;left:10px;border-width:1.5px 0 0 1.5px;}
+.brk-tr{top:10px;right:10px;border-width:1.5px 1.5px 0 0;}
+.brk-bl{bottom:60px;left:10px;border-width:0 0 1.5px 1.5px;}
+.brk-br{bottom:60px;right:10px;border-width:0 1.5px 1.5px 0;}
+
+/* Target scanning prompt — center */
 #target-msg{
   position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
   background:rgba(0,8,20,0.85);border:1px solid #00f5ff22;border-radius:12px;
-  padding:20px 28px;text-align:center;transition:opacity 0.5s;
+  padding:16px 24px;text-align:center;transition:opacity 0.5s;
 }
-.tm-t{font-size:11px;letter-spacing:4px;margin-bottom:6px;}
-.tm-s{font-size:10px;color:#00f5ff55;line-height:1.9;letter-spacing:1px;}
-#dots{position:absolute;bottom:68px;left:50%;transform:translateX(-50%);display:flex;gap:16px;}
-.dot{width:8px;height:8px;border-radius:50%;border:1.5px solid #00f5ff33;transition:all 0.4s;}
-.dot.on{background:#00f5ff;border-color:#00f5ff;box-shadow:0 0 12px #00f5ff;}
-#swipe-hint{position:absolute;bottom:48px;left:50%;transform:translateX(-50%);
-  font-size:9px;letter-spacing:2px;color:#00f5ff33;white-space:nowrap;}
+.tm-t{font-size:10px;letter-spacing:4px;margin-bottom:5px;}
+.tm-s{font-size:9px;color:#00f5ff55;line-height:1.9;letter-spacing:1px;}
+
+/* Landscape panel dots — bottom center */
+#dots{
+  position:absolute;bottom:36px;left:50%;transform:translateX(-50%);
+  display:flex;gap:14px;
+}
+.dot{width:7px;height:7px;border-radius:50%;border:1.5px solid #00f5ff33;transition:all 0.4s;}
+.dot.on{background:#00f5ff;border-color:#00f5ff;box-shadow:0 0 10px #00f5ff;}
+#swipe-hint{
+  position:absolute;bottom:20px;left:50%;transform:translateX(-50%);
+  font-size:8px;letter-spacing:2px;color:#00f5ff33;white-space:nowrap;
+}
+
+/* Change target button — bottom right in landscape */
+#btn-change-target{
+  position:absolute;bottom:24px;right:16px;
+  background:rgba(0,0,0,0.6);border:1px solid rgba(0,245,255,0.2);
+  border-radius:10px;padding:8px 14px;
+  font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:2px;color:#00f5ff66;
+  cursor:pointer;pointer-events:all;
+}
+#btn-change-target:active{background:rgba(0,245,255,0.08);}
+
 #hand-dot{
-  position:absolute;width:22px;height:22px;border-radius:50%;
+  position:absolute;width:20px;height:20px;border-radius:50%;
   border:2px solid #00f5ff;background:rgba(0,245,255,0.14);
   transform:translate(-50%,-50%);display:none;
-  box-shadow:0 0 12px #00f5ff55;pointer-events:none;
+  box-shadow:0 0 10px #00f5ff55;pointer-events:none;
 }
-#flash{position:absolute;inset:0;background:rgba(0,245,255,0.05);
-  opacity:0;pointer-events:none;transition:opacity 0.15s;}
+#flash{
+  position:absolute;inset:0;background:rgba(0,245,255,0.05);
+  opacity:0;pointer-events:none;transition:opacity 0.15s;
+}
 </style>
 </head>
 <body>
 
 <div id="container"></div>
 
-<!-- ══ PERMISSION ══ -->
-<div id="perm-screen">
-  <div class="perm-icon">📷</div>
-  <div class="p-title">CAMERA ACCESS</div>
-  <div class="p-desc">J.A.R.V.I.S needs your rear camera to track the marker and anchor the hologram.</div>
-  <button class="big-btn" onclick="grantCam()">▶ &nbsp;GRANT CAMERA ACCESS</button>
-  <div class="p-note">Camera stays on device. Nothing recorded or uploaded.</div>
+<!-- ══════════════════════════════════════════
+     LAUNCH PAGE — portrait
+══════════════════════════════════════════ -->
+<div id="launch-page">
+  <div class="lp-logo">J.A.R.V.I.S</div>
+  <div class="lp-sub">HOLOGRAPHIC INTERFACE v4.6</div>
+
+  <div class="lp-step">
+    <div class="lp-num">1</div>
+    <div class="lp-txt">
+      <div class="lp-t">PHOTOGRAPH ANY IMAGE</div>
+      <div class="lp-d">Book cover, poster, magazine — anything with texture and colour.</div>
+    </div>
+  </div>
+  <div class="lp-step">
+    <div class="lp-num">2</div>
+    <div class="lp-txt">
+      <div class="lp-t">APP COMPILES IT AS TARGET</div>
+      <div class="lp-d">~15 seconds. Done once per image.</div>
+    </div>
+  </div>
+  <div class="lp-step">
+    <div class="lp-num">3</div>
+    <div class="lp-txt">
+      <div class="lp-t">POINT CAMERA — HOLOGRAM LOCKS</div>
+      <div class="lp-d">Swipe right to cycle AKSHAT → TIME → DATE.</div>
+    </div>
+  </div>
+
+  <button id="btn-start" onclick="showUploadPage()">
+    <span style="font-size:18px;">⬡</span>
+    BEGIN
+  </button>
 </div>
 
-<!-- ══ COMPILE ══ -->
+<!-- ══════════════════════════════════════════
+     UPLOAD PAGE — portrait
+══════════════════════════════════════════ -->
+<div id="upload-page">
+  <div class="up-title">CHOOSE YOUR TARGET</div>
+  <div class="up-sub">PHOTOGRAPH OR SELECT ANY IMAGE</div>
+
+  <div id="upload-zone" onclick="triggerUpload()">
+    <img id="preview-img" alt="preview">
+    <div id="uz-placeholder" style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+      <div class="uz-icon">📸</div>
+      <div class="uz-t">TAP TO TAKE PHOTO OR CHOOSE IMAGE</div>
+      <div class="uz-d">Use your camera to photograph the object<br>you want JARVIS to appear above.<br>Book cover · poster · printed page · any object</div>
+    </div>
+  </div>
+
+  <input type="file" id="file-input" accept="image/*" capture="environment" onchange="handleFile(this)">
+
+  <div class="tips-card">
+    <div class="tip-title">TIPS FOR BEST TRACKING</div>
+    <div class="tip-row"><span class="tip-dot tip-g"></span>Rich texture — book cover, magazine, colourful poster</div>
+    <div class="tip-row"><span class="tip-dot tip-g"></span>Good contrast — dark and light areas</div>
+    <div class="tip-row"><span class="tip-dot tip-g"></span>At least A5 size when placed on table</div>
+    <div class="tip-row"><span class="tip-dot tip-g"></span>Flat surface, no glare or reflections</div>
+    <div class="tip-row"><span class="tip-dot tip-r"></span>Avoid plain white/black surfaces</div>
+    <div class="tip-row"><span class="tip-dot tip-r"></span>Avoid repeating patterns (brick, fabric)</div>
+    <div class="tip-row"><span class="tip-dot tip-r"></span>Avoid shiny or transparent materials</div>
+  </div>
+</div>
+
+<div id="upload-btns">
+  <button id="btn-compile" onclick="startCompile()">
+    <span style="font-size:16px;">⬡</span>
+    COMPILE TARGET &amp; LAUNCH
+  </button>
+  <button id="btn-retake" onclick="triggerUpload()">📸 &nbsp;RETAKE / CHOOSE DIFFERENT IMAGE</button>
+</div>
+
+<!-- ══════════════════════════════════════════
+     COMPILE SCREEN
+══════════════════════════════════════════ -->
 <div id="compile-screen">
   <div class="c-title">COMPILING TARGET</div>
-  <div class="c-sub" id="compile-sub">PROCESSING MARKER — ONE TIME ONLY</div>
+  <div class="c-sub">EXTRACTING FEATURE POINTS<br>FROM YOUR IMAGE</div>
+  <img id="compile-thumb" alt="">
   <div class="prog-wrap"><div id="prog-bar"></div></div>
   <div id="prog-txt">0%</div>
 </div>
 
-<!-- ══ SETUP ══ -->
-<div id="setup">
-  <div class="logo">J.A.R.V.I.S</div>
-  <div class="logo-s">▸ HOLOGRAPHIC INTERFACE ◂</div>
-
-  <div class="status-bar">
-    <span class="ldot" id="ldot"></span>
-    <span id="status-lbl">READY</span>
-  </div>
-
-  <!-- Marker selector: choose which one you printed -->
-  <div class="marker-tabs">
-    <div class="mtab active" id="tab-text" onclick="selectMarker('text')">HIRO TEXT<br>(ALREADY PRINTED)</div>
-    <div class="mtab" id="tab-pixel" onclick="selectMarker('pixel')">PIXEL PATTERN<br>(BETTER TRACKING)</div>
-  </div>
-
-  <div class="hiro-card">
-    <canvas id="marker-canvas" class="marker-thumb"></canvas>
-    <div>
-      <div id="which-badge">YOU HAVE THIS PRINTED</div>
-      <div class="hi-t" id="marker-title">HIRO TEXT MARKER</div>
-      <div class="hi-d" id="marker-desc">
-        This is the marker you already have.<br>
-        No reprinting needed — tap Activate.<br>
-        <span>Tap "PIXEL PATTERN" tab for better tracking.</span>
-      </div>
-    </div>
-  </div>
-
-  <div class="steps-card">
-    <div class="s-row">
-      <div class="s-n">1</div>
-      <div>
-        <div class="s-t">SELECT YOUR MARKER ABOVE</div>
-        <div class="s-d">Already printed the "Hiro" text? Select that tab. Want better tracking? Select Pixel Pattern and reprint.</div>
-      </div>
-    </div>
-    <div class="s-row">
-      <div class="s-n">2</div>
-      <div>
-        <div class="s-t">TAP ACTIVATE</div>
-        <div class="s-d">Compiles selected marker once (~15s). Goes fullscreen.</div>
-      </div>
-    </div>
-    <div class="s-row">
-      <div class="s-n">3</div>
-      <div>
-        <div class="s-t">POINT AT MARKER — SWIPE RIGHT</div>
-        <div class="s-d">Hold ~40cm above marker. Good light, no glare. AKSHAT → TIME → DATE.</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ══ BOTTOM BUTTONS ══ -->
-<div id="bottom-btns">
-  <button id="btn-launch" onclick="launchAR()">
-    <span style="font-size:18px;">⬡</span>
-    ACTIVATE J.A.R.V.I.S
-  </button>
-  <button id="btn-save" onclick="saveMarker()">↓ SAVE SELECTED MARKER AS PNG</button>
-</div>
-
-<!-- ══ HUD ══ -->
+<!-- ══════════════════════════════════════════
+     AR HUD — landscape
+══════════════════════════════════════════ -->
 <div id="hud">
   <div class="brk brk-tl"></div><div class="brk brk-tr"></div>
   <div class="brk brk-bl"></div><div class="brk brk-br"></div>
@@ -294,7 +342,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
   </div>
   <div id="target-msg">
     <div class="tm-t">◈ SEARCHING</div>
-    <div class="tm-s">POINT CAMERA AT<br>HIRO MARKER ON TABLE</div>
+    <div class="tm-s">POINT CAMERA AT<br>YOUR TARGET IMAGE</div>
   </div>
   <div id="hand-dot"></div>
   <div id="flash"></div>
@@ -304,138 +352,25 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
     <div class="dot" id="d2"></div>
   </div>
   <div id="swipe-hint">◀ SWIPE RIGHT TO CYCLE PANELS ▶</div>
+  <button id="btn-change-target" onclick="resetToUpload()">⇄ CHANGE TARGET</button>
 </div>
 
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
 
-// ── Draw the TEXT Hiro marker (what user printed) ─────────────────────────────
-function drawHiroText(canvas, size) {
-  canvas.width = size; canvas.height = size;
-  const ctx = canvas.getContext('2d');
-
-  // White background
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, size, size);
-
-  // Full black background (like the printed one)
-  ctx.fillStyle = '#000000';
-  ctx.fillRect(0, 0, size, size);
-
-  // Inner white box (about 55% of size, centered slightly upper)
-  const boxW = size * 0.55;
-  const boxH = size * 0.52;
-  const boxX = (size - boxW) / 2;
-  const boxY = size * 0.18;
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(boxX, boxY, boxW, boxH);
-
-  // "Hiro" text inside the white box
-  ctx.fillStyle = '#000000';
-  ctx.font = `bold ${size * 0.18}px Georgia, serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('Hiro', size / 2, boxY + boxH * 0.72);
-
-  // Small dot above the "i" for the capital feel — draw the "H", "i", "r", "o" style
-  // Already done by the font above
-}
-
-// ── Draw the PIXEL pattern marker ─────────────────────────────────────────────
-function drawHiroPixel(canvas, size) {
-  canvas.width = size; canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  const u = size / 14;
-
-  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, size, size);
-  ctx.fillStyle = '#000000';
-  // Outer border (1u thick)
-  ctx.fillRect(0, 0, size, u);
-  ctx.fillRect(0, size-u, size, u);
-  ctx.fillRect(0, 0, u, size);
-  ctx.fillRect(size-u, 0, u, size);
-  // Inner white
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(u, u, size-2*u, size-2*u);
-  // Pattern pixels
-  ctx.fillStyle = '#000000';
-  const px = [
-    [2,2],[3,2],[4,2],[6,2],[8,2],[9,2],[11,2],
-    [2,3],[5,3],[7,3],[9,3],[11,3],
-    [2,4],[4,4],[5,4],[7,4],[9,4],[11,4],
-    [2,5],[3,5],[7,5],[10,5],[11,5],
-    [2,6],[4,6],[6,6],[8,6],[9,6],[11,6],
-    [2,7],[4,7],[6,7],[8,7],[10,7],
-    [2,8],[3,8],[6,8],[8,8],[10,8],[11,8],
-    [2,9],[5,9],[8,9],[11,9],
-    [2,10],[3,10],[4,10],[7,10],[10,10],[11,10],
-    [2,11],[4,11],[8,11],[9,11],[11,11],
-  ];
-  px.forEach(([x,y]) => ctx.fillRect(x*u, y*u, u, u));
-}
-
-// ── Marker selection ──────────────────────────────────────────────────────────
-let activeMarker = 'text'; // 'text' or 'pixel'
-let activeCanvas = null;
-
-function selectMarker(type) {
-  activeMarker = type;
-  const cv = $('marker-canvas');
-
-  if (type === 'text') {
-    drawHiroText(cv, 90);
-    $('tab-text').classList.add('active');
-    $('tab-pixel').classList.remove('active');
-    $('which-badge').textContent = 'YOU HAVE THIS PRINTED';
-    $('marker-title').textContent = 'HIRO TEXT MARKER';
-    $('marker-desc').innerHTML = 'This is the marker you already have.<br>No reprinting needed — tap Activate.<br><span style="color:#00ff88;">Tap Activate and point camera at it.</span>';
-  } else {
-    drawHiroPixel(cv, 90);
-    $('tab-pixel').classList.add('active');
-    $('tab-text').classList.remove('active');
-    $('which-badge').textContent = 'BETTER TRACKING';
-    $('marker-title').textContent = 'PIXEL PATTERN MARKER';
-    $('marker-desc').innerHTML = 'More features = more reliable tracking.<br>Tap "SAVE" below, print at A5+.<br><span style="color:#00ff88;">Recommended for best results.</span>';
-  }
-
-  // Build full-size canvas for compilation
-  activeCanvas = document.createElement('canvas');
-  if (type === 'text') {
-    drawHiroText(activeCanvas, 512);
-  } else {
-    drawHiroPixel(activeCanvas, 512);
-  }
-
-  // Reset compiled data when switching
-  compiledURL = null;
-}
-
-function saveMarker() {
-  if (!activeCanvas) return;
-  const link = document.createElement('a');
-  link.download = activeMarker === 'text' ? 'hiro-text.png' : 'hiro-pixel.png';
-  link.href = activeCanvas.toDataURL('image/png');
-  link.click();
-}
-
-// ── Init preview ──────────────────────────────────────────────────────────────
-window.addEventListener('DOMContentLoaded', () => {
-  selectMarker('text'); // default: text marker (what user has printed)
-});
-
-// ── State ─────────────────────────────────────────────────────────────────────
 let selectedDevId = null;
 let compiledURL   = null;
+let uploadedImage = null;
 let arLaunched    = false;
 let currentPanel  = 0;
 let swipeCooldown = false;
 let scanY=0, floatY=0, floatDir=1, ring1Rot=0, ring2Rot=0, frameN=0;
-let THREE, panels=[], panelGroup, ring1, ring2;
+let THREE, panels=[], panelGroup, ring1, ring2, mindarThreeInst=null;
 
-// ── Camera permission ─────────────────────────────────────────────────────────
-async function grantCam() {
-  $('perm-screen').style.display = 'none';
+// ── Show upload page ──────────────────────────────────────────────────────────
+async function showUploadPage() {
+  // Request camera permission first
   try {
     const init = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});
     init.getTracks().forEach(t=>t.stop());
@@ -447,103 +382,129 @@ async function grantCam() {
     });
     const uw = rear.find(d=>{const l=d.label.toLowerCase();return l.includes('wide')||l.includes('ultra');});
     selectedDevId = (uw||rear[1]||rear[0])?.deviceId||null;
-    const lbl = (uw||rear[1]||rear[0])?.label||'';
-    $('ldot').classList.add('on');
-    $('status-lbl').textContent = lbl.toLowerCase().includes('wide')
-      ? '0.5× ULTRA WIDE SELECTED' : 'CAMERA READY · '+(lbl.substring(0,22)||'REAR LENS');
-  } catch(e) {
-    $('status-lbl').textContent = 'CAMERA READY';
-  }
-  $('setup').style.display = 'flex';
-  $('bottom-btns').style.display = 'flex';
+  } catch(e) {}
+
+  $('launch-page').style.display='none';
+  $('upload-page').style.display='flex';
+  $('upload-btns').style.display='flex';
+}
+
+// ── File input ────────────────────────────────────────────────────────────────
+function triggerUpload() {
+  $('file-input').value = '';
+  $('file-input').click();
+}
+
+function handleFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      uploadedImage = img;
+      // Show preview
+      const prev = $('preview-img');
+      prev.src = e.target.result;
+      prev.style.display = 'block';
+      $('uz-placeholder').style.display = 'none';
+      $('upload-zone').classList.add('has-image');
+      // Enable compile button
+      $('btn-compile').classList.add('ready');
+      // Set compile thumb
+      $('compile-thumb').src = e.target.result;
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
 }
 
 // ── Compile ───────────────────────────────────────────────────────────────────
-async function compileMarker() {
-  $('compile-screen').style.display = 'flex';
-  $('prog-bar').style.width = '0%';
-  $('prog-txt').textContent = '0%';
-  $('compile-sub').textContent = activeMarker === 'text'
-    ? 'COMPILING HIRO TEXT MARKER'
-    : 'COMPILING PIXEL PATTERN MARKER';
+async function startCompile() {
+  if (!uploadedImage) return;
+
+  $('upload-page').style.display='none';
+  $('upload-btns').style.display='none';
+  $('compile-screen').style.display='flex';
+  $('prog-bar').style.width='0%';
+  $('prog-txt').textContent='0%';
 
   if (!window.MINDAR?.IMAGE?.Compiler) {
-    $('prog-txt').textContent = 'ERROR: MindAR not loaded.';
-    return null;
+    $('prog-txt').textContent='ERROR: MindAR not loaded. Check internet.'; return;
   }
 
-  // Use the active canvas for compilation
-  const img = new Image();
-  img.src = activeCanvas.toDataURL('image/png');
-  await new Promise(r => { img.onload = r; });
+  // Fullscreen (inside gesture chain from button tap)
+  try {
+    const el=document.documentElement;
+    if(el.requestFullscreen) await el.requestFullscreen({navigationUI:'hide'});
+    else if(el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  } catch(e){}
 
   try {
     const compiler = new window.MINDAR.IMAGE.Compiler();
-    await compiler.compileImageTargets([img], progress => {
-      const p = Math.round(progress * 100);
-      $('prog-bar').style.width = p + '%';
-      $('prog-txt').textContent = p + '%';
+    await compiler.compileImageTargets([uploadedImage], progress=>{
+      const p=Math.round(progress*100);
+      $('prog-bar').style.width=p+'%';
+      $('prog-txt').textContent=p+'%';
     });
     const buf = await compiler.exportData();
     compiledURL = URL.createObjectURL(new Blob([buf]));
-    $('compile-screen').style.display = 'none';
-    return compiledURL;
+    $('compile-screen').style.display='none';
+    await initMindAR();
   } catch(err) {
-    $('prog-txt').textContent = 'ERROR: ' + err.message;
-    return null;
+    $('prog-txt').textContent='ERROR: '+err.message;
   }
 }
 
-// ── Launch ────────────────────────────────────────────────────────────────────
-async function launchAR() {
-  if (arLaunched) return;
-  arLaunched = true;
-  $('btn-launch').disabled = true;
-
-  try {
-    const el = document.documentElement;
-    if (el.requestFullscreen) await el.requestFullscreen({navigationUI:'hide'});
-    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-  } catch(e) {}
-
-  [$('setup'),$('bottom-btns')].forEach(el=>{
-    el.style.transition='opacity 0.4s';el.style.opacity='0';
-  });
-  await new Promise(r=>setTimeout(r,450));
-  $('setup').style.display='none';$('bottom-btns').style.display='none';
-
-  if (!compiledURL) {
-    const url = await compileMarker();
-    if (!url) return;
+// ── Reset to upload (change target) ──────────────────────────────────────────
+async function resetToUpload() {
+  if (mindarThreeInst) {
+    try { await mindarThreeInst.stop(); } catch(e){}
+    mindarThreeInst = null;
   }
+  arLaunched=false;
+  compiledURL=null;
+  uploadedImage=null;
+  panels=[];
+  $('hud').style.display='none';
+  $('upload-page').style.display='flex';
+  $('upload-btns').style.display='flex';
+  $('preview-img').style.display='none';
+  $('uz-placeholder').style.display='flex';
+  $('upload-zone').classList.remove('has-image');
+  $('btn-compile').classList.remove('ready');
+  try{ document.exitFullscreen(); }catch(e){}
+}
 
+// ── MindAR ────────────────────────────────────────────────────────────────────
+async function initMindAR() {
+  arLaunched=true;
+  THREE = window.MINDAR.IMAGE.THREE;
+
+  // Override camera to use chosen lens
   if (selectedDevId) {
-    const orig = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-    navigator.mediaDevices.getUserMedia = async c => {
-      if (c&&c.video) c={audio:false,video:{deviceId:{exact:selectedDevId},width:{ideal:1920},height:{ideal:1080}}};
+    const orig=navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia=async c=>{
+      if(c&&c.video) c={audio:false,video:{deviceId:{exact:selectedDevId},width:{ideal:1920},height:{ideal:1080}}};
       return orig(c);
     };
   }
 
-  $('hud').style.display = 'block';
-  await initMindAR();
-}
-
-// ── MindAR + Three.js ─────────────────────────────────────────────────────────
-async function initMindAR() {
-  THREE = window.MINDAR.IMAGE.THREE;
-  const mindarThree = new window.MINDAR.IMAGE.MindARThree({
+  mindarThreeInst = new window.MINDAR.IMAGE.MindARThree({
     container:$('container'), imageTargetSrc:compiledURL,
     maxTrack:1, uiLoading:'no', uiScanning:'no', uiError:'no',
     filterMinCF:0.001, filterBeta:1000, missTolerance:5, warmupTolerance:3,
   });
-  const {renderer,scene,camera} = mindarThree;
+
+  const {renderer,scene,camera}=mindarThreeInst;
   renderer.setPixelRatio(window.devicePixelRatio);
 
-  const anchor = mindarThree.addAnchor(0);
-  anchor.onTargetFound = () => { $('target-msg').style.opacity='0'; $('hud-st').textContent='✦ HOLOGRAM LOCKED'; };
-  anchor.onTargetLost  = () => { $('target-msg').style.opacity='1'; $('hud-st').textContent='◎ SCANNING'; };
+  const anchor=mindarThreeInst.addAnchor(0);
+  anchor.onTargetFound=()=>{ $('target-msg').style.opacity='0'; $('hud-st').textContent='✦ HOLOGRAM LOCKED'; };
+  anchor.onTargetLost= ()=>{ $('target-msg').style.opacity='1'; $('hud-st').textContent='◎ SCANNING'; };
 
+  // Build hologram
   ring1=mkRing(0.19,0.24,0x00f5ff,0.55); ring2=mkRing(0.27,0.285,0x4af8ff,0.18);
   ring1.rotation.x=ring2.rotation.x=-Math.PI/2;
   ring1.position.y=0.005; ring2.position.y=0.003;
@@ -552,9 +513,11 @@ async function initMindAR() {
 
   panelGroup=new THREE.Group(); panelGroup.position.y=0.5;
   anchor.group.add(panelGroup);
+  panels=[];
   for(let i=0;i<3;i++){ const m=mkPanel(i); m.visible=(i===0); panelGroup.add(m); panels[i]=m; }
 
-  await mindarThree.start();
+  await mindarThreeInst.start();
+  $('hud').style.display='block';
 
   renderer.setAnimationLoop(()=>{
     frameN++;
@@ -574,6 +537,7 @@ async function initMindAR() {
   setTimeout(initMediaPipe,2000);
 }
 
+// ── THREE helpers ─────────────────────────────────────────────────────────────
 function mkRing(i,o,col,op){
   return new THREE.Mesh(new THREE.RingGeometry(i,o,48),
     new THREE.MeshBasicMaterial({color:col,side:THREE.DoubleSide,transparent:true,opacity:op}));
@@ -581,16 +545,16 @@ function mkRing(i,o,col,op){
 function mkLine(x,y,z){
   const m=new THREE.Mesh(new THREE.PlaneGeometry(0.002,0.55),
     new THREE.MeshBasicMaterial({color:0x00f5ff,side:THREE.DoubleSide,transparent:true,opacity:0.1}));
-  m.position.set(x,y,z);return m;
+  m.position.set(x,y,z); return m;
 }
 function mkPanel(idx){
   return new THREE.Mesh(new THREE.PlaneGeometry(0.76,0.44),
     new THREE.MeshBasicMaterial({map:drawTex(idx),transparent:true,side:THREE.DoubleSide}));
 }
 
+// ── Panel canvas textures ──────────────────────────────────────────────────────
 const DAYS=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
 const MONS=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-
 function drawTex(idx){
   const W=1024,H=580,cv=document.createElement('canvas');
   cv.width=W;cv.height=H;const c=cv.getContext('2d');
@@ -643,6 +607,8 @@ function tickClock(){
   panels[currentPanel].material.map=drawTex(currentPanel);
   panels[currentPanel].material.needsUpdate=true;
 }
+
+// ── Panel cycle ────────────────────────────────────────────────────────────────
 function showPanel(i){
   panels.forEach((p,j)=>{if(p)p.visible=(j===i);});
   [0,1,2].forEach(j=>$('d'+j).classList.toggle('on',j===i));
@@ -650,15 +616,16 @@ function showPanel(i){
   panels[i].material.map.dispose();panels[i].material.map=drawTex(i);panels[i].material.needsUpdate=true;
 }
 function doSwipe(){
-  if(swipeCooldown)return;swipeCooldown=true;
+  if(swipeCooldown||!arLaunched)return;swipeCooldown=true;
   showPanel((currentPanel+1)%3);
   const f=$('flash');f.style.opacity='1';setTimeout(()=>f.style.opacity='0',180);
   setTimeout(()=>swipeCooldown=false,900);
 }
 let tx0=0;
 document.addEventListener('touchstart',e=>{tx0=e.touches[0].clientX;},{passive:true});
-document.addEventListener('touchend',e=>{if(arLaunched&&e.changedTouches[0].clientX-tx0>55)doSwipe();});
+document.addEventListener('touchend',e=>{if(arLaunched&&e.changedTouches[0].clientX-tx0>60)doSwipe();});
 
+// ── MediaPipe ──────────────────────────────────────────────────────────────────
 function initMediaPipe(){
   if(typeof Hands==='undefined')return;
   const vid=$('container').querySelector('video');
@@ -670,7 +637,8 @@ function initMediaPipe(){
     if(!r.multiHandLandmarks?.length){$('hand-dot').style.display='none';lastX=null;return;}
     const lm=r.multiHandLandmarks[0];
     const hd=$('hand-dot');hd.style.display='block';
-    hd.style.left=(lm[8].x*window.innerWidth)+'px';hd.style.top=(lm[8].y*window.innerHeight)+'px';
+    hd.style.left=(lm[8].x*window.innerWidth)+'px';
+    hd.style.top=(lm[8].y*window.innerHeight)+'px';
     const now=Date.now(),dx=lm[0].x-(lastX??lm[0].x);
     if(lastX!==null&&dx>0.09&&now-lastT>1000){lastT=now;doSwipe();}
     lastX=lm[0].x;
