@@ -8,108 +8,144 @@
 <meta name="theme-color" content="#000000">
 <title>J.A.R.V.I.S</title>
 
-<script src="https://cdn.jsdelivr.net/gh/aframevr/aframe@1.3.0/dist/aframe.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar.js"></script>
+<!-- Three.js — Zappar's rendering backbone -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.139.0/build/three.min.js"></script>
+<!-- Zappar Universal AR — instant world tracking, no marker needed -->
+<script src="https://libs.zappar.com/zappar-threejs/4.2.0/zappar-threejs.js"></script>
+<!-- MediaPipe Hands — reads from Zappar's camera, no second stream opened -->
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js" crossorigin="anonymous"></script>
-<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
 
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Share Tech Mono',monospace;color:#00f5ff;}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;
+  font-family:'Share Tech Mono',monospace;color:#00f5ff;}
 
-/* ── LIVE CAMERA PREVIEW ── */
+/* ── Three.js canvas — always full screen behind everything ── */
+#three-canvas{
+  position:fixed;top:0;left:0;width:100%;height:100%;
+  z-index:0;display:none;
+}
+
+/* ── bg-video for setup screen only ── */
 #bg-video{
   position:fixed;top:0;left:0;width:100%;height:100%;
-  object-fit:cover;z-index:0;transform-origin:center center;
+  object-fit:cover;z-index:0;
 }
 
-/* ── PERMISSION SCREEN ── */
-#perm-screen{
-  position:fixed;top:0;left:0;width:100%;height:100%;
-  background:rgba(0,4,12,0.96);z-index:500;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
+/* ── HTTPS warning ── */
+#https-warn{
+  position:fixed;inset:0;z-index:1000;
+  background:rgba(0,4,14,0.97);
+  display:none;flex-direction:column;align-items:center;justify-content:center;
   padding:32px 24px;text-align:center;
 }
+.warn-icon{font-size:48px;margin-bottom:18px;}
+.warn-title{font-family:'Rajdhani',sans-serif;font-size:22px;letter-spacing:4px;color:#EF9F27;margin-bottom:10px;}
+.warn-body{font-size:11px;color:#854F0B;line-height:1.85;margin-bottom:28px;max-width:300px;background:#FAEEDA;padding:16px;border-radius:10px;}
+.warn-body strong{color:#412402;font-weight:500;display:block;margin-bottom:4px;}
+.warn-step{font-size:11px;color:#00f5ff88;line-height:1.9;max-width:300px;text-align:left;}
+.warn-step span{color:#00f5ff;font-weight:500;}
+
+/* ── PERMISSION screen ── */
+#perm-screen{
+  position:fixed;inset:0;z-index:900;
+  background:rgba(0,4,14,0.96);
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;padding:32px 24px;text-align:center;
+}
 .perm-icon{font-size:56px;margin-bottom:20px;}
-.perm-title{font-family:'Rajdhani',sans-serif;font-size:24px;letter-spacing:5px;color:#fff;margin-bottom:10px;}
-.perm-desc{font-size:11px;color:#00f5ff66;line-height:1.9;margin-bottom:36px;max-width:290px;letter-spacing:0.5px;}
-#btn-perm{
+.perm-title{font-family:'Rajdhani',sans-serif;font-size:26px;letter-spacing:6px;color:#fff;margin-bottom:10px;}
+.perm-desc{font-size:11px;color:#00f5ff66;line-height:2;margin-bottom:36px;max-width:280px;}
+.perm-btn{
   width:100%;max-width:340px;height:68px;
   background:transparent;border:1.5px solid #00f5ff;border-radius:16px;
   color:#00f5ff;font-family:'Share Tech Mono',monospace;
   font-size:14px;letter-spacing:5px;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;gap:10px;
+  display:flex;align-items:center;justify-content:center;gap:12px;
 }
-#btn-perm:active{background:rgba(0,245,255,0.1);}
-.perm-note{font-size:10px;color:#00f5ff33;margin-top:18px;line-height:1.7;max-width:260px;}
+.perm-btn:active{background:rgba(0,245,255,0.1);}
+.perm-note{font-size:9px;color:#00f5ff33;margin-top:16px;line-height:1.8;max-width:260px;}
+
+/* ── CAMERA PICKER ── */
+#cam-picker{
+  position:fixed;inset:0;z-index:880;
+  background:rgba(0,4,14,0.97);
+  display:none;flex-direction:column;
+  align-items:center;justify-content:center;padding:28px 22px;
+}
+.picker-title{font-family:'Rajdhani',sans-serif;font-size:20px;letter-spacing:4px;color:#fff;margin-bottom:5px;}
+.picker-sub{font-size:10px;color:#00f5ff55;letter-spacing:2px;margin-bottom:24px;}
+#cam-list{width:100%;max-width:360px;display:flex;flex-direction:column;gap:10px;}
+.cam-opt{
+  width:100%;padding:16px 18px;
+  background:rgba(0,245,255,0.04);border:1px solid rgba(0,245,255,0.18);
+  border-radius:14px;color:#00f5ff;font-family:'Share Tech Mono',monospace;
+  font-size:12px;letter-spacing:1.5px;cursor:pointer;text-align:left;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+}
+.cam-opt.sel{border-color:#00f5ff;background:rgba(0,245,255,0.1);}
+.cam-opt:active{background:rgba(0,245,255,0.15);}
+.cam-tag{font-size:9px;padding:2px 8px;border-radius:20px;white-space:nowrap;flex-shrink:0;}
+.tag-uw{background:rgba(0,255,136,0.12);color:#00ff88;}
+.tag-main{background:rgba(0,245,255,0.1);color:#00f5ff66;}
+#btn-use-cam{
+  margin-top:16px;width:100%;max-width:360px;height:58px;
+  background:transparent;border:1.5px solid #00f5ff;border-radius:14px;
+  color:#00f5ff;font-family:'Share Tech Mono',monospace;
+  font-size:13px;letter-spacing:4px;cursor:pointer;display:none;
+  align-items:center;justify-content:center;
+}
+#btn-use-cam.show{display:flex;}
+#btn-use-cam:active{background:rgba(0,245,255,0.1);}
 
 /* ── SETUP SCREEN ── */
 #setup{
-  position:fixed;top:0;left:0;width:100%;height:100%;z-index:100;
+  position:fixed;inset:0;z-index:800;
   display:none;flex-direction:column;align-items:center;
-  background:linear-gradient(180deg,rgba(0,5,15,0.9) 0%,rgba(0,8,20,0.84) 55%,rgba(0,4,12,0.95) 100%);
-  padding:0 20px;overflow-y:auto;
-  padding-top:max(env(safe-area-inset-top,0px),16px);
-  padding-bottom:160px;
+  background:linear-gradient(180deg,rgba(0,5,15,0.88) 0%,rgba(0,8,20,0.82) 55%,rgba(0,4,12,0.95) 100%);
+  padding:max(env(safe-area-inset-top,0px),16px) 20px 170px;
+  overflow-y:auto;
 }
-#setup::after{
-  content:'';position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;
-  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,245,255,0.01) 3px,rgba(0,245,255,0.01) 4px);
-}
+.logo{font-family:'Rajdhani',sans-serif;font-size:36px;font-weight:700;
+  letter-spacing:14px;color:#00f5ff;
+  text-shadow:0 0 24px #00f5ffaa,0 0 50px #00f5ff44;
+  margin-top:18px;margin-bottom:2px;text-align:center;}
+.logo-ver{font-size:9px;letter-spacing:5px;color:#00f5ff44;margin-bottom:20px;text-align:center;}
 
-.jarvis-logo{
-  font-family:'Rajdhani',sans-serif;font-size:36px;font-weight:700;letter-spacing:14px;
-  color:#00f5ff;text-shadow:0 0 24px #00f5ffaa,0 0 50px #00f5ff44;
-  margin-top:20px;margin-bottom:2px;text-align:center;position:relative;z-index:2;
-}
-.jarvis-ver{font-size:9px;letter-spacing:5px;color:#00f5ff44;margin-bottom:20px;text-align:center;position:relative;z-index:2;}
-
-#cam-badge{
+#cam-status{
   display:flex;align-items:center;gap:10px;
-  background:rgba(0,245,255,0.06);border:1px solid rgba(0,245,255,0.15);
-  border-radius:10px;padding:12px 18px;font-size:11px;letter-spacing:2px;
-  margin-bottom:18px;width:100%;max-width:400px;position:relative;z-index:2;
+  background:rgba(0,245,255,0.05);border:1px solid rgba(0,245,255,0.14);
+  border-radius:10px;padding:11px 16px;font-size:10px;letter-spacing:2px;
+  margin-bottom:16px;width:100%;max-width:400px;
 }
-.cam-dot{width:9px;height:9px;border-radius:50%;background:#ff4455;flex-shrink:0;animation:blink 1s ease-in-out infinite;}
-.cam-dot.live{background:#00ff88;animation:none;}
+.live-dot{width:9px;height:9px;border-radius:50%;background:#ff4455;flex-shrink:0;animation:blink 1s ease-in-out infinite;}
+.live-dot.on{background:#00ff88;animation:none;}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0.15}}
 
-/* Hiro marker card */
-.marker-card{
+.info-card{
   width:100%;max-width:400px;
-  background:rgba(0,10,22,0.65);border:1px solid rgba(0,245,255,0.15);
-  border-radius:14px;padding:16px;margin-bottom:16px;
-  display:flex;gap:16px;align-items:center;position:relative;z-index:2;
+  background:rgba(0,10,22,0.6);border:1px solid rgba(0,245,255,0.13);
+  border-radius:14px;overflow:hidden;margin-bottom:14px;
 }
-.hiro-thumb{width:88px;height:88px;flex-shrink:0;background:#fff;border-radius:8px;padding:5px;}
-.marker-info-title{font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:500;letter-spacing:2px;color:#fff;margin-bottom:5px;}
-.marker-info-desc{font-size:10px;color:#00f5ff66;line-height:1.75;letter-spacing:0.3px;}
-
-/* Steps */
-.steps-card{
-  width:100%;max-width:400px;
-  background:rgba(0,10,22,0.5);border:1px solid rgba(0,245,255,0.1);
-  border-radius:14px;overflow:hidden;margin-bottom:16px;position:relative;z-index:2;
-}
-.step-row{
+.info-row{
   display:flex;align-items:flex-start;gap:14px;padding:14px 16px;
   border-bottom:1px solid rgba(0,245,255,0.07);
 }
-.step-row:last-child{border-bottom:none;}
-.step-n{font-family:'Rajdhani',sans-serif;font-size:24px;font-weight:700;color:#00f5ff;line-height:1;min-width:22px;text-shadow:0 0 10px #00f5ff55;}
-.step-t{font-size:11px;letter-spacing:2px;color:#fff;margin-bottom:3px;}
-.step-d{font-size:10px;color:#00f5ff55;line-height:1.65;letter-spacing:0.3px;}
+.info-row:last-child{border-bottom:none;}
+.info-n{font-family:'Rajdhani',sans-serif;font-size:24px;font-weight:700;
+  color:#00f5ff;line-height:1;min-width:22px;text-shadow:0 0 10px #00f5ff44;}
+.info-t{font-size:11px;letter-spacing:2px;color:#fff;margin-bottom:3px;}
+.info-d{font-size:10px;color:#00f5ff55;line-height:1.65;}
 
-/* ── BOTTOM ACTIONS — Moto G Stylus 2025 optimized ── */
-/* Screen: 6.8", 1080x2400 (20:9). Safe thumb zone = bottom 38%. */
-#bottom-actions{
-  position:fixed;bottom:0;left:0;width:100%;z-index:200;
+/* ── BOTTOM BUTTONS — Moto G Stylus 2025 thumb zone ── */
+#bottom-btns{
+  position:fixed;bottom:0;left:0;width:100%;z-index:850;
   display:none;flex-direction:column;gap:10px;
-  padding:16px 20px calc(max(env(safe-area-inset-bottom,0px),16px) + 8px);
-  background:linear-gradient(0deg,rgba(0,3,10,0.98) 0%,rgba(0,3,10,0.88) 65%,transparent 100%);
+  padding:16px 20px calc(max(env(safe-area-inset-bottom,0px),12px) + 10px);
+  background:linear-gradient(0deg,rgba(0,3,10,0.98) 0%,rgba(0,3,10,0.86) 68%,transparent 100%);
 }
-
-/* Main CTA — 64px tall, full width, prominent */
 #btn-launch{
   width:100%;height:64px;
   background:transparent;border:1.5px solid #00f5ff;border-radius:16px;
@@ -120,36 +156,27 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Sh
 }
 #btn-launch::before{
   content:'';position:absolute;top:0;left:-110%;width:100%;height:100%;
-  background:linear-gradient(90deg,transparent,rgba(0,245,255,0.15),transparent);
-  animation:shine 2.8s ease-in-out infinite;
+  background:linear-gradient(90deg,transparent,rgba(0,245,255,0.16),transparent);
+  animation:shine 2.6s ease-in-out infinite;
 }
 @keyframes shine{to{left:210%;}}
-#btn-launch:active{background:rgba(0,245,255,0.1);box-shadow:0 0 28px rgba(0,245,255,0.3);}
-.btn-icon{font-size:18px;}
+#btn-launch:active{background:rgba(0,245,255,0.1);box-shadow:0 0 26px rgba(0,245,255,0.28);}
+#btn-launch:disabled{opacity:0.35;pointer-events:none;}
 
-/* Secondary — 50px, muted */
-#btn-marker{
+#btn-switch-cam{
   width:100%;height:50px;
-  background:rgba(0,245,255,0.03);
-  border:1px solid rgba(0,245,255,0.18);border-radius:14px;
-  color:#00f5ff77;font-family:'Share Tech Mono',monospace;
+  background:rgba(0,245,255,0.03);border:1px solid rgba(0,245,255,0.16);
+  border-radius:14px;color:#00f5ff77;font-family:'Share Tech Mono',monospace;
   font-size:11px;letter-spacing:3px;cursor:pointer;
 }
-#btn-marker:active{background:rgba(0,245,255,0.07);}
+#btn-switch-cam:active{background:rgba(0,245,255,0.07);}
 
-/* ── A-FRAME ── */
-a-scene{
-  position:fixed!important;top:0;left:0;width:100%;height:100%;
-  z-index:2;background:transparent!important;display:none;
-}
-
-/* ── HUD ── */
+/* ── AR HUD ── */
 #hud{
-  position:fixed;top:0;left:0;width:100%;height:100%;
-  z-index:10;pointer-events:none;display:none;
+  position:fixed;inset:0;z-index:10;pointer-events:none;display:none;
 }
 #hud::after{
-  content:'';position:absolute;top:0;left:0;width:100%;height:100%;
+  content:'';position:absolute;inset:0;
   background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,245,255,0.01) 3px,rgba(0,245,255,0.01) 4px);
   pointer-events:none;
 }
@@ -157,393 +184,758 @@ a-scene{
   position:absolute;top:0;left:0;right:0;
   padding:max(env(safe-area-inset-top,0px),12px) 18px 10px;
   display:flex;justify-content:space-between;align-items:center;
-  background:linear-gradient(180deg,rgba(0,4,12,0.8) 0%,transparent 100%);
+  background:linear-gradient(180deg,rgba(0,4,12,0.82) 0%,transparent 100%);
 }
-.hud-brand{font-family:'Rajdhani',sans-serif;font-size:17px;font-weight:700;letter-spacing:7px;color:#00f5ff;text-shadow:0 0 14px #00f5ff55;}
-#hud-zoom{font-size:9px;letter-spacing:2px;color:#00f5ff44;background:rgba(0,245,255,0.06);border:1px solid rgba(0,245,255,0.1);border-radius:20px;padding:2px 9px;}
+.hud-brand{font-family:'Rajdhani',sans-serif;font-size:17px;font-weight:700;
+  letter-spacing:7px;color:#00f5ff;text-shadow:0 0 14px #00f5ff55;}
+#hud-zoom{font-size:9px;letter-spacing:2px;color:#00ff88;
+  background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.2);
+  border-radius:20px;padding:2px 9px;}
 #hud-status{font-size:9px;letter-spacing:2px;color:#00f5ff66;}
 
 .brk{position:absolute;width:24px;height:24px;border-color:#00f5ff33;border-style:solid;}
 .brk-tl{top:12px;left:12px;border-width:1.5px 0 0 1.5px;}
 .brk-tr{top:12px;right:12px;border-width:1.5px 1.5px 0 0;}
-.brk-bl{bottom:88px;left:12px;border-width:0 0 1.5px 1.5px;}
-.brk-br{bottom:88px;right:12px;border-width:0 1.5px 1.5px 0;}
+.brk-bl{bottom:86px;left:12px;border-width:0 0 1.5px 1.5px;}
+.brk-br{bottom:86px;right:12px;border-width:0 1.5px 1.5px 0;}
 
-#marker-prompt{
+/* PLACE prompt — center screen */
+#place-prompt{
   position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-  background:rgba(0,8,20,0.82);border:1px solid #00f5ff22;border-radius:12px;
-  padding:20px 28px;text-align:center;transition:opacity 0.5s;
+  text-align:center;pointer-events:all;
 }
-.mp-t{font-size:11px;letter-spacing:4px;margin-bottom:6px;}
-.mp-s{font-size:10px;color:#00f5ff55;line-height:1.9;letter-spacing:1px;}
+.pp-ring{
+  width:70px;height:70px;border-radius:50%;
+  border:2px solid #00f5ff;background:rgba(0,245,255,0.08);
+  margin:0 auto 16px;
+  animation:pulse 1.6s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(0,245,255,0.4);}50%{box-shadow:0 0 0 16px rgba(0,245,255,0);}}
+.pp-text{font-size:13px;letter-spacing:3px;color:#00f5ff;margin-bottom:6px;}
+.pp-sub{font-size:10px;color:#00f5ff55;letter-spacing:1.5px;}
 
+/* Panel dots */
 #dots{
-  position:absolute;bottom:70px;left:50%;transform:translateX(-50%);
-  display:flex;gap:16px;align-items:center;
+  position:absolute;bottom:68px;left:50%;transform:translateX(-50%);
+  display:flex;gap:16px;
 }
 .dot{width:8px;height:8px;border-radius:50%;border:1.5px solid #00f5ff33;transition:all 0.4s;}
 .dot.on{background:#00f5ff;border-color:#00f5ff;box-shadow:0 0 12px #00f5ff;}
 #swipe-hint{
-  position:absolute;bottom:50px;left:50%;transform:translateX(-50%);
+  position:absolute;bottom:48px;left:50%;transform:translateX(-50%);
   font-size:9px;letter-spacing:2px;color:#00f5ff33;white-space:nowrap;
 }
+
+/* Hand cursor dot */
 #hand-dot{
   position:absolute;width:22px;height:22px;border-radius:50%;
   border:2px solid #00f5ff;background:rgba(0,245,255,0.14);
   transform:translate(-50%,-50%);display:none;
   box-shadow:0 0 12px #00f5ff55;pointer-events:none;
 }
+/* Flash on swipe */
 #flash{
-  position:absolute;top:0;left:0;width:100%;height:100%;
-  background:rgba(0,245,255,0.05);opacity:0;pointer-events:none;transition:opacity 0.15s;
+  position:absolute;inset:0;background:rgba(0,245,255,0.05);
+  opacity:0;pointer-events:none;transition:opacity 0.15s;
 }
 </style>
 </head>
 <body>
 
-<!-- Live camera preview, always behind everything -->
+<!-- Camera preview for setup screen -->
 <video id="bg-video" autoplay playsinline muted></video>
+<!-- Three.js AR canvas -->
+<canvas id="three-canvas"></canvas>
+
+<!-- ══ HTTPS WARNING ══ -->
+<div id="https-warn">
+  <div class="warn-icon">🔒</div>
+  <div class="warn-title">HTTPS REQUIRED</div>
+  <div class="warn-body">
+    <strong>You opened this as a local file.</strong>
+    Chrome requires HTTPS for camera access in AR apps. You need to host this file over HTTPS. The easiest free way:
+  </div>
+  <div class="warn-step">
+    <span>Option 1 — GitHub Pages (free):</span><br>
+    1. github.com → New repo → upload this file as index.html<br>
+    2. Settings → Pages → Enable → you get a free URL<br>
+    3. Open that URL in Chrome on your phone<br><br>
+    <span>Option 2 — localhost (for testing on same WiFi):</span><br>
+    Install "HTTP Server" app on PC, serve this file, open <br>
+    http://[your-pc-ip]:8080 in Chrome on phone
+  </div>
+</div>
 
 <!-- ══ PERMISSION SCREEN ══ -->
 <div id="perm-screen">
   <div class="perm-icon">📷</div>
   <div class="perm-title">CAMERA ACCESS</div>
   <div class="perm-desc">
-    J.A.R.V.I.S needs your rear camera to anchor the hologram onto your table in real space.
+    J.A.R.V.I.S needs your camera to detect your table surface and anchor the hologram in 3D space. No marker required.
   </div>
-  <button id="btn-perm" onclick="requestCamera()">
-    <span>▶</span> GRANT CAMERA ACCESS
-  </button>
-  <div class="perm-note">Camera feed stays on your device only.<br>Nothing is recorded or uploaded.</div>
+  <button class="perm-btn" onclick="requestCamera()">▶ &nbsp;GRANT CAMERA ACCESS</button>
+  <div class="perm-note">Camera stays on device. Nothing is recorded or uploaded.</div>
+</div>
+
+<!-- ══ CAMERA PICKER ══ -->
+<div id="cam-picker">
+  <div class="picker-title">SELECT CAMERA LENS</div>
+  <div class="picker-sub">PICK YOUR 0.5× ULTRAWIDE LENS FOR MOTO G STYLUS 2025</div>
+  <div id="cam-list"></div>
+  <button id="btn-use-cam" onclick="confirmCam()">✓ &nbsp;USE THIS LENS</button>
 </div>
 
 <!-- ══ SETUP SCREEN ══ -->
 <div id="setup">
-  <div class="jarvis-logo">J.A.R.V.I.S</div>
-  <div class="jarvis-ver">▸ HOLOGRAPHIC INTERFACE v4.6 ◂</div>
+  <div class="logo">J.A.R.V.I.S</div>
+  <div class="logo-ver">▸ HOLOGRAPHIC INTERFACE — MARKERLESS ◂</div>
 
-  <div id="cam-badge">
-    <span class="cam-dot" id="cam-dot"></span>
+  <div id="cam-status">
+    <span class="live-dot" id="live-dot"></span>
     <span id="cam-label">CAMERA INITIALIZING...</span>
   </div>
 
-  <div class="marker-card">
-    <svg class="hiro-thumb" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
-      <rect width="100" height="100" fill="white"/>
-      <rect x="5" y="5" width="90" height="90" fill="black"/>
-      <rect x="15" y="15" width="70" height="70" fill="white"/>
-      <rect x="20" y="20" width="10" height="10" fill="black"/>
-      <rect x="30" y="20" width="10" height="10" fill="black"/>
-      <rect x="50" y="20" width="10" height="10" fill="black"/>
-      <rect x="70" y="20" width="10" height="10" fill="black"/>
-      <rect x="20" y="30" width="10" height="10" fill="black"/>
-      <rect x="40" y="30" width="10" height="10" fill="black"/>
-      <rect x="60" y="30" width="10" height="10" fill="black"/>
-      <rect x="70" y="30" width="10" height="10" fill="black"/>
-      <rect x="20" y="40" width="10" height="10" fill="black"/>
-      <rect x="40" y="40" width="10" height="10" fill="black"/>
-      <rect x="50" y="40" width="10" height="10" fill="black"/>
-      <rect x="70" y="40" width="10" height="10" fill="black"/>
-      <rect x="20" y="50" width="10" height="10" fill="black"/>
-      <rect x="30" y="50" width="10" height="10" fill="black"/>
-      <rect x="50" y="50" width="10" height="10" fill="black"/>
-      <rect x="60" y="50" width="10" height="10" fill="black"/>
-      <rect x="20" y="60" width="10" height="10" fill="black"/>
-      <rect x="40" y="60" width="10" height="10" fill="black"/>
-      <rect x="60" y="60" width="10" height="10" fill="black"/>
-      <rect x="70" y="60" width="10" height="10" fill="black"/>
-      <rect x="20" y="70" width="10" height="10" fill="black"/>
-      <rect x="30" y="70" width="10" height="10" fill="black"/>
-      <rect x="40" y="70" width="10" height="10" fill="black"/>
-      <rect x="50" y="70" width="10" height="10" fill="black"/>
-      <rect x="60" y="70" width="10" height="10" fill="black"/>
-      <rect x="70" y="70" width="10" height="10" fill="black"/>
-    </svg>
-    <div>
-      <div class="marker-info-title">HIRO MARKER</div>
-      <div class="marker-info-desc">
-        Print this pattern — A5 or larger.<br>
-        Place it flat on your desk.<br>
-        JARVIS locks the hologram onto it.
+  <div class="info-card">
+    <div class="info-row">
+      <div class="info-n">1</div>
+      <div>
+        <div class="info-t">TAP ACTIVATE BELOW</div>
+        <div class="info-d">App goes fullscreen. Zappar scans for your table surface automatically — no marker needed.</div>
       </div>
     </div>
-  </div>
-
-  <div class="steps-card">
-    <div class="step-row">
-      <div class="step-n">1</div>
+    <div class="info-row">
+      <div class="info-n">2</div>
       <div>
-        <div class="step-t">PRINT THE MARKER</div>
-        <div class="step-d">Tap "OPEN PRINTABLE MARKER" below or screenshot the one above. Lay it on a flat surface.</div>
+        <div class="info-t">POINT AT YOUR TABLE</div>
+        <div class="info-d">A glowing ring appears on the detected surface. Move phone slowly if it doesn't appear.</div>
       </div>
     </div>
-    <div class="step-row">
-      <div class="step-n">2</div>
+    <div class="info-row">
+      <div class="info-n">3</div>
       <div>
-        <div class="step-t">TAP ACTIVATE — GOES FULLSCREEN</div>
-        <div class="step-d">Point your camera at the marker on your table. Hologram locks in 3D space.</div>
-      </div>
-    </div>
-    <div class="step-row">
-      <div class="step-n">3</div>
-      <div>
-        <div class="step-t">SWIPE RIGHT TO CYCLE PANELS</div>
-        <div class="step-d">AKSHAT → TIME → DATE → repeat.<br>Swipe finger right on screen.</div>
+        <div class="info-t">TAP SCREEN TO PLACE JARVIS</div>
+        <div class="info-d">Hologram locks to your table. Then swipe right to cycle panels: AKSHAT → TIME → DATE.</div>
       </div>
     </div>
   </div>
 </div>
 
 <!-- ══ BOTTOM BUTTONS — fixed thumb zone ══ -->
-<div id="bottom-actions">
+<div id="bottom-btns">
   <button id="btn-launch" onclick="launchAR()">
-    <span class="btn-icon">⬡</span>
+    <span style="font-size:18px;">⬡</span>
     ACTIVATE J.A.R.V.I.S
   </button>
-  <button id="btn-marker" onclick="window.open('https://ar-js-org.github.io/AR.js/data/images/hiro.png','_blank')">
-    ↗ OPEN PRINTABLE MARKER
+  <button id="btn-switch-cam" onclick="showCamPicker()">
+    ⇄ SWITCH CAMERA LENS
   </button>
 </div>
 
-<!-- ══ A-FRAME AR SCENE ══ -->
-<a-scene id="ar-scene" embedded
-  arjs="sourceType:webcam; debugUIEnabled:false; detectionMode:mono_and_matrix; matrixCodeType:3x3;"
-  renderer="logarithmicDepthBuffer:true; antialias:true; alpha:true;"
-  vr-mode-ui="enabled:false">
-
-  <a-marker preset="hiro" id="hiro-marker">
-    <a-entity id="float-grp"
-      animation="property:position;from:0 0 0;to:0 0.032 0;dur:2800;dir:alternate;loop:true;easing:easeInOutSine">
-
-      <a-ring color="#00f5ff" radius-inner="0.19" radius-outer="0.24" rotation="-90 0 0" position="0 0.004 0"
-        material="opacity:0.55;transparent:true;emissive:#00f5ff;emissiveIntensity:0.9;"
-        animation="property:rotation;from:-90 0 0;to:-90 360 0;dur:6200;loop:true;easing:linear"></a-ring>
-      <a-ring color="#4af8ff" radius-inner="0.27" radius-outer="0.285" rotation="-90 0 0" position="0 0.002 0"
-        material="opacity:0.18;transparent:true;emissive:#00f5ff;emissiveIntensity:0.5;"
-        animation="property:rotation;from:-90 0 0;to:-90 -360 0;dur:10500;loop:true;easing:linear"></a-ring>
-
-      <a-plane color="#00f5ff" width="0.002" height="0.55" position="-0.34 0.28 0" material="opacity:0.1;transparent:true;emissive:#00f5ff;emissiveIntensity:0.5;"></a-plane>
-      <a-plane color="#00f5ff" width="0.002" height="0.55" position="0.34 0.28 0" material="opacity:0.1;transparent:true;emissive:#00f5ff;emissiveIntensity:0.5;"></a-plane>
-
-      <!-- PANEL 0 — AKSHAT -->
-      <a-entity id="p0" position="0 0.5 0">
-        <a-plane color="#000d1c" width="0.76" height="0.44" material="opacity:0.86;transparent:true;side:double;"></a-plane>
-        <a-plane color="#00f5ff" width="0.76" height="0.003" position="0 0.22 0.003" material="opacity:1;transparent:true;emissive:#00f5ff;emissiveIntensity:3;"></a-plane>
-        <a-plane color="#00f5ff" width="0.76" height="0.003" position="0 -0.22 0.003" material="opacity:1;transparent:true;emissive:#00f5ff;emissiveIntensity:3;"></a-plane>
-        <a-plane color="#00f5ff" width="0.002" height="0.44" position="-0.38 0 0.002" material="opacity:0.4;transparent:true;emissive:#00f5ff;emissiveIntensity:1;"></a-plane>
-        <a-plane color="#00f5ff" width="0.002" height="0.44" position="0.38 0 0.002" material="opacity:0.4;transparent:true;emissive:#00f5ff;emissiveIntensity:1;"></a-plane>
-        <a-text value="AKSHAT" align="center" color="#00f5ff" width="1.7" position="0 0.09 0.015" wrap-count="8"></a-text>
-        <a-plane color="#00f5ff" width="0.46" height="0.001" position="0 0.01 0.003" material="opacity:0.28;transparent:true;emissive:#00f5ff;emissiveIntensity:1;"></a-plane>
-        <a-text value="WELCOME BACK, SIR" align="center" color="#a0f0ff" opacity="0.6" width="0.88" position="0 -0.08 0.015" wrap-count="22"></a-text>
-        <a-text value="SYSTEM ONLINE" align="center" color="#00ff88" opacity="0.95" width="0.78" position="0 -0.168 0.015" wrap-count="22"></a-text>
-        <a-plane color="#00f5ff" width="0.76" height="0.002" position="0 0 0.006" material="opacity:0.14;transparent:true;emissive:#00f5ff;emissiveIntensity:1.5;"
-          animation="property:position;from:0 -0.21 0.006;to:0 0.21 0.006;dur:2300;dir:alternate;loop:true;easing:easeInOutSine"></a-plane>
-      </a-entity>
-
-      <!-- PANEL 1 — TIME -->
-      <a-entity id="p1" position="0 0.5 0" visible="false">
-        <a-plane color="#000d1c" width="0.76" height="0.44" material="opacity:0.86;transparent:true;side:double;"></a-plane>
-        <a-plane color="#00f5ff" width="0.76" height="0.003" position="0 0.22 0.003" material="opacity:1;transparent:true;emissive:#00f5ff;emissiveIntensity:3;"></a-plane>
-        <a-plane color="#00f5ff" width="0.76" height="0.003" position="0 -0.22 0.003" material="opacity:1;transparent:true;emissive:#00f5ff;emissiveIntensity:3;"></a-plane>
-        <a-plane color="#00f5ff" width="0.002" height="0.44" position="-0.38 0 0.002" material="opacity:0.4;transparent:true;emissive:#00f5ff;emissiveIntensity:1;"></a-plane>
-        <a-plane color="#00f5ff" width="0.002" height="0.44" position="0.38 0 0.002" material="opacity:0.4;transparent:true;emissive:#00f5ff;emissiveIntensity:1;"></a-plane>
-        <a-text value="LOCAL TIME" align="center" color="#00f5ff" opacity="0.38" width="0.82" position="0 0.165 0.015" wrap-count="18"></a-text>
-        <a-text id="time-el" value="00:00:00" align="center" color="#00f5ff" width="1.62" position="0 0.04 0.015" wrap-count="10"></a-text>
-        <a-text id="ampm-el" value="AM" align="center" color="#00ff88" opacity="0.85" width="0.65" position="0 -0.14 0.015" wrap-count="5"></a-text>
-        <a-plane color="#00f5ff" width="0.76" height="0.002" position="0 0 0.006" material="opacity:0.14;transparent:true;emissive:#00f5ff;emissiveIntensity:1.5;"
-          animation="property:position;from:0 -0.21 0.006;to:0 0.21 0.006;dur:1950;dir:alternate;loop:true;easing:easeInOutSine"></a-plane>
-      </a-entity>
-
-      <!-- PANEL 2 — DATE -->
-      <a-entity id="p2" position="0 0.5 0" visible="false">
-        <a-plane color="#000d1c" width="0.76" height="0.44" material="opacity:0.86;transparent:true;side:double;"></a-plane>
-        <a-plane color="#00f5ff" width="0.76" height="0.003" position="0 0.22 0.003" material="opacity:1;transparent:true;emissive:#00f5ff;emissiveIntensity:3;"></a-plane>
-        <a-plane color="#00f5ff" width="0.76" height="0.003" position="0 -0.22 0.003" material="opacity:1;transparent:true;emissive:#00f5ff;emissiveIntensity:3;"></a-plane>
-        <a-plane color="#00f5ff" width="0.002" height="0.44" position="-0.38 0 0.002" material="opacity:0.4;transparent:true;emissive:#00f5ff;emissiveIntensity:1;"></a-plane>
-        <a-plane color="#00f5ff" width="0.002" height="0.44" position="0.38 0 0.002" material="opacity:0.4;transparent:true;emissive:#00f5ff;emissiveIntensity:1;"></a-plane>
-        <a-text id="day-el" value="THURSDAY" align="center" color="#00f5ff" opacity="0.42" width="0.9" position="0 0.165 0.015" wrap-count="12"></a-text>
-        <a-text id="date-el" value="19 MAR 2026" align="center" color="#00f5ff" width="1.32" position="0 0.04 0.015" wrap-count="12"></a-text>
-        <a-text value="EARTH DATE" align="center" color="#a0f0ff" opacity="0.38" width="0.78" position="0 -0.135 0.015" wrap-count="18"></a-text>
-        <a-plane color="#00f5ff" width="0.76" height="0.002" position="0 0 0.006" material="opacity:0.14;transparent:true;emissive:#00f5ff;emissiveIntensity:1.5;"
-          animation="property:position;from:0 -0.21 0.006;to:0 0.21 0.006;dur:2100;dir:alternate;loop:true;easing:easeInOutSine"></a-plane>
-      </a-entity>
-
-    </a-entity>
-  </a-marker>
-  <a-entity camera></a-entity>
-</a-scene>
-
-<!-- ══ HUD OVERLAY ══ -->
+<!-- ══ AR HUD ══ -->
 <div id="hud">
   <div class="brk brk-tl"></div><div class="brk brk-tr"></div>
   <div class="brk brk-bl"></div><div class="brk brk-br"></div>
+
   <div id="hud-top">
     <span class="hud-brand">J.A.R.V.I.S</span>
     <span id="hud-zoom">0.5× ULTRA WIDE</span>
     <span id="hud-status">◎ SCANNING</span>
   </div>
-  <div id="marker-prompt">
-    <div class="mp-t">◈ SEARCHING</div>
-    <div class="mp-s">POINT CAMERA AT<br>HIRO MARKER</div>
+
+  <!-- Place prompt (shown until user taps to place) -->
+  <div id="place-prompt">
+    <div class="pp-ring"></div>
+    <div class="pp-text">SURFACE DETECTED</div>
+    <div class="pp-sub">TAP ANYWHERE TO PLACE HOLOGRAM</div>
   </div>
+
   <div id="hand-dot"></div>
   <div id="flash"></div>
-  <div id="dots">
+
+  <div id="dots" style="display:none;">
     <div class="dot on" id="d0"></div>
     <div class="dot" id="d1"></div>
     <div class="dot" id="d2"></div>
   </div>
-  <div id="swipe-hint">◀ SWIPE RIGHT TO CYCLE PANELS ▶</div>
+  <div id="swipe-hint" style="display:none;">◀ SWIPE RIGHT TO CYCLE PANELS ▶</div>
 </div>
 
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
-let currentPanel = 0, swipeCooldown = false, cameraStream = null, arLaunched = false;
 
-// ── Camera request ──────────────────────────────────────────────────────────
+// ── State ────────────────────────────────────────────────────────────────────
+let selectedDevId  = null;
+let allRearCams    = [];
+let bgStream       = null;
+let arLaunched     = false;
+let hologramPlaced = false;
+let currentPanel   = 0;
+let swipeCooldown  = false;
+
+// ── HTTPS check ───────────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  const proto = location.protocol;
+  if (proto !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    $('perm-screen').style.display = 'none';
+    $('https-warn').style.display = 'flex';
+    return;
+  }
+  setTimeout(requestCamera, 300);
+});
+
+// ── Step 1: Request camera & enumerate lenses ─────────────────────────────────
 async function requestCamera() {
   $('perm-screen').style.display = 'none';
-  $('setup').style.display = 'flex';
-  $('bottom-actions').style.display = 'flex';
-
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { exact: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-      audio: false
+    // Prime permission so enumerateDevices returns labels
+    const init = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' }, audio: false
     });
-    cameraStream = stream;
-    $('bg-video').srcObject = stream;
+    init.getTracks().forEach(t => t.stop());
 
-    // Try hardware 0.5x zoom
-    const track = stream.getVideoTracks()[0];
-    if (track) {
-      const caps = track.getCapabilities ? track.getCapabilities() : {};
-      if (caps.zoom) {
-        const z = Math.max(caps.zoom.min || 0, 0.5);
-        await track.applyConstraints({ advanced: [{ zoom: z }] }).catch(() => {});
-      }
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    allRearCams = devs.filter(d => {
+      if (d.kind !== 'videoinput') return false;
+      const l = d.label.toLowerCase();
+      return !l.includes('front') && !l.includes('selfie');
+    });
+
+    if (allRearCams.length <= 1) {
+      selectedDevId = allRearCams[0]?.deviceId || null;
+      await startBgVideo();
+      showSetup();
+    } else {
+      showCamPicker();
     }
-    $('cam-dot').classList.add('live');
-    $('cam-label').textContent = 'CAMERA LIVE  ·  0.5× ULTRA WIDE';
-  } catch (err) {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-      cameraStream = stream;
-      $('bg-video').srcObject = stream;
-      $('cam-dot').classList.add('live');
-      $('cam-label').textContent = 'CAMERA LIVE';
-    } catch(e) {
-      $('cam-label').textContent = '✕ CAMERA DENIED — CHECK SETTINGS';
-    }
+  } catch(e) {
+    await startBgVideo();
+    showSetup();
   }
 }
 
-// Auto-trigger on load
-window.addEventListener('load', () => setTimeout(requestCamera, 300));
+function showCamPicker() {
+  $('cam-picker').style.display = 'flex';
+  $('bg-video').style.display = 'none';
+  const list = $('cam-list');
+  list.innerHTML = '';
+  allRearCams.forEach((dev, i) => {
+    const lbl  = dev.label || ('Camera ' + (i+1));
+    const low  = lbl.toLowerCase();
+    const isUW = low.includes('wide') || low.includes('ultra') || i === 1;
+    const btn = document.createElement('button');
+    btn.className = 'cam-opt';
+    btn.dataset.devid = dev.deviceId;
+    btn.innerHTML = `<span style="flex:1;color:#fff;font-size:11px;">${lbl}</span>
+      <span class="cam-tag ${isUW ? 'tag-uw' : 'tag-main'}">${isUW ? '0.5× ULTRA WIDE' : 'MAIN'}</span>`;
+    btn.onclick = () => {
+      document.querySelectorAll('.cam-opt').forEach(b => b.classList.remove('sel'));
+      btn.classList.add('sel');
+      selectedDevId = dev.deviceId;
+      $('btn-use-cam').classList.add('show');
+    };
+    list.appendChild(btn);
+    if (isUW && !selectedDevId) { selectedDevId = dev.deviceId; btn.classList.add('sel'); $('btn-use-cam').classList.add('show'); }
+  });
+}
 
-// ── Launch ───────────────────────────────────────────────────────────────
+async function confirmCam() {
+  $('cam-picker').style.display = 'none';
+  $('bg-video').style.display = 'block';
+  await startBgVideo();
+  showSetup();
+}
+
+// ── bg-video for setup preview ────────────────────────────────────────────────
+async function startBgVideo() {
+  try {
+    const constraints = selectedDevId
+      ? { video: { deviceId: { exact: selectedDevId }, width:{ideal:1920}, height:{ideal:1080} }, audio: false }
+      : { video: { facingMode: 'environment', width:{ideal:1920}, height:{ideal:1080} }, audio: false };
+    bgStream = await navigator.mediaDevices.getUserMedia(constraints);
+    $('bg-video').srcObject = bgStream;
+    await $('bg-video').play().catch(()=>{});
+    // Try hardware 0.5x zoom
+    const track = bgStream.getVideoTracks()[0];
+    if (track) {
+      const caps = track.getCapabilities ? track.getCapabilities() : {};
+      if (caps.zoom) await track.applyConstraints({advanced:[{zoom: Math.max(caps.zoom.min||0, 0.5)}]}).catch(()=>{});
+    }
+    $('live-dot').classList.add('on');
+    const lbl = bgStream.getVideoTracks()[0]?.label || '';
+    $('cam-label').textContent = lbl.toLowerCase().includes('wide')
+      ? '0.5× ULTRA WIDE  ·  CAMERA LIVE'
+      : 'CAMERA LIVE  ·  ' + (lbl.substring(0,30) || 'REAR LENS');
+  } catch(e) {
+    $('cam-label').textContent = '✕ CAMERA ERROR — CHECK PERMISSIONS';
+  }
+}
+
+function showSetup() {
+  $('setup').style.display = 'flex';
+  $('bottom-btns').style.display = 'flex';
+}
+
+// ── LAUNCH AR ─────────────────────────────────────────────────────────────────
 async function launchAR() {
   if (arLaunched) return;
   arLaunched = true;
+  $('btn-launch').disabled = true;
 
-  // Fullscreen (must be inside gesture handler)
+  // Fullscreen (inside gesture handler)
   try {
     const el = document.documentElement;
-    if (el.requestFullscreen) await el.requestFullscreen({ navigationUI: 'hide' });
+    if (el.requestFullscreen) await el.requestFullscreen({navigationUI:'hide'});
     else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
   } catch(e) {}
 
   // Fade out setup
-  [$('setup'), $('bottom-actions')].forEach(el => {
-    el.style.transition = 'opacity 0.5s';
-    el.style.opacity = '0';
+  [$('setup'), $('bottom-btns')].forEach(el => {
+    el.style.transition = 'opacity 0.45s'; el.style.opacity = '0';
   });
 
-  setTimeout(() => {
+  setTimeout(async () => {
     $('setup').style.display = 'none';
-    $('bottom-actions').style.display = 'none';
+    $('bottom-btns').style.display = 'none';
 
-    // Stop preview stream — AR.js opens its own
-    if (cameraStream) {
-      cameraStream.getTracks().forEach(t => t.stop());
-      $('bg-video').srcObject = null;
-      $('bg-video').style.display = 'none';
-    }
+    // Stop bg preview — Zappar will open the camera
+    if (bgStream) { bgStream.getTracks().forEach(t => t.stop()); bgStream = null; }
+    $('bg-video').srcObject = null;
+    $('bg-video').style.display = 'none';
 
-    $('ar-scene').style.display = 'block';
+    $('three-canvas').style.display = 'block';
     $('hud').style.display = 'block';
 
-    setupMarkerEvents();
-    setInterval(tick, 1000); tick();
-    setTimeout(initHands, 2200);
-  }, 550);
+    await initZappar();
+    setInterval(tickClock, 1000); tickClock();
+  }, 500);
 }
 
-// ── Marker ───────────────────────────────────────────────────────────────
-function setupMarkerEvents() {
-  const m = $('hiro-marker');
-  if (!m) { setTimeout(setupMarkerEvents, 500); return; }
-  m.addEventListener('markerFound', () => { $('marker-prompt').style.opacity = '0'; $('hud-status').textContent = '✦ HOLOGRAM LOCKED'; });
-  m.addEventListener('markerLost',  () => { $('marker-prompt').style.opacity = '1'; $('hud-status').textContent = '◎ SCANNING'; });
+// ── ZAPPAR + THREE.JS ─────────────────────────────────────────────────────────
+let zapCamera, renderer, scene, instantTracker, instantTrackerGroup;
+let panelMeshes = [null, null, null];
+let panelTextures = [null, null, null];
+let baseMesh, ringMesh1, ringMesh2;
+let scanLineOffset = 0;
+let placementReticle;
+
+async function initZappar() {
+  // Renderer
+  renderer = new THREE.WebGLRenderer({ canvas: $('three-canvas'), antialias: true });
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  ZapparThree.glContextSet(renderer.getContext());
+
+  // Scene
+  scene = new THREE.Scene();
+
+  // Zappar Camera — force our chosen deviceId
+  const camOptions = {};
+  if (selectedDevId) camOptions.rearCameraSource = selectedDevId;
+  zapCamera = new ZapparThree.Camera(camOptions);
+  scene.background = zapCamera.backgroundTexture;
+
+  // Permission
+  await ZapparThree.permissionRequestUI();
+
+  // Instant World Tracker (no marker!)
+  instantTracker = new ZapparThree.InstantWorldTracker();
+  instantTrackerGroup = new ZapparThree.InstantWorldTrackerGroup(renderer, instantTracker);
+  instantTrackerGroup.setAnchorPoseFromCameraOffset(0, 0, -2);
+  scene.add(instantTrackerGroup);
+
+  // Build JARVIS hologram inside tracker group
+  buildHologram();
+
+  // Placement reticle (shown while not placed)
+  buildReticle();
+
+  // Resize handler
+  window.addEventListener('resize', () => {
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    zapCamera.updateFrame(renderer);
+  });
+
+  // Start camera
+  zapCamera.start(true); // true = rear camera
+
+  // Render loop
+  renderLoop();
+
+  // Hook MediaPipe after Zappar camera is running
+  setTimeout(initMediaPipe, 2500);
 }
 
-// ── Panels ───────────────────────────────────────────────────────────────
-function showPanel(i) {
-  ['p0','p1','p2'].forEach((id,j) => { const e = $(id); if(e) e.setAttribute('visible', j===i?'true':'false'); });
-  [0,1,2].forEach(j => $('d'+j).classList.toggle('on', j===i));
-  currentPanel = i;
+// ── Placement reticle ─────────────────────────────────────────────────────────
+function buildReticle() {
+  const geo = new THREE.RingGeometry(0.12, 0.16, 32);
+  const mat = new THREE.MeshBasicMaterial({ color:0x00f5ff, side:THREE.DoubleSide, transparent:true, opacity:0.7 });
+  placementReticle = new THREE.Mesh(geo, mat);
+  placementReticle.rotation.x = -Math.PI / 2;
+  placementReticle.visible = true;
+  // Float reticle slightly above ground
+  placementReticle.position.set(0, 0.001, 0);
+  instantTrackerGroup.add(placementReticle);
 }
+
+// ── Build JARVIS 3D hologram ──────────────────────────────────────────────────
+function buildHologram() {
+  // Spinning base rings
+  const r1Geo = new THREE.RingGeometry(0.19, 0.24, 48);
+  const r1Mat = new THREE.MeshBasicMaterial({color:0x00f5ff, side:THREE.DoubleSide, transparent:true, opacity:0.55});
+  ringMesh1 = new THREE.Mesh(r1Geo, r1Mat);
+  ringMesh1.rotation.x = -Math.PI / 2;
+  ringMesh1.position.y = 0.005;
+  instantTrackerGroup.add(ringMesh1);
+
+  const r2Geo = new THREE.RingGeometry(0.27, 0.285, 48);
+  const r2Mat = new THREE.MeshBasicMaterial({color:0x4af8ff, side:THREE.DoubleSide, transparent:true, opacity:0.18});
+  ringMesh2 = new THREE.Mesh(r2Geo, r2Mat);
+  ringMesh2.rotation.x = -Math.PI / 2;
+  ringMesh2.position.y = 0.003;
+  instantTrackerGroup.add(ringMesh2);
+
+  // Side guide lines
+  addGuideLine(-0.34, 0.28, 0.55);
+  addGuideLine( 0.34, 0.28, 0.55);
+
+  // Create all 3 panels
+  for (let i = 0; i < 3; i++) {
+    panelTextures[i] = drawPanelTexture(i, 0);
+    const geo = new THREE.PlaneGeometry(0.76, 0.44);
+    const mat = new THREE.MeshBasicMaterial({
+      map: panelTextures[i], transparent: true, side: THREE.DoubleSide
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(0, 0.5, 0);
+    mesh.visible = (i === 0);
+    instantTrackerGroup.add(mesh);
+    panelMeshes[i] = mesh;
+  }
+}
+
+function addGuideLine(x, y, h) {
+  const geo = new THREE.PlaneGeometry(0.002, h);
+  const mat = new THREE.MeshBasicMaterial({color:0x00f5ff, transparent:true, opacity:0.1, side:THREE.DoubleSide});
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, 0);
+  instantTrackerGroup.add(m);
+}
+
+// ── Canvas texture rendering ───────────────────────────────────────────────────
+const DAYS   = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
+const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+
+function drawPanelTexture(panelIdx, scanY) {
+  const W = 1024, H = 580;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+
+  // Background
+  ctx.fillStyle = 'rgba(0,13,28,0.87)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Top cyan glow border
+  const topGrad = ctx.createLinearGradient(0,0,W,0);
+  topGrad.addColorStop(0, 'rgba(0,245,255,0)');
+  topGrad.addColorStop(0.5, 'rgba(0,245,255,1)');
+  topGrad.addColorStop(1, 'rgba(0,245,255,0)');
+  ctx.fillStyle = topGrad;
+  ctx.fillRect(0, 0, W, 3);
+
+  // Bottom border
+  ctx.fillStyle = topGrad;
+  ctx.fillRect(0, H-3, W, 3);
+
+  // Left & right side lines
+  ctx.fillStyle = 'rgba(0,245,255,0.4)';
+  ctx.fillRect(0, 0, 2, H);
+  ctx.fillRect(W-2, 0, 2, H);
+
+  // Corner accents TL
+  ctx.fillStyle = 'rgba(0,245,255,0.9)';
+  ctx.fillRect(0, 0, 60, 3);
+  ctx.fillRect(0, 0, 3, 60);
+  // TR
+  ctx.fillRect(W-60, 0, 60, 3);
+  ctx.fillRect(W-3, 0, 3, 60);
+  // BL
+  ctx.fillRect(0, H-3, 60, 3);
+  ctx.fillRect(0, H-60, 3, 60);
+  // BR
+  ctx.fillRect(W-60, H-3, 60, 3);
+  ctx.fillRect(W-3, H-60, 3, 60);
+
+  // Scan line
+  const sl = ctx.createLinearGradient(0, scanY-6, 0, scanY+6);
+  sl.addColorStop(0, 'rgba(0,245,255,0)');
+  sl.addColorStop(0.5, 'rgba(0,245,255,0.18)');
+  sl.addColorStop(1, 'rgba(0,245,255,0)');
+  ctx.fillStyle = sl;
+  ctx.fillRect(0, scanY-6, W, 12);
+
+  ctx.textAlign = 'center';
+
+  if (panelIdx === 0) {
+    // ── AKSHAT PANEL ──
+    ctx.font = 'bold 130px "Rajdhani", monospace';
+    ctx.fillStyle = '#00f5ff';
+    ctx.shadowColor = '#00f5ff';
+    ctx.shadowBlur = 24;
+    ctx.fillText('AKSHAT', W/2, 210);
+    ctx.shadowBlur = 0;
+
+    // divider
+    const div = ctx.createLinearGradient(200, 0, W-200, 0);
+    div.addColorStop(0,'rgba(0,245,255,0)');
+    div.addColorStop(0.5,'rgba(0,245,255,0.5)');
+    div.addColorStop(1,'rgba(0,245,255,0)');
+    ctx.fillStyle = div;
+    ctx.fillRect(100, 255, W-200, 2);
+
+    ctx.font = '42px "Share Tech Mono", monospace';
+    ctx.fillStyle = 'rgba(160,240,255,0.65)';
+    ctx.fillText('WELCOME BACK, SIR', W/2, 330);
+
+    ctx.font = '40px "Share Tech Mono", monospace';
+    ctx.fillStyle = '#00ff88';
+    ctx.shadowColor = '#00ff88';
+    ctx.shadowBlur = 14;
+    ctx.fillText('SYSTEM ONLINE', W/2, 430);
+    ctx.shadowBlur = 0;
+
+  } else if (panelIdx === 1) {
+    // ── TIME PANEL ──
+    const now = new Date();
+    let h = now.getHours(), ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    const timeStr = String(h).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
+
+    ctx.font = '36px "Share Tech Mono", monospace';
+    ctx.fillStyle = 'rgba(0,245,255,0.4)';
+    ctx.fillText('LOCAL TIME', W/2, 90);
+
+    ctx.font = 'bold 118px "Share Tech Mono", monospace';
+    ctx.fillStyle = '#00f5ff';
+    ctx.shadowColor = '#00f5ff';
+    ctx.shadowBlur = 20;
+    ctx.fillText(timeStr, W/2, 245);
+    ctx.shadowBlur = 0;
+
+    ctx.font = 'bold 64px "Rajdhani", monospace';
+    ctx.fillStyle = '#00ff88';
+    ctx.shadowColor = '#00ff88';
+    ctx.shadowBlur = 14;
+    ctx.fillText(ampm, W/2, 380);
+    ctx.shadowBlur = 0;
+
+    ctx.font = '30px "Share Tech Mono", monospace';
+    ctx.fillStyle = 'rgba(0,245,255,0.35)';
+    ctx.fillText('UTC ' + (now.getTimezoneOffset() > 0 ? '-' : '+') + String(Math.abs(now.getTimezoneOffset()/60)).padStart(2,'0') + ':00', W/2, 480);
+
+  } else {
+    // ── DATE PANEL ──
+    const now = new Date();
+    const dayStr  = DAYS[now.getDay()];
+    const dateStr = String(now.getDate()).padStart(2,'0') + ' ' + MONTHS[now.getMonth()] + ' ' + now.getFullYear();
+
+    ctx.font = '36px "Share Tech Mono", monospace';
+    ctx.fillStyle = 'rgba(0,245,255,0.4)';
+    ctx.fillText('EARTH DATE', W/2, 90);
+
+    ctx.font = 'bold 72px "Rajdhani", monospace';
+    ctx.fillStyle = 'rgba(0,245,255,0.55)';
+    ctx.fillText(dayStr, W/2, 200);
+
+    ctx.font = 'bold 96px "Share Tech Mono", monospace';
+    ctx.fillStyle = '#00f5ff';
+    ctx.shadowColor = '#00f5ff';
+    ctx.shadowBlur = 20;
+    ctx.fillText(dateStr, W/2, 340);
+    ctx.shadowBlur = 0;
+
+    ctx.font = 'bold 40px "Rajdhani", monospace';
+    ctx.fillStyle = '#a0f0ff';
+    ctx.fillStyle = 'rgba(160,240,255,0.45)';
+    ctx.fillText('GREGORIAN CALENDAR', W/2, 440);
+  }
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+// ── Render loop ───────────────────────────────────────────────────────────────
+let floatY = 0, floatDir = 1, frameCount = 0;
+let ring1Rot = 0, ring2Rot = 0;
+
+function renderLoop() {
+  requestAnimationFrame(renderLoop);
+  zapCamera.updateFrame(renderer);
+  frameCount++;
+
+  if (!hologramPlaced) {
+    // Keep updating anchor so reticle follows detected surface
+    instantTrackerGroup.setAnchorPoseFromCameraOffset(0, 0, -2);
+  }
+
+  // Animate rings
+  ring1Rot += 0.012;
+  ring2Rot -= 0.007;
+  if (ringMesh1) ringMesh1.rotation.z = ring1Rot;
+  if (ringMesh2) ringMesh2.rotation.z = ring2Rot;
+
+  // Float bob
+  floatY += 0.008 * floatDir;
+  if (floatY >  0.03) floatDir = -1;
+  if (floatY < -0.03) floatDir =  1;
+  panelMeshes.forEach(m => { if (m) m.position.y = 0.5 + floatY; });
+
+  // Update scan line every 2 frames (performance)
+  if (frameCount % 2 === 0) {
+    scanLineOffset = (scanLineOffset + 4) % 580;
+    const activePanelIdx = currentPanel;
+    const newTex = drawPanelTexture(activePanelIdx, scanLineOffset);
+    if (panelMeshes[activePanelIdx]) {
+      panelMeshes[activePanelIdx].material.map.dispose();
+      panelMeshes[activePanelIdx].material.map = newTex;
+      panelMeshes[activePanelIdx].material.needsUpdate = true;
+    }
+  }
+
+  // Update clock panels 1 and 2 every 60 frames (~1s)
+  if (frameCount % 60 === 0 && currentPanel !== 0) {
+    const tex = drawPanelTexture(currentPanel, scanLineOffset);
+    panelMeshes[currentPanel].material.map.dispose();
+    panelMeshes[currentPanel].material.map = tex;
+    panelMeshes[currentPanel].material.needsUpdate = true;
+  }
+
+  renderer.render(scene, zapCamera);
+}
+
+// ── Clock tick (for Time panel) ────────────────────────────────────────────────
+function tickClock() {
+  if (currentPanel === 1 && hologramPlaced) {
+    const tex = drawPanelTexture(1, scanLineOffset);
+    if (panelMeshes[1]) {
+      panelMeshes[1].material.map.dispose();
+      panelMeshes[1].material.map = tex;
+      panelMeshes[1].material.needsUpdate = true;
+    }
+  }
+}
+
+// ── Tap to place ─────────────────────────────────────────────────────────────
+$('hud').addEventListener('click', e => {
+  // Don't fire if clicking on any button
+  if (e.target.closest('button')) return;
+  if (!arLaunched) return;
+  if (!hologramPlaced) {
+    hologramPlaced = true;
+    if (placementReticle) placementReticle.visible = false;
+    $('place-prompt').style.display = 'none';
+    $('dots').style.display = 'flex';
+    $('swipe-hint').style.display = 'block';
+    $('hud-status').textContent = '✦ HOLOGRAM LOCKED';
+  }
+}, true);
+
+// ── Panel cycling ─────────────────────────────────────────────────────────────
+function showPanel(idx) {
+  panelMeshes.forEach((m, i) => { if (m) m.visible = (i === idx); });
+  [0,1,2].forEach(i => $('d'+i).classList.toggle('on', i === idx));
+  currentPanel = idx;
+  // Redraw immediately for new panel
+  const tex = drawPanelTexture(idx, scanLineOffset);
+  if (panelMeshes[idx]) {
+    panelMeshes[idx].material.map.dispose();
+    panelMeshes[idx].material.map = tex;
+    panelMeshes[idx].material.needsUpdate = true;
+  }
+}
+
 function doSwipe() {
-  if (swipeCooldown) return;
+  if (swipeCooldown || !hologramPlaced) return;
   swipeCooldown = true;
-  showPanel((currentPanel+1)%3);
+  showPanel((currentPanel + 1) % 3);
   const f = $('flash'); f.style.opacity = '1'; setTimeout(() => f.style.opacity='0', 180);
-  setTimeout(() => swipeCooldown=false, 900);
+  setTimeout(() => swipeCooldown = false, 900);
 }
 
 // Touch swipe
 let tx0 = 0;
-document.addEventListener('touchstart', e => { tx0 = e.touches[0].clientX; }, { passive:true });
-document.addEventListener('touchend',   e => { if (arLaunched && e.changedTouches[0].clientX - tx0 > 55) doSwipe(); });
+document.addEventListener('touchstart', e => { tx0 = e.touches[0].clientX; }, {passive:true});
+document.addEventListener('touchend',   e => {
+  if (!arLaunched) return;
+  const dx = e.changedTouches[0].clientX - tx0;
+  if (dx > 55) doSwipe();
+});
 
-// ── Clock ────────────────────────────────────────────────────────────────
-const DAYS=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
-const MONTHS=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-function tick() {
-  const n=new Date(), h=n.getHours(), ampm=h>=12?'PM':'AM', h12=h%12||12;
-  const te=$('time-el'),ae=$('ampm-el'),de=$('day-el'),dte=$('date-el');
-  if(te) te.setAttribute('value', String(h12).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0')+':'+String(n.getSeconds()).padStart(2,'0'));
-  if(ae) ae.setAttribute('value', ampm);
-  if(de) de.setAttribute('value', DAYS[n.getDay()]);
-  if(dte) dte.setAttribute('value', String(n.getDate()).padStart(2,'0')+' '+MONTHS[n.getMonth()]+' '+n.getFullYear());
-}
+// ── MediaPipe Hands ───────────────────────────────────────────────────────────
+// KEY: MediaPipe reads Zappar's own video element — no second camera stream!
+function initMediaPipe() {
+  if (typeof Hands === 'undefined') { $('hud-status').textContent = '◎ SCANNING'; return; }
 
-// ── MediaPipe Hands ───────────────────────────────────────────────────────
-function initHands() {
-  if (typeof Hands === 'undefined') return;
-  const hands = new Hands({ locateFile: f => 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/'+f });
-  hands.setOptions({ maxNumHands:1, modelComplexity:0, minDetectionConfidence:0.65, minTrackingConfidence:0.55 });
-  let lastX=null, lastT=0;
-  hands.onResults(r => {
-    if (!r.multiHandLandmarks?.length) {
-      $('hud-status').textContent='◎ SCANNING'; $('hand-dot').style.display='none'; lastX=null; return;
-    }
-    const lm=r.multiHandLandmarks[0];
-    $('hud-status').textContent='✋ HAND LOCKED';
-    const hd=$('hand-dot');
-    hd.style.display='block'; hd.style.left=(lm[8].x*window.innerWidth)+'px'; hd.style.top=(lm[8].y*window.innerHeight)+'px';
-    const now=Date.now(), dx=lm[0].x-(lastX??lm[0].x);
-    if(lastX!==null && dx>0.09 && now-lastT>1000){ lastT=now; doSwipe(); }
-    lastX=lm[0].x;
+  const hands = new Hands({ locateFile: f =>
+    'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/' + f
   });
-  function hookVideo(){
-    const v=document.querySelector('a-scene video');
-    if(!v){ setTimeout(hookVideo,800); return; }
-    async function loop(){ if(v.readyState>=2){try{await hands.send({image:v});}catch(e){}} requestAnimationFrame(loop); }
+  hands.setOptions({
+    maxNumHands: 1,
+    modelComplexity: 0,
+    minDetectionConfidence: 0.65,
+    minTrackingConfidence: 0.55
+  });
+
+  let lastWristX = null, lastSwipeT = 0;
+
+  hands.onResults(res => {
+    if (!res.multiHandLandmarks?.length) {
+      if (hologramPlaced) $('hud-status').textContent = '✦ HOLOGRAM LOCKED';
+      else $('hud-status').textContent = '◎ SCANNING';
+      $('hand-dot').style.display = 'none';
+      lastWristX = null;
+      return;
+    }
+    const lm = res.multiHandLandmarks[0];
+    $('hud-status').textContent = '✋ HAND LOCKED';
+    const hd = $('hand-dot');
+    hd.style.display = 'block';
+    hd.style.left = (lm[8].x * window.innerWidth) + 'px';
+    hd.style.top  = (lm[8].y * window.innerHeight) + 'px';
+
+    const now = Date.now(), dx = lm[0].x - (lastWristX ?? lm[0].x);
+    if (lastWristX !== null && dx > 0.09 && now - lastSwipeT > 1000) {
+      lastSwipeT = now; doSwipe();
+    }
+    lastWristX = lm[0].x;
+  });
+
+  // Find Zappar's internal video element and feed it to MediaPipe
+  function hookZapparVideo() {
+    // Zappar creates a <video> element in the document
+    const vids = document.querySelectorAll('video');
+    let zapVid = null;
+    vids.forEach(v => { if (v !== $('bg-video') && v.srcObject) zapVid = v; });
+
+    if (!zapVid) {
+      // Also check if Zappar uses a canvas or direct context
+      setTimeout(hookZapparVideo, 600);
+      return;
+    }
+
+    async function loop() {
+      if (zapVid.readyState >= 2) {
+        try { await hands.send({ image: zapVid }); } catch(e) {}
+      }
+      requestAnimationFrame(loop);
+    }
     requestAnimationFrame(loop);
   }
-  setTimeout(hookVideo, 2000);
+
+  setTimeout(hookZapparVideo, 1500);
 }
 </script>
 </body>
