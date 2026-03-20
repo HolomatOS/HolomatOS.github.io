@@ -6,54 +6,51 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#000000">
 <title>J.A.R.V.I.S</title>
-<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.1.5/dist/mindar-image.prod.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.1.5/dist/mindar-image-three.prod.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.139.0/build/three.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;
   font-family:'Share Tech Mono',monospace;color:#00f5ff;}
 
-/* MindAR owns this — camera always visible inside */
-#container{position:fixed;inset:0;z-index:1;}
-#container canvas,#container video{
-  position:fixed!important;top:0!important;left:0!important;
-  width:100%!important;height:100%!important;object-fit:cover!important;
-}
+/* Three.js canvas fills screen — WebXR draws camera feed into it */
+#c{position:fixed;inset:0;z-index:1;}
 
-/* ═══════════════════════════════════════════════════
-   LAUNCH PAGE — PORTRAIT, full screen
-═══════════════════════════════════════════════════ */
-#launch-page{
+/* ── LAUNCH PAGE ── */
+#launch{
   position:fixed;inset:0;z-index:900;
   background:#000a12;
+  background-image:repeating-linear-gradient(
+    0deg,transparent,transparent 3px,rgba(0,245,255,0.012) 3px,rgba(0,245,255,0.012) 4px);
   display:flex;flex-direction:column;
   align-items:center;justify-content:center;
   padding:32px 24px;
-  /* scanlines */
-  background-image:repeating-linear-gradient(
-    0deg,transparent,transparent 3px,rgba(0,245,255,0.012) 3px,rgba(0,245,255,0.012) 4px
-  );
 }
-.lp-logo{
-  font-family:'Rajdhani',sans-serif;font-size:48px;font-weight:700;
+.logo{font-family:'Rajdhani',sans-serif;font-size:48px;font-weight:700;
   letter-spacing:16px;color:#00f5ff;
   text-shadow:0 0 30px #00f5ffaa,0 0 60px #00f5ff44;
-  margin-bottom:4px;text-align:center;
-}
-.lp-sub{font-size:10px;letter-spacing:5px;color:#00f5ff44;margin-bottom:48px;text-align:center;}
+  margin-bottom:4px;text-align:center;}
+.logo-s{font-size:10px;letter-spacing:5px;color:#00f5ff44;margin-bottom:44px;text-align:center;}
 
-.lp-step{
+.step{
   width:100%;max-width:340px;
   background:rgba(0,30,50,0.6);border:1px solid rgba(0,245,255,0.15);
   border-radius:12px;padding:14px 18px;margin-bottom:12px;
   display:flex;align-items:center;gap:14px;
 }
-.lp-num{font-family:'Rajdhani',sans-serif;font-size:28px;font-weight:700;color:#00f5ff;min-width:28px;}
-.lp-txt{}
-.lp-t{font-size:11px;letter-spacing:2px;color:#fff;margin-bottom:2px;}
-.lp-d{font-size:10px;color:#00f5ff55;line-height:1.6;}
+.step-n{font-family:'Rajdhani',sans-serif;font-size:28px;font-weight:700;
+  color:#00f5ff;min-width:28px;}
+.step-t{font-size:11px;letter-spacing:2px;color:#fff;margin-bottom:2px;}
+.step-d{font-size:10px;color:#00f5ff55;line-height:1.6;}
+
+/* unsupported warning */
+#unsupported{
+  width:100%;max-width:340px;
+  background:#FAEEDA;border:1px solid #EF9F27;
+  border-radius:12px;padding:14px 18px;margin-bottom:16px;
+  display:none;font-size:11px;color:#633806;line-height:1.8;
+}
+#unsupported strong{display:block;color:#412402;font-size:12px;margin-bottom:4px;letter-spacing:1px;}
 
 #btn-start{
   margin-top:8px;width:100%;max-width:340px;height:64px;
@@ -70,584 +67,483 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
 }
 @keyframes shine{to{left:210%;}}
 #btn-start:active{background:rgba(0,245,255,0.1);}
+#btn-start:disabled{opacity:0.3;pointer-events:none;}
 
-/* ═══════════════════════════════════════════════════
-   IMAGE UPLOAD PAGE — PORTRAIT
-═══════════════════════════════════════════════════ */
-#upload-page{
-  position:fixed;inset:0;z-index:890;
-  background:rgba(0,5,15,0.97);
-  display:none;flex-direction:column;
-  align-items:center;justify-content:flex-start;
-  padding:max(env(safe-area-inset-top,0px),20px) 20px 160px;
-  overflow-y:auto;
-}
-.up-title{font-family:'Rajdhani',sans-serif;font-size:22px;letter-spacing:4px;
-  color:#fff;margin-bottom:4px;margin-top:8px;}
-.up-sub{font-size:10px;color:#00f5ff55;letter-spacing:2px;margin-bottom:24px;}
-
-/* Upload zone */
-#upload-zone{
-  width:100%;max-width:380px;
-  border:2px dashed rgba(0,245,255,0.3);border-radius:16px;
-  padding:28px 20px;margin-bottom:16px;
-  display:flex;flex-direction:column;align-items:center;gap:14px;
-  cursor:pointer;transition:border-color 0.2s;
-  background:rgba(0,245,255,0.02);
-}
-#upload-zone.has-image{border-color:#00f5ff;border-style:solid;}
-#upload-zone:active{background:rgba(0,245,255,0.05);}
-#preview-img{
-  width:100%;max-height:220px;object-fit:contain;
-  border-radius:8px;display:none;
-}
-.uz-icon{font-size:40px;}
-.uz-t{font-size:12px;letter-spacing:2px;color:#00f5ff;}
-.uz-d{font-size:10px;color:#00f5ff44;text-align:center;line-height:1.7;}
-#file-input{display:none;}
-
-/* Tips */
-.tips-card{
-  width:100%;max-width:380px;
-  background:rgba(0,245,255,0.04);border:1px solid rgba(0,245,255,0.12);
-  border-radius:12px;padding:14px 16px;margin-bottom:14px;
-}
-.tip-title{font-size:10px;letter-spacing:3px;color:#00f5ff55;margin-bottom:10px;}
-.tip-row{display:flex;gap:8px;align-items:flex-start;margin:5px 0;font-size:11px;color:#00f5ff88;line-height:1.5;}
-.tip-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:4px;}
-.tip-g{background:#1D9E75;}.tip-r{background:#E24B4A;}
-
-/* Bottom buttons for upload page */
-#upload-btns{
-  position:fixed;bottom:0;left:0;width:100%;z-index:895;
-  display:none;flex-direction:column;gap:10px;
-  padding:14px 20px calc(max(env(safe-area-inset-bottom,0px),12px) + 8px);
-  background:linear-gradient(0deg,rgba(0,3,10,0.98) 0%,rgba(0,3,10,0.85) 65%,transparent 100%);
-}
-#btn-compile{
-  width:100%;height:64px;
-  background:transparent;border:1.5px solid #00f5ff;border-radius:16px;
-  color:#00f5ff;font-family:'Share Tech Mono',monospace;
-  font-size:14px;letter-spacing:4px;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;gap:12px;
-  position:relative;overflow:hidden;opacity:0.35;pointer-events:none;
-}
-#btn-compile.ready{opacity:1;pointer-events:all;}
-#btn-compile.ready::before{
-  content:'';position:absolute;top:0;left:-110%;width:100%;height:100%;
-  background:linear-gradient(90deg,transparent,rgba(0,245,255,0.16),transparent);
-  animation:shine 2.6s ease-in-out infinite;
-}
-#btn-compile:active{background:rgba(0,245,255,0.1);}
-#btn-retake{
-  width:100%;height:50px;
-  background:rgba(0,0,0,0.5);border:1px solid rgba(0,245,255,0.18);
-  border-radius:14px;color:#00f5ff77;font-family:'Share Tech Mono',monospace;
-  font-size:11px;letter-spacing:3px;cursor:pointer;
-}
-#btn-retake:active{background:rgba(0,245,255,0.07);}
-
-/* ═══════════════════════════════════════════════════
-   COMPILE SCREEN
-═══════════════════════════════════════════════════ */
-#compile-screen{
-  position:fixed;inset:0;z-index:960;background:rgba(0,4,14,0.97);
-  display:none;flex-direction:column;align-items:center;justify-content:center;
-  padding:32px 24px;text-align:center;
-}
-.c-title{font-family:'Rajdhani',sans-serif;font-size:22px;letter-spacing:4px;color:#00f5ff;margin-bottom:6px;}
-.c-sub{font-size:10px;color:#00f5ff55;letter-spacing:2px;margin-bottom:10px;line-height:1.8;}
-#compile-thumb{width:120px;height:120px;object-fit:cover;border-radius:10px;margin-bottom:24px;border:1px solid rgba(0,245,255,0.3);}
-.prog-wrap{width:100%;max-width:300px;background:rgba(0,245,255,0.08);
-  border:1px solid rgba(0,245,255,0.2);border-radius:8px;height:8px;overflow:hidden;margin-bottom:12px;}
-#prog-bar{height:100%;background:#00f5ff;width:0%;transition:width 0.3s;border-radius:8px;}
-#prog-txt{font-size:12px;color:#00f5ff66;letter-spacing:2px;}
-
-/* ═══════════════════════════════════════════════════
-   AR HUD — LANDSCAPE
-   Everything except the launch page is landscape
-═══════════════════════════════════════════════════ */
+/* ── HUD — shown during AR session, landscape-optimised ── */
 #hud{
   position:fixed;inset:0;z-index:10;
   pointer-events:none;display:none;
 }
-/* scanlines */
 #hud::after{
   content:'';position:absolute;inset:0;
-  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,245,255,0.01) 3px,rgba(0,245,255,0.01) 4px);
+  background:repeating-linear-gradient(
+    0deg,transparent,transparent 3px,rgba(0,245,255,0.01) 3px,rgba(0,245,255,0.01) 4px);
   pointer-events:none;
 }
-/* Landscape: brand on LEFT, status on RIGHT, both along long axis */
+/* Top bar */
 #hud-top{
   position:absolute;top:0;left:0;right:0;
-  padding:10px 20px;
+  padding:10px 18px;
   display:flex;justify-content:space-between;align-items:center;
   background:linear-gradient(180deg,rgba(0,4,12,0.82) 0%,transparent 100%);
 }
-.hbrand{font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;
+.hbrand{font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;
   letter-spacing:7px;color:#00f5ff;text-shadow:0 0 14px #00f5ff55;}
 #hud-zoom{font-size:8px;letter-spacing:2px;color:#00ff88;
   background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.2);
   border-radius:20px;padding:2px 8px;}
 #hud-st{font-size:8px;letter-spacing:2px;color:#00f5ff66;}
 
-/* Corner brackets — landscape positions */
+/* Corner brackets */
 .brk{position:absolute;width:22px;height:22px;border-color:#00f5ff33;border-style:solid;}
 .brk-tl{top:10px;left:10px;border-width:1.5px 0 0 1.5px;}
 .brk-tr{top:10px;right:10px;border-width:1.5px 1.5px 0 0;}
-.brk-bl{bottom:60px;left:10px;border-width:0 0 1.5px 1.5px;}
-.brk-br{bottom:60px;right:10px;border-width:0 1.5px 1.5px 0;}
+.brk-bl{bottom:56px;left:10px;border-width:0 0 1.5px 1.5px;}
+.brk-br{bottom:56px;right:10px;border-width:0 1.5px 1.5px 0;}
 
-/* Target scanning prompt — center */
-#target-msg{
+/* Placement prompt — center */
+#place-msg{
   position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-  background:rgba(0,8,20,0.85);border:1px solid #00f5ff22;border-radius:12px;
-  padding:16px 24px;text-align:center;transition:opacity 0.5s;
+  text-align:center;pointer-events:none;
 }
-.tm-t{font-size:10px;letter-spacing:4px;margin-bottom:5px;}
-.tm-s{font-size:9px;color:#00f5ff55;line-height:1.9;letter-spacing:1px;}
+.pm-ring{
+  width:64px;height:64px;border-radius:50%;
+  border:2px solid #00f5ff;background:rgba(0,245,255,0.07);
+  margin:0 auto 12px;
+  animation:pulse 1.5s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(0,245,255,0.5);}50%{box-shadow:0 0 0 16px rgba(0,245,255,0);}}
+.pm-t{font-size:12px;letter-spacing:3px;color:#00f5ff;margin-bottom:4px;}
+.pm-s{font-size:9px;color:#00f5ff55;letter-spacing:1.5px;line-height:1.6;}
 
-/* Landscape panel dots — bottom center */
-#dots{
-  position:absolute;bottom:36px;left:50%;transform:translateX(-50%);
-  display:flex;gap:14px;
-}
+/* Panel dots */
+#dots{position:absolute;bottom:32px;left:50%;transform:translateX(-50%);display:flex;gap:14px;}
 .dot{width:7px;height:7px;border-radius:50%;border:1.5px solid #00f5ff33;transition:all 0.4s;}
 .dot.on{background:#00f5ff;border-color:#00f5ff;box-shadow:0 0 10px #00f5ff;}
-#swipe-hint{
-  position:absolute;bottom:20px;left:50%;transform:translateX(-50%);
-  font-size:8px;letter-spacing:2px;color:#00f5ff33;white-space:nowrap;
-}
+#swipe-hint{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);
+  font-size:8px;letter-spacing:2px;color:#00f5ff33;white-space:nowrap;}
 
-/* Change target button — bottom right in landscape */
-#btn-change-target{
-  position:absolute;bottom:24px;right:16px;
-  background:rgba(0,0,0,0.6);border:1px solid rgba(0,245,255,0.2);
-  border-radius:10px;padding:8px 14px;
-  font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:2px;color:#00f5ff66;
-  cursor:pointer;pointer-events:all;
-}
-#btn-change-target:active{background:rgba(0,245,255,0.08);}
-
-#hand-dot{
-  position:absolute;width:20px;height:20px;border-radius:50%;
-  border:2px solid #00f5ff;background:rgba(0,245,255,0.14);
-  transform:translate(-50%,-50%);display:none;
-  box-shadow:0 0 10px #00f5ff55;pointer-events:none;
-}
-#flash{
-  position:absolute;inset:0;background:rgba(0,245,255,0.05);
-  opacity:0;pointer-events:none;transition:opacity 0.15s;
-}
+#flash{position:absolute;inset:0;background:rgba(0,245,255,0.05);
+  opacity:0;pointer-events:none;transition:opacity 0.15s;}
 </style>
 </head>
 <body>
 
-<div id="container"></div>
+<!-- Three.js renders WebXR camera + hologram here -->
+<canvas id="c"></canvas>
 
-<!-- ══════════════════════════════════════════
-     LAUNCH PAGE — portrait
-══════════════════════════════════════════ -->
-<div id="launch-page">
-  <div class="lp-logo">J.A.R.V.I.S</div>
-  <div class="lp-sub">HOLOGRAPHIC INTERFACE v4.6</div>
+<!-- ══ LAUNCH PAGE ══ -->
+<div id="launch">
+  <div class="logo">J.A.R.V.I.S</div>
+  <div class="logo-s">HOLOGRAPHIC INTERFACE v4.6</div>
 
-  <div class="lp-step">
-    <div class="lp-num">1</div>
-    <div class="lp-txt">
-      <div class="lp-t">PHOTOGRAPH ANY IMAGE</div>
-      <div class="lp-d">Book cover, poster, magazine — anything with texture and colour.</div>
-    </div>
-  </div>
-  <div class="lp-step">
-    <div class="lp-num">2</div>
-    <div class="lp-txt">
-      <div class="lp-t">APP COMPILES IT AS TARGET</div>
-      <div class="lp-d">~15 seconds. Done once per image.</div>
-    </div>
-  </div>
-  <div class="lp-step">
-    <div class="lp-num">3</div>
-    <div class="lp-txt">
-      <div class="lp-t">POINT CAMERA — HOLOGRAM LOCKS</div>
-      <div class="lp-d">Swipe right to cycle AKSHAT → TIME → DATE.</div>
-    </div>
+  <div id="unsupported">
+    <strong>⚠ WEBXR NOT AVAILABLE</strong>
+    Make sure:<br>
+    · Chrome is up to date<br>
+    · AR Core is installed (Play Store → "Google Play Services for AR")<br>
+    · This page is served over HTTPS (GitHub Pages)
   </div>
 
-  <button id="btn-start" onclick="showUploadPage()">
+  <div class="step">
+    <div class="step-n">1</div>
+    <div>
+      <div class="step-t">TAP ACTIVATE</div>
+      <div class="step-d">Chrome asks for camera. Real ARCore scans your floor/table.</div>
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-n">2</div>
+    <div>
+      <div class="step-t">POINT AT ANY FLAT SURFACE</div>
+      <div class="step-d">A glowing reticle dot appears on the detected plane.</div>
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-n">3</div>
+    <div>
+      <div class="step-t">TAP TO PLACE HOLOGRAM</div>
+      <div class="step-d">JARVIS locks there. Swipe right — AKSHAT → TIME → DATE.</div>
+    </div>
+  </div>
+
+  <button id="btn-start" onclick="startXR()">
     <span style="font-size:18px;">⬡</span>
-    BEGIN
+    ACTIVATE J.A.R.V.I.S
   </button>
 </div>
 
-<!-- ══════════════════════════════════════════
-     UPLOAD PAGE — portrait
-══════════════════════════════════════════ -->
-<div id="upload-page">
-  <div class="up-title">CHOOSE YOUR TARGET</div>
-  <div class="up-sub">PHOTOGRAPH OR SELECT ANY IMAGE</div>
-
-  <div id="upload-zone" onclick="triggerUpload()">
-    <img id="preview-img" alt="preview">
-    <div id="uz-placeholder" style="display:flex;flex-direction:column;align-items:center;gap:10px;">
-      <div class="uz-icon">📸</div>
-      <div class="uz-t">TAP TO TAKE PHOTO OR CHOOSE IMAGE</div>
-      <div class="uz-d">Use your camera to photograph the object<br>you want JARVIS to appear above.<br>Book cover · poster · printed page · any object</div>
-    </div>
-  </div>
-
-  <input type="file" id="file-input" accept="image/*" capture="environment" onchange="handleFile(this)">
-
-  <div class="tips-card">
-    <div class="tip-title">TIPS FOR BEST TRACKING</div>
-    <div class="tip-row"><span class="tip-dot tip-g"></span>Rich texture — book cover, magazine, colourful poster</div>
-    <div class="tip-row"><span class="tip-dot tip-g"></span>Good contrast — dark and light areas</div>
-    <div class="tip-row"><span class="tip-dot tip-g"></span>At least A5 size when placed on table</div>
-    <div class="tip-row"><span class="tip-dot tip-g"></span>Flat surface, no glare or reflections</div>
-    <div class="tip-row"><span class="tip-dot tip-r"></span>Avoid plain white/black surfaces</div>
-    <div class="tip-row"><span class="tip-dot tip-r"></span>Avoid repeating patterns (brick, fabric)</div>
-    <div class="tip-row"><span class="tip-dot tip-r"></span>Avoid shiny or transparent materials</div>
-  </div>
-</div>
-
-<div id="upload-btns">
-  <button id="btn-compile" onclick="startCompile()">
-    <span style="font-size:16px;">⬡</span>
-    COMPILE TARGET &amp; LAUNCH
-  </button>
-  <button id="btn-retake" onclick="triggerUpload()">📸 &nbsp;RETAKE / CHOOSE DIFFERENT IMAGE</button>
-</div>
-
-<!-- ══════════════════════════════════════════
-     COMPILE SCREEN
-══════════════════════════════════════════ -->
-<div id="compile-screen">
-  <div class="c-title">COMPILING TARGET</div>
-  <div class="c-sub">EXTRACTING FEATURE POINTS<br>FROM YOUR IMAGE</div>
-  <img id="compile-thumb" alt="">
-  <div class="prog-wrap"><div id="prog-bar"></div></div>
-  <div id="prog-txt">0%</div>
-</div>
-
-<!-- ══════════════════════════════════════════
-     AR HUD — landscape
-══════════════════════════════════════════ -->
+<!-- ══ HUD ══ -->
 <div id="hud">
   <div class="brk brk-tl"></div><div class="brk brk-tr"></div>
   <div class="brk brk-bl"></div><div class="brk brk-br"></div>
   <div id="hud-top">
     <span class="hbrand">J.A.R.V.I.S</span>
-    <span id="hud-zoom">0.5× ULTRA WIDE</span>
+    <span id="hud-zoom">ARCore · PLANE DETECTION</span>
     <span id="hud-st">◎ SCANNING</span>
   </div>
-  <div id="target-msg">
-    <div class="tm-t">◈ SEARCHING</div>
-    <div class="tm-s">POINT CAMERA AT<br>YOUR TARGET IMAGE</div>
+  <div id="place-msg">
+    <div class="pm-ring"></div>
+    <div class="pm-t">SURFACE DETECTED</div>
+    <div class="pm-s">TAP TO PLACE HOLOGRAM</div>
   </div>
-  <div id="hand-dot"></div>
   <div id="flash"></div>
-  <div id="dots">
+  <div id="dots" style="display:none;">
     <div class="dot on" id="d0"></div>
     <div class="dot" id="d1"></div>
     <div class="dot" id="d2"></div>
   </div>
-  <div id="swipe-hint">◀ SWIPE RIGHT TO CYCLE PANELS ▶</div>
-  <button id="btn-change-target" onclick="resetToUpload()">⇄ CHANGE TARGET</button>
+  <div id="swipe-hint" style="display:none;">◀ SWIPE RIGHT TO CYCLE PANELS ▶</div>
 </div>
 
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
 
-let selectedDevId = null;
-let compiledURL   = null;
-let uploadedImage = null;
-let arLaunched    = false;
-let currentPanel  = 0;
+// ── State ─────────────────────────────────────────────────────────────────────
+let placed    = false;
+let currentPanel = 0;
 let swipeCooldown = false;
-let scanY=0, floatY=0, floatDir=1, ring1Rot=0, ring2Rot=0, frameN=0;
-let THREE, panels=[], panelGroup, ring1, ring2, mindarThreeInst=null;
+let scanY = 0, floatY = 0, floatDir = 1;
+let ring1Rot = 0, ring2Rot = 0, frameN = 0;
 
-// ── Show upload page ──────────────────────────────────────────────────────────
-async function showUploadPage() {
-  // Request camera permission first
-  try {
-    const init = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});
-    init.getTracks().forEach(t=>t.stop());
-    const devs = await navigator.mediaDevices.enumerateDevices();
-    const rear = devs.filter(d=>{
-      if(d.kind!=='videoinput') return false;
-      const l=d.label.toLowerCase();
-      return !l.includes('front')&&!l.includes('selfie');
-    });
-    const uw = rear.find(d=>{const l=d.label.toLowerCase();return l.includes('wide')||l.includes('ultra');});
-    selectedDevId = (uw||rear[1]||rear[0])?.deviceId||null;
-  } catch(e) {}
+// Three.js
+let renderer, scene, camera;
+let reticle, hologramGroup, panelGroup;
+let ring1Mesh, ring2Mesh;
+let panels = [];
 
-  $('launch-page').style.display='none';
-  $('upload-page').style.display='flex';
-  $('upload-btns').style.display='flex';
-}
+// WebXR
+let xrSession  = null;
+let xrRefSpace = null;
+let hitTestSrc = null;
 
-// ── File input ────────────────────────────────────────────────────────────────
-function triggerUpload() {
-  $('file-input').value = '';
-  $('file-input').click();
-}
-
-function handleFile(input) {
-  const file = input.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = e => {
-    const img = new Image();
-    img.onload = () => {
-      uploadedImage = img;
-      // Show preview
-      const prev = $('preview-img');
-      prev.src = e.target.result;
-      prev.style.display = 'block';
-      $('uz-placeholder').style.display = 'none';
-      $('upload-zone').classList.add('has-image');
-      // Enable compile button
-      $('btn-compile').classList.add('ready');
-      // Set compile thumb
-      $('compile-thumb').src = e.target.result;
-    };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
-}
-
-// ── Compile ───────────────────────────────────────────────────────────────────
-async function startCompile() {
-  if (!uploadedImage) return;
-
-  $('upload-page').style.display='none';
-  $('upload-btns').style.display='none';
-  $('compile-screen').style.display='flex';
-  $('prog-bar').style.width='0%';
-  $('prog-txt').textContent='0%';
-
-  if (!window.MINDAR?.IMAGE?.Compiler) {
-    $('prog-txt').textContent='ERROR: MindAR not loaded. Check internet.'; return;
+// ── Check WebXR support on load ────────────────────────────────────────────────
+window.addEventListener('load', async () => {
+  if (!navigator.xr) {
+    showUnsupported(); return;
   }
+  const supported = await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
+  if (!supported) showUnsupported();
+});
 
-  // Fullscreen (inside gesture chain from button tap)
+function showUnsupported() {
+  $('unsupported').style.display = 'block';
+  $('btn-start').disabled = true;
+}
+
+// ── Start WebXR ───────────────────────────────────────────────────────────────
+async function startXR() {
+  // Fullscreen inside gesture
   try {
-    const el=document.documentElement;
-    if(el.requestFullscreen) await el.requestFullscreen({navigationUI:'hide'});
-    else if(el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    const el = document.documentElement;
+    if (el.requestFullscreen) await el.requestFullscreen({navigationUI:'hide'});
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
   } catch(e){}
 
   try {
-    const compiler = new window.MINDAR.IMAGE.Compiler();
-    await compiler.compileImageTargets([uploadedImage], progress=>{
-      const p=Math.round(progress*100);
-      $('prog-bar').style.width=p+'%';
-      $('prog-txt').textContent=p+'%';
+    xrSession = await navigator.xr.requestSession('immersive-ar', {
+      requiredFeatures: ['hit-test'],
+      optionalFeatures: ['dom-overlay', 'light-estimation'],
+      domOverlay: { root: $('hud') }
     });
-    const buf = await compiler.exportData();
-    compiledURL = URL.createObjectURL(new Blob([buf]));
-    $('compile-screen').style.display='none';
-    await initMindAR();
   } catch(err) {
-    $('prog-txt').textContent='ERROR: '+err.message;
+    alert('Could not start AR session: ' + err.message);
+    return;
   }
+
+  $('launch').style.display = 'none';
+  $('hud').style.display = 'block';
+
+  initThree();
+  xrSession.addEventListener('end', onSessionEnd);
+
+  // Reference space
+  xrRefSpace = await xrSession.requestReferenceSpace('local');
+
+  // Hit test source — real ARCore plane detection
+  const viewerSpace = await xrSession.requestReferenceSpace('viewer');
+  hitTestSrc = await xrSession.requestHitTestSource({ space: viewerSpace });
+
+  // Start render loop
+  xrSession.requestAnimationFrame(onXRFrame);
 }
 
-// ── Reset to upload (change target) ──────────────────────────────────────────
-async function resetToUpload() {
-  if (mindarThreeInst) {
-    try { await mindarThreeInst.stop(); } catch(e){}
-    mindarThreeInst = null;
-  }
-  arLaunched=false;
-  compiledURL=null;
-  uploadedImage=null;
-  panels=[];
-  $('hud').style.display='none';
-  $('upload-page').style.display='flex';
-  $('upload-btns').style.display='flex';
-  $('preview-img').style.display='none';
-  $('uz-placeholder').style.display='flex';
-  $('upload-zone').classList.remove('has-image');
-  $('btn-compile').classList.remove('ready');
-  try{ document.exitFullscreen(); }catch(e){}
-}
-
-// ── MindAR ────────────────────────────────────────────────────────────────────
-async function initMindAR() {
-  arLaunched=true;
-  THREE = window.MINDAR.IMAGE.THREE;
-
-  // Override camera to use chosen lens
-  if (selectedDevId) {
-    const orig=navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-    navigator.mediaDevices.getUserMedia=async c=>{
-      if(c&&c.video) c={audio:false,video:{deviceId:{exact:selectedDevId},width:{ideal:1920},height:{ideal:1080}}};
-      return orig(c);
-    };
-  }
-
-  mindarThreeInst = new window.MINDAR.IMAGE.MindARThree({
-    container:$('container'), imageTargetSrc:compiledURL,
-    maxTrack:1, uiLoading:'no', uiScanning:'no', uiError:'no',
-    filterMinCF:0.001, filterBeta:1000, missTolerance:5, warmupTolerance:3,
-  });
-
-  const {renderer,scene,camera}=mindarThreeInst;
+// ── Three.js setup ────────────────────────────────────────────────────────────
+function initThree() {
+  const canvas = $('c');
+  renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.xr.enabled = true;
+  renderer.xr.setReferenceSpaceType('local');
+  renderer.xr.setSession(xrSession);
 
-  const anchor=mindarThreeInst.addAnchor(0);
-  anchor.onTargetFound=()=>{ $('target-msg').style.opacity='0'; $('hud-st').textContent='✦ HOLOGRAM LOCKED'; };
-  anchor.onTargetLost= ()=>{ $('target-msg').style.opacity='1'; $('hud-st').textContent='◎ SCANNING'; };
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 100);
 
-  // Build hologram
-  ring1=mkRing(0.19,0.24,0x00f5ff,0.55); ring2=mkRing(0.27,0.285,0x4af8ff,0.18);
-  ring1.rotation.x=ring2.rotation.x=-Math.PI/2;
-  ring1.position.y=0.005; ring2.position.y=0.003;
-  anchor.group.add(ring1,ring2);
-  anchor.group.add(mkLine(-0.34,0.28,0),mkLine(0.34,0.28,0));
-
-  panelGroup=new THREE.Group(); panelGroup.position.y=0.5;
-  anchor.group.add(panelGroup);
-  panels=[];
-  for(let i=0;i<3;i++){ const m=mkPanel(i); m.visible=(i===0); panelGroup.add(m); panels[i]=m; }
-
-  await mindarThreeInst.start();
-  $('hud').style.display='block';
-
-  renderer.setAnimationLoop(()=>{
-    frameN++;
-    floatY+=0.008*floatDir; if(floatY>0.03)floatDir=-1; if(floatY<-0.03)floatDir=1;
-    panelGroup.position.y=0.5+floatY;
-    ring1Rot+=0.012; ring2Rot-=0.007;
-    ring1.rotation.z=ring1Rot; ring2.rotation.z=ring2Rot;
-    if(frameN%2===0){
-      scanY=(scanY+5)%580;
-      const p=panels[currentPanel];
-      if(p){p.material.map.dispose();p.material.map=drawTex(currentPanel);p.material.needsUpdate=true;}
-    }
-    renderer.render(scene,camera);
+  // Reticle — shows where plane is detected
+  const rGeo = new THREE.RingGeometry(0.08, 0.12, 32);
+  rGeo.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI/2));
+  const rMat = new THREE.MeshBasicMaterial({
+    color: 0x00f5ff, side: THREE.DoubleSide, transparent: true, opacity: 0.85
   });
+  reticle = new THREE.Mesh(rGeo, rMat);
+  reticle.visible = false;
+  scene.add(reticle);
 
-  setInterval(tickClock,1000);
-  setTimeout(initMediaPipe,2000);
+  // Outer reticle ring (decorative)
+  const r2Geo = new THREE.RingGeometry(0.14, 0.155, 32);
+  r2Geo.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI/2));
+  const r2Mat = new THREE.MeshBasicMaterial({color:0x00f5ff, side:THREE.DoubleSide, transparent:true, opacity:0.3});
+  const reticle2 = new THREE.Mesh(r2Geo, r2Mat);
+  reticle.add(reticle2);
+
+  // Hologram group — placed when user taps
+  hologramGroup = new THREE.Group();
+  hologramGroup.visible = false;
+  scene.add(hologramGroup);
+
+  buildHologram();
+
+  window.addEventListener('resize', () => {
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+  });
 }
 
-// ── THREE helpers ─────────────────────────────────────────────────────────────
-function mkRing(i,o,col,op){
-  return new THREE.Mesh(new THREE.RingGeometry(i,o,48),
-    new THREE.MeshBasicMaterial({color:col,side:THREE.DoubleSide,transparent:true,opacity:op}));
-}
-function mkLine(x,y,z){
-  const m=new THREE.Mesh(new THREE.PlaneGeometry(0.002,0.55),
-    new THREE.MeshBasicMaterial({color:0x00f5ff,side:THREE.DoubleSide,transparent:true,opacity:0.1}));
-  m.position.set(x,y,z); return m;
-}
-function mkPanel(idx){
-  return new THREE.Mesh(new THREE.PlaneGeometry(0.76,0.44),
-    new THREE.MeshBasicMaterial({map:drawTex(idx),transparent:true,side:THREE.DoubleSide}));
-}
+// ── Build JARVIS hologram ─────────────────────────────────────────────────────
+function buildHologram() {
+  // Base spinning rings
+  ring1Mesh = mkRing(0.19, 0.24, 0x00f5ff, 0.55);
+  ring2Mesh = mkRing(0.27, 0.285, 0x4af8ff, 0.18);
+  ring1Mesh.rotation.x = ring2Mesh.rotation.x = -Math.PI/2;
+  ring1Mesh.position.y = 0.005;
+  ring2Mesh.position.y = 0.003;
+  hologramGroup.add(ring1Mesh, ring2Mesh);
 
-// ── Panel canvas textures ──────────────────────────────────────────────────────
-const DAYS=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
-const MONS=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-function drawTex(idx){
-  const W=1024,H=580,cv=document.createElement('canvas');
-  cv.width=W;cv.height=H;const c=cv.getContext('2d');
-  c.fillStyle='rgba(0,13,28,0.88)';c.fillRect(0,0,W,H);
-  const gb=c.createLinearGradient(0,0,W,0);
-  gb.addColorStop(0,'rgba(0,245,255,0)');gb.addColorStop(0.5,'rgba(0,245,255,1)');gb.addColorStop(1,'rgba(0,245,255,0)');
-  c.fillStyle=gb;c.fillRect(0,0,W,3);c.fillRect(0,H-3,W,3);
-  c.fillStyle='rgba(0,245,255,0.4)';c.fillRect(0,0,2,H);c.fillRect(W-2,0,2,H);
-  c.fillStyle='rgba(0,245,255,0.9)';
-  [[0,0,60,3],[0,0,3,60],[W-60,0,60,3],[W-3,0,3,60],
-   [0,H-3,60,3],[0,H-60,3,60],[W-60,H-3,60,3],[W-3,H-60,3,60]].forEach(([x,y,w,h])=>c.fillRect(x,y,w,h));
-  const sl=c.createLinearGradient(0,scanY-8,0,scanY+8);
-  sl.addColorStop(0,'rgba(0,245,255,0)');sl.addColorStop(0.5,'rgba(0,245,255,0.2)');sl.addColorStop(1,'rgba(0,245,255,0)');
-  c.fillStyle=sl;c.fillRect(0,scanY-8,W,16);
-  c.textAlign='center';
-  if(idx===0){
-    c.font='bold 130px Rajdhani,monospace';c.fillStyle='#00f5ff';c.shadowColor='#00f5ff';c.shadowBlur=28;
-    c.fillText('AKSHAT',W/2,215);c.shadowBlur=0;
-    const dv=c.createLinearGradient(80,0,W-80,0);
-    dv.addColorStop(0,'rgba(0,245,255,0)');dv.addColorStop(0.5,'rgba(0,245,255,0.5)');dv.addColorStop(1,'rgba(0,245,255,0)');
-    c.fillStyle=dv;c.fillRect(80,260,W-160,2);
-    c.font='40px "Share Tech Mono",monospace';c.fillStyle='rgba(160,240,255,0.65)';c.fillText('WELCOME BACK, SIR',W/2,330);
-    c.font='38px "Share Tech Mono",monospace';c.fillStyle='#00ff88';c.shadowColor='#00ff88';c.shadowBlur=14;
-    c.fillText('SYSTEM ONLINE',W/2,432);c.shadowBlur=0;
-  } else if(idx===1){
-    const now=new Date(),h=now.getHours(),ampm=h>=12?'PM':'AM',h12=h%12||12;
-    const ts=String(h12).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
-    c.font='34px "Share Tech Mono",monospace';c.fillStyle='rgba(0,245,255,0.4)';c.fillText('LOCAL TIME',W/2,88);
-    c.font='bold 115px "Share Tech Mono",monospace';c.fillStyle='#00f5ff';c.shadowColor='#00f5ff';c.shadowBlur=22;
-    c.fillText(ts,W/2,242);c.shadowBlur=0;
-    c.font='bold 62px Rajdhani,monospace';c.fillStyle='#00ff88';c.shadowColor='#00ff88';c.shadowBlur=14;
-    c.fillText(ampm,W/2,375);c.shadowBlur=0;
-    const off=new Date().getTimezoneOffset();
-    c.font='28px "Share Tech Mono",monospace';c.fillStyle='rgba(0,245,255,0.3)';
-    c.fillText('UTC'+(off<=0?'+':'-')+String(Math.abs(off/60)).padStart(2,'0')+':00',W/2,475);
-  } else {
-    const now=new Date();
-    c.font='34px "Share Tech Mono",monospace';c.fillStyle='rgba(0,245,255,0.4)';c.fillText('EARTH DATE',W/2,88);
-    c.font='bold 72px Rajdhani,monospace';c.fillStyle='rgba(0,245,255,0.55)';c.fillText(DAYS[now.getDay()],W/2,198);
-    const ds=String(now.getDate()).padStart(2,'0')+' '+MONS[now.getMonth()]+' '+now.getFullYear();
-    c.font='bold 92px "Share Tech Mono",monospace';c.fillStyle='#00f5ff';c.shadowColor='#00f5ff';c.shadowBlur=20;
-    c.fillText(ds,W/2,335);c.shadowBlur=0;
-    c.font='34px Rajdhani,monospace';c.fillStyle='rgba(160,240,255,0.42)';c.fillText('GREGORIAN CALENDAR',W/2,432);
+  // Vertical guide lines
+  hologramGroup.add(mkLine(-0.34, 0.28, 0));
+  hologramGroup.add(mkLine( 0.34, 0.28, 0));
+
+  // 3 panels
+  panelGroup = new THREE.Group();
+  panelGroup.position.y = 0.5;
+  hologramGroup.add(panelGroup);
+
+  for (let i = 0; i < 3; i++) {
+    const mesh = mkPanel(i);
+    mesh.visible = (i === 0);
+    panelGroup.add(mesh);
+    panels[i] = mesh;
   }
-  const t=new THREE.CanvasTexture(cv);t.needsUpdate=true;return t;
 }
-function tickClock(){
-  if(currentPanel===0||!panels[currentPanel])return;
-  panels[currentPanel].material.map.dispose();
-  panels[currentPanel].material.map=drawTex(currentPanel);
-  panels[currentPanel].material.needsUpdate=true;
+
+function mkRing(inner, outer, col, op) {
+  const g = new THREE.RingGeometry(inner, outer, 48);
+  const m = new THREE.MeshBasicMaterial({color:col, side:THREE.DoubleSide, transparent:true, opacity:op});
+  return new THREE.Mesh(g, m);
 }
+function mkLine(x, y, z) {
+  const g = new THREE.PlaneGeometry(0.002, 0.55);
+  const m = new THREE.MeshBasicMaterial({color:0x00f5ff, side:THREE.DoubleSide, transparent:true, opacity:0.1});
+  const mesh = new THREE.Mesh(g, m);
+  mesh.position.set(x, y, z);
+  return mesh;
+}
+function mkPanel(idx) {
+  const g = new THREE.PlaneGeometry(0.76, 0.44);
+  const m = new THREE.MeshBasicMaterial({map: drawTex(idx), transparent:true, side:THREE.DoubleSide});
+  return new THREE.Mesh(g, m);
+}
+
+// ── WebXR render loop ─────────────────────────────────────────────────────────
+function onXRFrame(t, frame) {
+  xrSession.requestAnimationFrame(onXRFrame);
+  frameN++;
+
+  const pose = frame.getViewerPose(xrRefSpace);
+  if (!pose) return;
+
+  // Hit test — real ARCore plane detection
+  if (hitTestSrc && !placed) {
+    const hits = frame.getHitTestResults(hitTestSrc);
+    if (hits.length > 0) {
+      const hitPose = hits[0].getPose(xrRefSpace);
+      reticle.visible = true;
+      reticle.matrix.fromArray(hitPose.transform.matrix);
+      reticle.matrix.decompose(reticle.position, reticle.quaternion, reticle.scale);
+      $('hud-st').textContent = '◉ SURFACE FOUND — TAP TO PLACE';
+    } else {
+      reticle.visible = false;
+      $('hud-st').textContent = '◎ SCANNING SURFACE...';
+    }
+  }
+
+  // Animate hologram
+  if (placed) {
+    frameN++;
+    floatY += 0.008 * floatDir;
+    if (floatY > 0.03) floatDir = -1;
+    if (floatY < -0.03) floatDir = 1;
+    panelGroup.position.y = 0.5 + floatY;
+
+    ring1Rot += 0.012; ring2Rot -= 0.007;
+    ring1Mesh.rotation.z = ring1Rot;
+    ring2Mesh.rotation.z = ring2Rot;
+
+    // Redraw panel texture every 2 frames (scan line + clock)
+    if (frameN % 2 === 0) {
+      scanY = (scanY + 5) % 580;
+      const p = panels[currentPanel];
+      if (p) {
+        p.material.map.dispose();
+        p.material.map = drawTex(currentPanel);
+        p.material.needsUpdate = true;
+      }
+    }
+  }
+
+  renderer.render(scene, camera);
+}
+
+// ── Place hologram on tap ──────────────────────────────────────────────────────
+$('hud').addEventListener('click', e => {
+  if (placed) return;
+  if (!reticle.visible) return;
+
+  placed = true;
+  reticle.visible = false;
+  hologramGroup.visible = true;
+
+  // Lock hologram to where reticle was
+  hologramGroup.position.copy(reticle.position);
+  hologramGroup.quaternion.copy(reticle.quaternion);
+
+  $('place-msg').style.display = 'none';
+  $('dots').style.display = 'flex';
+  $('swipe-hint').style.display = 'block';
+  $('hud-st').textContent = '✦ HOLOGRAM LOCKED';
+});
 
 // ── Panel cycle ────────────────────────────────────────────────────────────────
-function showPanel(i){
-  panels.forEach((p,j)=>{if(p)p.visible=(j===i);});
-  [0,1,2].forEach(j=>$('d'+j).classList.toggle('on',j===i));
-  currentPanel=i;
-  panels[i].material.map.dispose();panels[i].material.map=drawTex(i);panels[i].material.needsUpdate=true;
+function showPanel(i) {
+  panels.forEach((p, j) => { if(p) p.visible = (j===i); });
+  [0,1,2].forEach(j => $('d'+j).classList.toggle('on', j===i));
+  currentPanel = i;
+  const p = panels[i];
+  if (p) { p.material.map.dispose(); p.material.map = drawTex(i); p.material.needsUpdate = true; }
 }
-function doSwipe(){
-  if(swipeCooldown||!arLaunched)return;swipeCooldown=true;
-  showPanel((currentPanel+1)%3);
-  const f=$('flash');f.style.opacity='1';setTimeout(()=>f.style.opacity='0',180);
-  setTimeout(()=>swipeCooldown=false,900);
+function doSwipe() {
+  if (swipeCooldown || !placed) return;
+  swipeCooldown = true;
+  showPanel((currentPanel + 1) % 3);
+  const f = $('flash'); f.style.opacity = '1'; setTimeout(() => f.style.opacity='0', 180);
+  setTimeout(() => swipeCooldown = false, 900);
 }
-let tx0=0;
-document.addEventListener('touchstart',e=>{tx0=e.touches[0].clientX;},{passive:true});
-document.addEventListener('touchend',e=>{if(arLaunched&&e.changedTouches[0].clientX-tx0>60)doSwipe();});
+let tx0 = 0;
+document.addEventListener('touchstart', e => { tx0 = e.touches[0].clientX; }, {passive:true});
+document.addEventListener('touchend',   e => {
+  const dx = e.changedTouches[0].clientX - tx0;
+  if (dx > 60) doSwipe();
+});
 
-// ── MediaPipe ──────────────────────────────────────────────────────────────────
-function initMediaPipe(){
-  if(typeof Hands==='undefined')return;
-  const vid=$('container').querySelector('video');
-  if(!vid||!vid.srcObject){setTimeout(initMediaPipe,700);return;}
-  const hands=new Hands({locateFile:f=>'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/'+f});
-  hands.setOptions({maxNumHands:1,modelComplexity:0,minDetectionConfidence:0.65,minTrackingConfidence:0.55});
-  let lastX=null,lastT=0;
-  hands.onResults(r=>{
-    if(!r.multiHandLandmarks?.length){$('hand-dot').style.display='none';lastX=null;return;}
-    const lm=r.multiHandLandmarks[0];
-    const hd=$('hand-dot');hd.style.display='block';
-    hd.style.left=(lm[8].x*window.innerWidth)+'px';
-    hd.style.top=(lm[8].y*window.innerHeight)+'px';
-    const now=Date.now(),dx=lm[0].x-(lastX??lm[0].x);
-    if(lastX!==null&&dx>0.09&&now-lastT>1000){lastT=now;doSwipe();}
-    lastX=lm[0].x;
-  });
-  async function loop(){
-    if(vid.readyState>=2){try{await hands.send({image:vid});}catch(e){}}
-    requestAnimationFrame(loop);
+// ── Session end ────────────────────────────────────────────────────────────────
+function onSessionEnd() {
+  placed = false; panels = []; currentPanel = 0;
+  $('launch').style.display = 'flex';
+  $('hud').style.display = 'none';
+  $('dots').style.display = 'none';
+  $('swipe-hint').style.display = 'none';
+  $('place-msg').style.display = 'block';
+}
+
+// ── Clock tick ─────────────────────────────────────────────────────────────────
+setInterval(() => {
+  if (!placed || currentPanel === 0) return;
+  const p = panels[currentPanel];
+  if (p) { p.material.map.dispose(); p.material.map = drawTex(currentPanel); p.material.needsUpdate = true; }
+}, 1000);
+
+// ── Panel canvas textures ──────────────────────────────────────────────────────
+const DAYS = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
+const MONS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+
+function drawTex(idx) {
+  const W=1024, H=580;
+  const cv = document.createElement('canvas');
+  cv.width=W; cv.height=H;
+  const c = cv.getContext('2d');
+
+  c.fillStyle='rgba(0,13,28,0.88)'; c.fillRect(0,0,W,H);
+
+  const gb = c.createLinearGradient(0,0,W,0);
+  gb.addColorStop(0,'rgba(0,245,255,0)');
+  gb.addColorStop(0.5,'rgba(0,245,255,1)');
+  gb.addColorStop(1,'rgba(0,245,255,0)');
+  c.fillStyle=gb; c.fillRect(0,0,W,3); c.fillRect(0,H-3,W,3);
+
+  c.fillStyle='rgba(0,245,255,0.4)';
+  c.fillRect(0,0,2,H); c.fillRect(W-2,0,2,H);
+
+  c.fillStyle='rgba(0,245,255,0.9)';
+  [[0,0,60,3],[0,0,3,60],[W-60,0,60,3],[W-3,0,3,60],
+   [0,H-3,60,3],[0,H-60,3,60],[W-60,H-3,60,3],[W-3,H-60,3,60]
+  ].forEach(([x,y,w,h]) => c.fillRect(x,y,w,h));
+
+  const sl = c.createLinearGradient(0,scanY-8,0,scanY+8);
+  sl.addColorStop(0,'rgba(0,245,255,0)');
+  sl.addColorStop(0.5,'rgba(0,245,255,0.2)');
+  sl.addColorStop(1,'rgba(0,245,255,0)');
+  c.fillStyle=sl; c.fillRect(0,scanY-8,W,16);
+
+  c.textAlign='center';
+
+  if (idx===0) {
+    c.font='bold 130px Rajdhani,monospace';
+    c.fillStyle='#00f5ff'; c.shadowColor='#00f5ff'; c.shadowBlur=28;
+    c.fillText('AKSHAT',W/2,215); c.shadowBlur=0;
+    const dv=c.createLinearGradient(80,0,W-80,0);
+    dv.addColorStop(0,'rgba(0,245,255,0)');
+    dv.addColorStop(0.5,'rgba(0,245,255,0.5)');
+    dv.addColorStop(1,'rgba(0,245,255,0)');
+    c.fillStyle=dv; c.fillRect(80,260,W-160,2);
+    c.font='40px "Share Tech Mono",monospace';
+    c.fillStyle='rgba(160,240,255,0.65)'; c.fillText('WELCOME BACK, SIR',W/2,330);
+    c.font='38px "Share Tech Mono",monospace';
+    c.fillStyle='#00ff88'; c.shadowColor='#00ff88'; c.shadowBlur=14;
+    c.fillText('SYSTEM ONLINE',W/2,432); c.shadowBlur=0;
+
+  } else if (idx===1) {
+    const now=new Date(), h=now.getHours(), ampm=h>=12?'PM':'AM', h12=h%12||12;
+    const ts=String(h12).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
+    c.font='34px "Share Tech Mono",monospace'; c.fillStyle='rgba(0,245,255,0.4)'; c.fillText('LOCAL TIME',W/2,88);
+    c.font='bold 115px "Share Tech Mono",monospace';
+    c.fillStyle='#00f5ff'; c.shadowColor='#00f5ff'; c.shadowBlur=22;
+    c.fillText(ts,W/2,242); c.shadowBlur=0;
+    c.font='bold 62px Rajdhani,monospace';
+    c.fillStyle='#00ff88'; c.shadowColor='#00ff88'; c.shadowBlur=14;
+    c.fillText(ampm,W/2,375); c.shadowBlur=0;
+    const off=new Date().getTimezoneOffset();
+    c.font='28px "Share Tech Mono",monospace'; c.fillStyle='rgba(0,245,255,0.3)';
+    c.fillText('UTC'+(off<=0?'+':'-')+String(Math.abs(off/60)).padStart(2,'0')+':00',W/2,475);
+
+  } else {
+    const now=new Date();
+    c.font='34px "Share Tech Mono",monospace'; c.fillStyle='rgba(0,245,255,0.4)'; c.fillText('EARTH DATE',W/2,88);
+    c.font='bold 72px Rajdhani,monospace'; c.fillStyle='rgba(0,245,255,0.55)'; c.fillText(DAYS[now.getDay()],W/2,198);
+    const ds=String(now.getDate()).padStart(2,'0')+' '+MONS[now.getMonth()]+' '+now.getFullYear();
+    c.font='bold 92px "Share Tech Mono",monospace';
+    c.fillStyle='#00f5ff'; c.shadowColor='#00f5ff'; c.shadowBlur=20;
+    c.fillText(ds,W/2,335); c.shadowBlur=0;
+    c.font='34px Rajdhani,monospace'; c.fillStyle='rgba(160,240,255,0.42)';
+    c.fillText('GREGORIAN CALENDAR',W/2,432);
   }
-  requestAnimationFrame(loop);
+
+  const t = new THREE.CanvasTexture(cv);
+  t.needsUpdate = true;
+  return t;
 }
 </script>
 </body>
