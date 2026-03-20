@@ -4,62 +4,54 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#000000">
 <title>J.A.R.V.I.S</title>
 
-<!-- MindAR Three.js bundle — includes Three.js + compiler + tracker -->
-<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
-<!-- MediaPipe Hands — will read from MindAR's own video element -->
+<!--
+  ROOT CAUSE OF PREVIOUS ERROR:
+  MindAR 1.2.5 Three.js = ES module → window.MINDAR never set → crash.
+  
+  FIX: Use 1.1.5 which is a UMD bundle → sets window.MINDAR.IMAGE as a global.
+  Load mindar-image.prod.js FIRST  → gives window.MINDAR.IMAGE.Compiler
+  Load mindar-image-three.prod.js SECOND → adds MindARThree + THREE to same namespace
+-->
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.1.5/dist/mindar-image.prod.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.1.5/dist/mindar-image-three.prod.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js" crossorigin="anonymous"></script>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
 
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-html,body{width:100%;height:100%;overflow:hidden;background:#000;
-  font-family:'Share Tech Mono',monospace;color:#00f5ff;}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Share Tech Mono',monospace;color:#00f5ff;}
 
 /*
-  ARCHITECTURE — why camera always shows:
-  MindAR creates its OWN canvas and renders camera + AR inside it.
-  We just put our HUD div on top. Zero conflict. Zero camera fighting.
-  
-  z=1  → #ar-container  (MindAR owns this — camera + hologram together)
-  z=10 → #hud           (our overlay — scanlines, status, dots, hand dot)
-  z=800→ #setup         (semi-transparent setup screen, camera shows through)
-  z=900→ #cam-picker    (lens selector)
-  z=950→ #compile-screen(compiling progress)
-  z=999→ #perm-screen   (permission gate)
+  CAMERA VISIBILITY ARCHITECTURE:
+  MindAR creates its OWN <video> + <canvas> inside #container.
+  Camera renders INSIDE MindAR's canvas — always visible.
+  We just stack our HUD div on top at z=10.
+  No separate video element fighting anything.
 */
-
-#ar-container{
+#container{
   position:fixed;inset:0;z-index:1;
-  /* MindAR appends its <video> + <canvas> here automatically */
 }
-/* Make MindAR's canvas fill screen */
-#ar-container canvas{
-  position:fixed!important;top:0!important;left:0!important;
-  width:100%!important;height:100%!important;
-}
-/* Make MindAR's video fill screen (it's the camera feed) */
-#ar-container video{
-  position:fixed!important;top:0!important;left:0!important;
+#container canvas,
+#container video{
+  position:fixed!important;
+  top:0!important;left:0!important;
   width:100%!important;height:100%!important;
   object-fit:cover!important;
 }
 
-/* ── PERMISSION SCREEN ── */
+/* ── PERMISSION ── */
 #perm-screen{
   position:fixed;inset:0;z-index:999;
   background:rgba(0,4,14,0.97);
-  display:flex;flex-direction:column;
-  align-items:center;justify-content:center;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
   padding:32px 24px;text-align:center;
 }
 .perm-icon{font-size:56px;margin-bottom:20px;}
-.ptitle{font-family:'Rajdhani',sans-serif;font-size:26px;letter-spacing:6px;
-  color:#fff;margin-bottom:10px;}
-.pdesc{font-size:11px;color:#00f5ff66;line-height:2;margin-bottom:36px;max-width:280px;}
+.p-title{font-family:'Rajdhani',sans-serif;font-size:26px;letter-spacing:6px;color:#fff;margin-bottom:10px;}
+.p-desc{font-size:11px;color:#00f5ff66;line-height:2;margin-bottom:36px;max-width:280px;}
 .big-btn{
   width:100%;max-width:340px;height:68px;
   background:transparent;border:1.5px solid #00f5ff;border-radius:16px;
@@ -68,57 +60,23 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
   display:flex;align-items:center;justify-content:center;gap:12px;
 }
 .big-btn:active{background:rgba(0,245,255,0.1);}
-.pnote{font-size:9px;color:#00f5ff33;margin-top:14px;line-height:1.8;max-width:260px;}
+.p-note{font-size:9px;color:#00f5ff33;margin-top:14px;line-height:1.8;max-width:260px;}
 
-/* ── CAMERA PICKER ── */
-#cam-picker{
-  position:fixed;inset:0;z-index:900;
-  background:rgba(0,4,14,0.97);
-  display:none;flex-direction:column;
-  align-items:center;justify-content:center;padding:28px 20px;
-}
-.ph{font-family:'Rajdhani',sans-serif;font-size:20px;letter-spacing:4px;
-  color:#fff;margin-bottom:4px;text-align:center;}
-.ps{font-size:10px;color:#00f5ff55;letter-spacing:2px;
-  margin-bottom:22px;text-align:center;}
-#cam-list{width:100%;max-width:360px;display:flex;flex-direction:column;gap:10px;}
-.cam-opt{
-  width:100%;padding:16px 18px;
-  background:rgba(0,245,255,0.04);border:1px solid rgba(0,245,255,0.18);
-  border-radius:14px;color:#00f5ff;font-family:'Share Tech Mono',monospace;
-  font-size:11px;cursor:pointer;
-  display:flex;align-items:center;justify-content:space-between;gap:10px;
-}
-.cam-opt.sel{border-color:#00f5ff;background:rgba(0,245,255,0.1);}
-.cam-opt:active{background:rgba(0,245,255,0.15);}
-.ctag{font-size:9px;padding:2px 8px;border-radius:20px;white-space:nowrap;flex-shrink:0;}
-.ctag-uw{background:rgba(0,255,136,0.12);color:#00ff88;}
-.ctag-m{background:rgba(0,245,255,0.08);color:#00f5ff55;}
-#btn-confirm{
-  margin-top:14px;width:100%;max-width:360px;height:56px;
-  background:transparent;border:1.5px solid #00f5ff;border-radius:14px;
-  color:#00f5ff;font-family:'Share Tech Mono',monospace;
-  font-size:12px;letter-spacing:4px;cursor:pointer;
-  display:none;align-items:center;justify-content:center;
-}
-#btn-confirm.show{display:flex;}
-#btn-confirm:active{background:rgba(0,245,255,0.1);}
-
-/* ── COMPILE PROGRESS SCREEN ── */
+/* ── COMPILE PROGRESS ── */
 #compile-screen{
   position:fixed;inset:0;z-index:950;
   background:rgba(0,4,14,0.97);
-  display:none;flex-direction:column;
-  align-items:center;justify-content:center;padding:32px 24px;text-align:center;
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  padding:32px 24px;text-align:center;
 }
-.ct{font-family:'Rajdhani',sans-serif;font-size:22px;letter-spacing:4px;color:#00f5ff;margin-bottom:8px;}
-.cs{font-size:10px;color:#00f5ff55;letter-spacing:2px;margin-bottom:32px;}
-.prog-wrap{width:100%;max-width:320px;background:rgba(0,245,255,0.08);
-  border:1px solid rgba(0,245,255,0.2);border-radius:8px;height:8px;overflow:hidden;margin-bottom:14px;}
-#prog-bar{height:100%;background:#00f5ff;width:0%;transition:width 0.2s;border-radius:8px;}
-#prog-label{font-size:11px;color:#00f5ff77;letter-spacing:2px;}
+.c-title{font-family:'Rajdhani',sans-serif;font-size:22px;letter-spacing:4px;color:#00f5ff;margin-bottom:6px;}
+.c-sub{font-size:10px;color:#00f5ff55;letter-spacing:2px;margin-bottom:32px;}
+.prog-wrap{width:100%;max-width:300px;background:rgba(0,245,255,0.08);
+  border:1px solid rgba(0,245,255,0.2);border-radius:8px;height:8px;overflow:hidden;margin-bottom:12px;}
+#prog-bar{height:100%;background:#00f5ff;width:0%;transition:width 0.3s;border-radius:8px;}
+#prog-txt{font-size:12px;color:#00f5ff66;letter-spacing:2px;}
 
-/* ── SETUP SCREEN — semi-transparent so user sees camera ── */
+/* ── SETUP ── */
 #setup{
   position:fixed;inset:0;z-index:800;
   display:none;flex-direction:column;align-items:center;
@@ -126,25 +84,24 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
   padding:max(env(safe-area-inset-top,0px),14px) 20px 175px;
   overflow-y:auto;
 }
+/* Camera preview behind setup — MindAR will be z=1 so this just styles the backdrop */
 .logo{font-family:'Rajdhani',sans-serif;font-size:36px;font-weight:700;
-  letter-spacing:14px;color:#00f5ff;
-  text-shadow:0 0 24px #00f5ffaa,0 0 50px #00f5ff44;
+  letter-spacing:14px;color:#00f5ff;text-shadow:0 0 24px #00f5ffaa,0 0 50px #00f5ff44;
   margin-top:14px;margin-bottom:2px;text-align:center;}
 .logo-s{font-size:9px;letter-spacing:5px;color:#00f5ff44;margin-bottom:18px;text-align:center;}
 
-#cam-badge{
+.status-bar{
   display:flex;align-items:center;gap:10px;
   background:rgba(0,0,0,0.55);border:1px solid rgba(0,245,255,0.2);
   border-radius:10px;padding:11px 16px;font-size:10px;letter-spacing:2px;
   margin-bottom:14px;width:100%;max-width:400px;
   backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
 }
-.ldot{width:9px;height:9px;border-radius:50%;
-  background:#ff4455;flex-shrink:0;animation:blink 1s ease-in-out infinite;}
+.ldot{width:9px;height:9px;border-radius:50%;background:#ff4455;flex-shrink:0;animation:blink 1s ease-in-out infinite;}
 .ldot.on{background:#00ff88;animation:none;}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0.15}}
 
-/* Hiro marker preview card */
+/* Hiro card */
 .hiro-card{
   width:100%;max-width:400px;
   background:rgba(0,0,0,0.55);border:1px solid rgba(0,245,255,0.14);
@@ -152,10 +109,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
   display:flex;gap:16px;align-items:center;
   backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
 }
-#hiro-preview{width:90px;height:90px;flex-shrink:0;border-radius:8px;}
-.hi-title{font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:500;
+#hiro-canvas{width:88px;height:88px;flex-shrink:0;border-radius:8px;}
+.hi-t{font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:500;
   letter-spacing:2px;color:#fff;margin-bottom:4px;}
-.hi-desc{font-size:10px;color:#00f5ff66;line-height:1.75;}
+.hi-d{font-size:10px;color:#00f5ff66;line-height:1.75;}
 
 .steps-card{
   width:100%;max-width:400px;
@@ -163,8 +120,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
   border-radius:14px;overflow:hidden;margin-bottom:14px;
   backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
 }
-.s-row{display:flex;gap:14px;padding:14px 16px;
-  border-bottom:1px solid rgba(0,245,255,0.07);}
+.s-row{display:flex;gap:14px;padding:14px 16px;border-bottom:1px solid rgba(0,245,255,0.07);}
 .s-row:last-child{border-bottom:none;}
 .s-n{font-family:'Rajdhani',sans-serif;font-size:24px;font-weight:700;
   color:#00f5ff;line-height:1;min-width:22px;}
@@ -192,26 +148,23 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
   animation:shine 2.6s ease-in-out infinite;
 }
 @keyframes shine{to{left:210%;}}
-#btn-launch:active{background:rgba(0,245,255,0.1);
-  box-shadow:0 0 26px rgba(0,245,255,0.28);}
+#btn-launch:active{background:rgba(0,245,255,0.1);box-shadow:0 0 26px rgba(0,245,255,0.28);}
 #btn-launch:disabled{opacity:0.35;pointer-events:none;}
-#btn-cam-switch{
+#btn-marker-print{
   width:100%;height:50px;
   background:rgba(0,0,0,0.5);border:1px solid rgba(0,245,255,0.18);
   border-radius:14px;color:#00f5ff77;font-family:'Share Tech Mono',monospace;
   font-size:11px;letter-spacing:3px;cursor:pointer;
 }
-#btn-cam-switch:active{background:rgba(0,245,255,0.07);}
+#btn-marker-print:active{background:rgba(0,245,255,0.07);}
 
-/* ── AR HUD ── */
+/* ── HUD ── */
 #hud{
-  position:fixed;inset:0;z-index:10;
-  pointer-events:none;display:none;
+  position:fixed;inset:0;z-index:10;pointer-events:none;display:none;
 }
 #hud::after{
   content:'';position:absolute;inset:0;
-  background:repeating-linear-gradient(0deg,transparent,transparent 3px,
-    rgba(0,245,255,0.01) 3px,rgba(0,245,255,0.01) 4px);
+  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,245,255,0.01) 3px,rgba(0,245,255,0.01) 4px);
   pointer-events:none;
 }
 #hud-top{
@@ -225,7 +178,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
 #hud-zoom{font-size:9px;letter-spacing:2px;color:#00ff88;
   background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.2);
   border-radius:20px;padding:2px 9px;}
-#hud-status{font-size:9px;letter-spacing:2px;color:#00f5ff66;}
+#hud-st{font-size:9px;letter-spacing:2px;color:#00f5ff66;}
 
 .brk{position:absolute;width:24px;height:24px;border-color:#00f5ff33;border-style:solid;}
 .brk-tl{top:12px;left:12px;border-width:1.5px 0 0 1.5px;}
@@ -233,20 +186,16 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
 .brk-bl{bottom:86px;left:12px;border-width:0 0 1.5px 1.5px;}
 .brk-br{bottom:86px;right:12px;border-width:0 1.5px 1.5px 0;}
 
-#target-prompt{
+#target-msg{
   position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
   background:rgba(0,8,20,0.85);border:1px solid #00f5ff22;border-radius:12px;
   padding:20px 28px;text-align:center;transition:opacity 0.5s;
 }
-.tpt{font-size:11px;letter-spacing:4px;margin-bottom:6px;}
-.tps{font-size:10px;color:#00f5ff55;line-height:1.9;letter-spacing:1px;}
+.tm-t{font-size:11px;letter-spacing:4px;margin-bottom:6px;}
+.tm-s{font-size:10px;color:#00f5ff55;line-height:1.9;letter-spacing:1px;}
 
-#dots{
-  position:absolute;bottom:68px;left:50%;transform:translateX(-50%);
-  display:flex;gap:16px;
-}
-.dot{width:8px;height:8px;border-radius:50%;
-  border:1.5px solid #00f5ff33;transition:all 0.4s;}
+#dots{position:absolute;bottom:68px;left:50%;transform:translateX(-50%);display:flex;gap:16px;}
+.dot{width:8px;height:8px;border-radius:50%;border:1.5px solid #00f5ff33;transition:all 0.4s;}
 .dot.on{background:#00f5ff;border-color:#00f5ff;box-shadow:0 0 12px #00f5ff;}
 #swipe-hint{
   position:absolute;bottom:48px;left:50%;transform:translateX(-50%);
@@ -266,54 +215,44 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
 </head>
 <body>
 
-<!-- MindAR puts its camera video + AR canvas here — always visible -->
-<div id="ar-container"></div>
+<!-- MindAR appends camera video + AR canvas here — camera ALWAYS inside this div -->
+<div id="container"></div>
 
-<!-- ══ PERMISSION SCREEN ══ -->
+<!-- ══ PERMISSION ══ -->
 <div id="perm-screen">
   <div class="perm-icon">📷</div>
-  <div class="ptitle">CAMERA ACCESS</div>
-  <div class="pdesc">J.A.R.V.I.S needs your rear camera to lock the hologram onto the Hiro marker on your table.</div>
-  <button class="big-btn" onclick="requestCamera()">▶ &nbsp;GRANT CAMERA ACCESS</button>
-  <div class="pnote">Camera stays on device. Nothing is recorded or uploaded.</div>
-</div>
-
-<!-- ══ CAMERA PICKER ══ -->
-<div id="cam-picker">
-  <div class="ph">SELECT CAMERA LENS</div>
-  <div class="ps">PICK YOUR 0.5× ULTRAWIDE — MOTO G STYLUS 2025</div>
-  <div id="cam-list"></div>
-  <button id="btn-confirm" onclick="confirmCam()">✓ &nbsp;USE THIS LENS</button>
+  <div class="p-title">CAMERA ACCESS</div>
+  <div class="p-desc">J.A.R.V.I.S needs your rear camera to track the Hiro marker and anchor the hologram.</div>
+  <button class="big-btn" onclick="grantCam()">▶ &nbsp;GRANT CAMERA ACCESS</button>
+  <div class="p-note">Camera stays on device only. Nothing recorded or uploaded.</div>
 </div>
 
 <!-- ══ COMPILE PROGRESS ══ -->
 <div id="compile-screen">
-  <div class="ct">INITIALISING TRACKER</div>
-  <div class="cs">COMPILING HIRO MARKER · ONE TIME ONLY</div>
+  <div class="c-title">COMPILING TARGET</div>
+  <div class="c-sub">PROCESSING HIRO MARKER — ONE TIME ONLY</div>
   <div class="prog-wrap"><div id="prog-bar"></div></div>
-  <div id="prog-label">0%</div>
+  <div id="prog-txt">0%</div>
 </div>
 
-<!-- ══ SETUP SCREEN — shows over camera feed ══ -->
+<!-- ══ SETUP ══ -->
 <div id="setup">
   <div class="logo">J.A.R.V.I.S</div>
   <div class="logo-s">▸ HOLOGRAPHIC INTERFACE ◂</div>
 
-  <div id="cam-badge">
+  <div class="status-bar">
     <span class="ldot" id="ldot"></span>
-    <span id="cam-label">READY</span>
+    <span id="status-lbl">READY</span>
   </div>
 
-  <!-- Live Hiro marker preview (drawn by JS) -->
   <div class="hiro-card">
-    <canvas id="hiro-preview"></canvas>
+    <canvas id="hiro-canvas" width="88" height="88"></canvas>
     <div>
-      <div class="hi-title">HIRO MARKER</div>
-      <div class="hi-desc">
-        Print this at A5 or larger.<br>
-        Place flat on your desk.<br>
-        JARVIS hologram locks onto it.<br>
-        <span style="color:#00ff88;">Screenshot this screen to save it.</span>
+      <div class="hi-t">HIRO MARKER</div>
+      <div class="hi-d">
+        Screenshot and print at A5 or larger.<br>
+        Place flat on your desk face up.<br>
+        <span style="color:#00ff88;">JARVIS locks the hologram onto it.</span>
       </div>
     </div>
   </div>
@@ -323,21 +262,21 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
       <div class="s-n">1</div>
       <div>
         <div class="s-t">PRINT THE HIRO MARKER ABOVE</div>
-        <div class="s-d">Screenshot and print at A5 minimum. Place on desk.</div>
+        <div class="s-d">Screenshot this screen and print it at A5 or larger. Lay on desk.</div>
       </div>
     </div>
     <div class="s-row">
       <div class="s-n">2</div>
       <div>
-        <div class="s-t">TAP ACTIVATE BELOW</div>
-        <div class="s-d">Goes fullscreen. Point your camera at the marker on the table.</div>
+        <div class="s-t">TAP ACTIVATE — GOES FULLSCREEN</div>
+        <div class="s-d">Marker compiles once (10 sec). Camera starts. Point at the marker.</div>
       </div>
     </div>
     <div class="s-row">
       <div class="s-n">3</div>
       <div>
-        <div class="s-t">HOLOGRAM LOCKS — SWIPE RIGHT</div>
-        <div class="s-d">AKSHAT → TIME → DATE. Swipe finger right or move hand right in camera.</div>
+        <div class="s-t">SWIPE RIGHT TO CYCLE PANELS</div>
+        <div class="s-d">AKSHAT → TIME → DATE. Finger swipe or hand swipe in camera.</div>
       </div>
     </div>
   </div>
@@ -349,7 +288,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
     <span style="font-size:18px;">⬡</span>
     ACTIVATE J.A.R.V.I.S
   </button>
-  <button id="btn-cam-switch" onclick="showCamPicker()">⇄ SWITCH LENS</button>
+  <button id="btn-marker-print" onclick="printMarker()">🖨 &nbsp;PRINT HIRO MARKER</button>
 </div>
 
 <!-- ══ HUD ══ -->
@@ -359,11 +298,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
   <div id="hud-top">
     <span class="hbrand">J.A.R.V.I.S</span>
     <span id="hud-zoom">0.5× ULTRA WIDE</span>
-    <span id="hud-status">◎ SCANNING</span>
+    <span id="hud-st">◎ SCANNING</span>
   </div>
-  <div id="target-prompt">
-    <div class="tpt">◈ SEARCHING</div>
-    <div class="tps">POINT AT HIRO MARKER<br>ON YOUR TABLE</div>
+  <div id="target-msg">
+    <div class="tm-t">◈ SEARCHING</div>
+    <div class="tm-s">POINT CAMERA AT<br>HIRO MARKER ON TABLE</div>
   </div>
   <div id="hand-dot"></div>
   <div id="flash"></div>
@@ -379,176 +318,118 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
 'use strict';
 const $ = id => document.getElementById(id);
 
+// ── Globals ───────────────────────────────────────────────────────────────────
 let selectedDevId = null;
-let allRearCams   = [];
-let compiledSrc   = null;
-let mindarThree   = null;
-let currentPanel  = 0;
+let compiledBlobURL = null;
+let arLaunched = false;
+let currentPanel = 0;
 let swipeCooldown = false;
-let arLaunched    = false;
-let frameCount    = 0;
-let scanLineY     = 0;
-let floatY        = 0, floatDir = 1;
-let ring1Rot = 0, ring2Rot = 0;
+let scanY = 0, floatY = 0, floatDir = 1, ring1Rot = 0, ring2Rot = 0;
+let frameN = 0;
+let THREE, panels = [], panelGroup, ring1, ring2;
 
-// ── THREE.js globals (from MindAR bundle) ─────────────────────────────────────
-let THREE_ref = null;
-
-// ── Draw Hiro marker ──────────────────────────────────────────────────────────
-function drawHiroMarker(size) {
-  const cv = document.createElement('canvas');
-  cv.width = size; cv.height = size;
-  const ctx = cv.getContext('2d');
-  const u = size / 100;
-
-  ctx.fillStyle = '#fff'; ctx.fillRect(0,0,size,size);
-  ctx.fillStyle = '#000'; ctx.fillRect(5*u,5*u,90*u,90*u);
-  ctx.fillStyle = '#fff'; ctx.fillRect(15*u,15*u,70*u,70*u);
-  ctx.fillStyle = '#000';
-  [[20,20],[30,20],[50,20],[70,20],
-   [20,30],[40,30],[60,30],[70,30],
-   [20,40],[40,40],[50,40],[70,40],
-   [20,50],[30,50],[50,50],[60,50],
-   [20,60],[40,60],[60,60],[70,60],
-   [20,70],[30,70],[40,70],[50,70],[60,70],[70,70]
-  ].forEach(([x,y]) => ctx.fillRect(x*u,y*u,10*u,10*u));
-  return cv;
+// ── Draw Hiro marker to canvas ────────────────────────────────────────────────
+function drawHiro(canvas, size) {
+  canvas.width = size; canvas.height = size;
+  const c = canvas.getContext('2d'), u = size / 100;
+  c.fillStyle = '#fff'; c.fillRect(0,0,size,size);
+  c.fillStyle = '#000'; c.fillRect(5*u,5*u,90*u,90*u);
+  c.fillStyle = '#fff'; c.fillRect(15*u,15*u,70*u,70*u);
+  c.fillStyle = '#000';
+  [[20,20],[30,20],[50,20],[70,20],[20,30],[40,30],[60,30],[70,30],
+   [20,40],[40,40],[50,40],[70,40],[20,50],[30,50],[50,50],[60,50],
+   [20,60],[40,60],[60,60],[70,60],[20,70],[30,70],[40,70],[50,70],[60,70],[70,70]
+  ].forEach(([x,y]) => c.fillRect(x*u, y*u, 10*u, 10*u));
 }
 
-// Render the preview on setup screen
-window.addEventListener('DOMContentLoaded', () => {
-  const prev = $('hiro-preview');
-  const m = drawHiroMarker(90);
-  const ctx = prev.getContext('2d');
-  prev.width = 90; prev.height = 90;
-  ctx.drawImage(m, 0, 0);
-});
+// Draw small preview on setup screen
+window.addEventListener('DOMContentLoaded', () => drawHiro($('hiro-canvas'), 88));
 
-// ── Step 1: Camera permission ─────────────────────────────────────────────────
-async function requestCamera() {
+// ── Print marker ──────────────────────────────────────────────────────────────
+function printMarker() {
+  const w = window.open('', '_blank');
+  const cv = document.createElement('canvas');
+  drawHiro(cv, 600);
+  w.document.write(`<!DOCTYPE html><html><head>
+    <style>*{margin:0;padding:0;}body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:#fff;font-family:system-ui,sans-serif;gap:20px;}
+    img{width:280px;height:280px;image-rendering:pixelated;}
+    p{font-size:12px;color:#666;letter-spacing:2px;text-align:center;}
+    button{padding:12px 28px;border:none;background:#000;color:#fff;font-size:13px;border-radius:8px;cursor:pointer;letter-spacing:2px;}
+    @media print{button{display:none;}}
+    </style></head><body>
+    <p>J.A.R.V.I.S — HIRO MARKER</p>
+    <img src="${cv.toDataURL()}">
+    <p>PRINT AT A5 OR LARGER · PLACE FLAT ON DESK</p>
+    <button onclick="window.print()">🖨 PRINT</button>
+    </body></html>`);
+  w.document.close();
+}
+
+// ── Camera permission + pick best rear cam ────────────────────────────────────
+async function grantCam() {
   $('perm-screen').style.display = 'none';
   try {
-    const init = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment' }, audio: false
-    });
-    init.getTracks().forEach(t => t.stop());
-
+    const init = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});
+    init.getTracks().forEach(t=>t.stop());
     const devs = await navigator.mediaDevices.enumerateDevices();
-    allRearCams = devs.filter(d => {
+    const rear = devs.filter(d => {
       if (d.kind !== 'videoinput') return false;
       const l = d.label.toLowerCase();
       return !l.includes('front') && !l.includes('selfie');
     });
-
-    if (allRearCams.length <= 1) {
-      selectedDevId = allRearCams[0]?.deviceId || null;
-      await showSetupWithCamera();
-    } else {
-      showCamPicker();
-    }
-  } catch(e) {
-    await showSetupWithCamera();
-  }
-}
-
-function showCamPicker() {
-  $('cam-picker').style.display = 'flex';
-  const list = $('cam-list'); list.innerHTML = '';
-  allRearCams.forEach((dev, i) => {
-    const lbl = dev.label || ('Camera ' + (i+1));
-    const low = lbl.toLowerCase();
-    const isUW = low.includes('wide') || low.includes('ultra') || i === 1;
-    const btn = document.createElement('button');
-    btn.className = 'cam-opt';
-    btn.innerHTML = `<span style="flex:1;color:#fff;">${lbl}</span>
-      <span class="ctag ${isUW?'ctag-uw':'ctag-m'}">${isUW?'0.5× ULTRA WIDE':'MAIN'}</span>`;
-    btn.onclick = () => {
-      document.querySelectorAll('.cam-opt').forEach(b=>b.classList.remove('sel'));
-      btn.classList.add('sel');
-      selectedDevId = dev.deviceId;
-      $('btn-confirm').classList.add('show');
-    };
-    list.appendChild(btn);
-    if (isUW && !selectedDevId) {
-      selectedDevId = dev.deviceId; btn.classList.add('sel');
-      $('btn-confirm').classList.add('show');
-    }
-  });
-}
-
-async function confirmCam() {
-  $('cam-picker').style.display = 'none';
-  await showSetupWithCamera();
-}
-
-async function showSetupWithCamera() {
-  // Show setup — MindAR will handle camera display after launch
-  // For now just show a brief live preview so user knows camera works
-  try {
-    const c = selectedDevId
-      ? { video:{ deviceId:{exact:selectedDevId}, width:{ideal:1920}, height:{ideal:1080} }, audio:false }
-      : { video:{ facingMode:'environment', width:{ideal:1920}, height:{ideal:1080} }, audio:false };
-    const stream = await navigator.mediaDevices.getUserMedia(c);
-    // Create temporary preview video
-    const tmpVid = document.createElement('video');
-    tmpVid.id = 'tmp-preview';
-    tmpVid.autoplay = true; tmpVid.playsInline = true; tmpVid.muted = true;
-    tmpVid.srcObject = stream;
-    Object.assign(tmpVid.style, {
-      position:'fixed',top:'0',left:'0',width:'100%',height:'100%',
-      objectFit:'cover',zIndex:'1',pointerEvents:'none'
+    // Auto-pick ultrawide if available (index 1 usually)
+    const uw = rear.find(d => {
+      const l = d.label.toLowerCase();
+      return l.includes('wide') || l.includes('ultra');
     });
-    document.body.appendChild(tmpVid);
-    await tmpVid.play().catch(()=>{});
-
-    const track = stream.getVideoTracks()[0];
-    if (track) {
-      const caps = track.getCapabilities?.() || {};
-      if (caps.zoom) await track.applyConstraints({advanced:[{zoom:Math.max(caps.zoom.min||0,0.5)}]}).catch(()=>{});
-    }
+    selectedDevId = (uw || rear[1] || rear[0])?.deviceId || null;
+    const lbl = (uw || rear[1] || rear[0])?.label || '';
     $('ldot').classList.add('on');
-    const lbl = track?.label || '';
-    $('cam-label').textContent = lbl.toLowerCase().includes('wide')
-      ? '0.5× ULTRA WIDE  ·  LIVE' : 'CAMERA LIVE  ·  ' + (lbl.substring(0,28)||'REAR LENS');
-
-    // Stop preview when AR launches
-    window._tmpStream = stream;
-    window._tmpVid = tmpVid;
+    $('status-lbl').textContent = lbl.toLowerCase().includes('wide')
+      ? '0.5× ULTRA WIDE SELECTED'
+      : 'CAMERA READY · ' + (lbl.substring(0,24) || 'REAR LENS');
   } catch(e) {
-    $('cam-label').textContent = 'READY — CAMERA STARTS ON LAUNCH';
+    $('status-lbl').textContent = 'CAMERA READY';
   }
-
   $('setup').style.display = 'flex';
   $('bottom-btns').style.display = 'flex';
 }
 
-// ── Compile Hiro marker (one-time, runs when ACTIVATE tapped) ─────────────────
-async function compileHiroMarker() {
+// ── Compile Hiro marker in browser using window.MINDAR.IMAGE.Compiler ─────────
+async function compileMarker() {
   $('compile-screen').style.display = 'flex';
   $('prog-bar').style.width = '0%';
-  $('prog-label').textContent = '0%';
+  $('prog-txt').textContent = '0%';
 
-  // Draw large Hiro for good feature detection
-  const hiroCanvas = drawHiroMarker(512);
+  // Verify MINDAR is loaded correctly
+  if (!window.MINDAR || !window.MINDAR.IMAGE || !window.MINDAR.IMAGE.Compiler) {
+    $('prog-txt').textContent = 'ERROR: MINDAR not loaded. Check internet connection.';
+    return null;
+  }
+
+  // Draw Hiro at high res for good feature detection
+  const hiroCanvas = document.createElement('canvas');
+  drawHiro(hiroCanvas, 512);
   const hiroImg = new Image();
   hiroImg.src = hiroCanvas.toDataURL('image/png');
-  await new Promise(r => { hiroImg.onload = r; });
+  await new Promise(r => { hiroImg.onload = r; hiroImg.onerror = r; });
 
   try {
     const compiler = new window.MINDAR.IMAGE.Compiler();
     await compiler.compileImageTargets([hiroImg], progress => {
       const pct = Math.round(progress * 100);
       $('prog-bar').style.width = pct + '%';
-      $('prog-label').textContent = pct + '%';
+      $('prog-txt').textContent = pct + '%';
     });
     const buf = await compiler.exportData();
     const blob = new Blob([buf]);
-    compiledSrc = URL.createObjectURL(blob);
+    compiledBlobURL = URL.createObjectURL(blob);
     $('compile-screen').style.display = 'none';
-    return true;
-  } catch(e) {
-    $('prog-label').textContent = 'ERROR: ' + e.message;
-    return false;
+    return compiledBlobURL;
+  } catch(err) {
+    $('prog-txt').textContent = 'COMPILE ERROR: ' + err.message;
+    console.error(err);
+    return null;
   }
 }
 
@@ -558,61 +439,48 @@ async function launchAR() {
   arLaunched = true;
   $('btn-launch').disabled = true;
 
-  // Fullscreen inside gesture handler
+  // Fullscreen inside gesture
   try {
     const el = document.documentElement;
     if (el.requestFullscreen) await el.requestFullscreen({navigationUI:'hide'});
     else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
   } catch(e) {}
 
-  // Stop tmp preview
-  if (window._tmpStream) {
-    window._tmpStream.getTracks().forEach(t=>t.stop());
-    window._tmpVid?.remove();
-  }
-
-  // Fade out setup UI
-  [$('setup'), $('bottom-btns')].forEach(el=>{
-    el.style.transition='opacity 0.4s'; el.style.opacity='0';
+  // Fade out setup
+  [$('setup'), $('bottom-btns')].forEach(el => {
+    el.style.transition = 'opacity 0.4s'; el.style.opacity = '0';
   });
-  await new Promise(r=>setTimeout(r,450));
-  $('setup').style.display='none';
-  $('bottom-btns').style.display='none';
+  await new Promise(r => setTimeout(r, 450));
+  $('setup').style.display = 'none';
+  $('bottom-btns').style.display = 'none';
 
-  // Compile Hiro marker
-  if (!compiledSrc) {
-    const ok = await compileHiroMarker();
-    if (!ok) return;
+  // Compile if not already done
+  if (!compiledBlobURL) {
+    const url = await compileMarker();
+    if (!url) return;
   }
 
-  // Show HUD
-  $('hud').style.display = 'block';
-
-  // Intercept getUserMedia so MindAR uses our chosen camera
+  // Override getUserMedia to force our chosen camera lens
   if (selectedDevId) {
     const orig = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
     navigator.mediaDevices.getUserMedia = async (c) => {
-      if (c && c.video) {
-        c = { audio:false, video:{
-          deviceId:{exact:selectedDevId},
-          width:{ideal:1920}, height:{ideal:1080}
-        }};
-      }
+      if (c && c.video) c = { audio:false, video:{ deviceId:{exact:selectedDevId}, width:{ideal:1920}, height:{ideal:1080} }};
       return orig(c);
     };
   }
 
-  // Init MindAR + Three.js
+  $('hud').style.display = 'block';
   await initMindAR();
 }
 
 // ── MindAR + Three.js ─────────────────────────────────────────────────────────
 async function initMindAR() {
-  THREE_ref = window.THREE || MINDAR?.THREE;
+  // THREE lives inside MINDAR.IMAGE.THREE in v1.1.5
+  THREE = window.MINDAR.IMAGE.THREE;
 
-  mindarThree = new window.MINDAR.IMAGE.MindARThree({
-    container:       $('ar-container'),
-    imageTargetSrc:  compiledSrc,
+  const mindarThree = new window.MINDAR.IMAGE.MindARThree({
+    container:       $('container'),
+    imageTargetSrc:  compiledBlobURL,
     maxTrack:        1,
     uiLoading:       'no',
     uiScanning:      'no',
@@ -626,271 +494,212 @@ async function initMindAR() {
   const { renderer, scene, camera } = mindarThree;
   renderer.setPixelRatio(window.devicePixelRatio);
 
-  // Build hologram group
   const anchor = mindarThree.addAnchor(0);
+  anchor.onTargetFound = () => {
+    $('target-msg').style.opacity = '0';
+    $('hud-st').textContent = '✦ HOLOGRAM LOCKED';
+  };
+  anchor.onTargetLost = () => {
+    $('target-msg').style.opacity = '1';
+    $('hud-st').textContent = '◎ SCANNING';
+  };
 
-  // Spinning base rings
-  const r1 = makeRing(0.19, 0.24, 0x00f5ff, 0.55);
-  const r2 = makeRing(0.27, 0.285, 0x4af8ff, 0.18);
-  r1.rotation.x = -Math.PI/2; r2.rotation.x = -Math.PI/2;
-  r1.position.y = 0.005; r2.position.y = 0.003;
-  anchor.group.add(r1, r2);
+  // ── Build hologram ──────────────────────────────────────────────────────────
 
-  // Guide lines
-  anchor.group.add(makePlane(0.002, 0.55, 0x00f5ff, 0.1, [-0.34,0.28,0]));
-  anchor.group.add(makePlane(0.002, 0.55, 0x00f5ff, 0.1, [ 0.34,0.28,0]));
+  // Base spinning rings
+  ring1 = makeRing(0.19, 0.24, 0x00f5ff, 0.55);
+  ring2 = makeRing(0.27, 0.285, 0x4af8ff, 0.18);
+  ring1.rotation.x = ring2.rotation.x = -Math.PI/2;
+  ring1.position.y = 0.005; ring2.position.y = 0.003;
+  anchor.group.add(ring1, ring2);
 
-  // Panels
-  const panelGroup = new THREE_ref.Group();
+  // Vertical guide lines
+  anchor.group.add(makeLine(-0.34, 0.28, 0));
+  anchor.group.add(makeLine( 0.34, 0.28, 0));
+
+  // 3 panels
+  panelGroup = new THREE.Group();
   panelGroup.position.y = 0.5;
   anchor.group.add(panelGroup);
 
-  const panels = [];
-  for (let i=0; i<3; i++) {
-    const tex = makePanelTexture(i);
-    const geo = new THREE_ref.PlaneGeometry(0.76, 0.44);
-    const mat = new THREE_ref.MeshBasicMaterial({map:tex, transparent:true, side:THREE_ref.DoubleSide});
-    const mesh = new THREE_ref.Mesh(geo, mat);
-    mesh.visible = (i===0);
+  for (let i = 0; i < 3; i++) {
+    const mesh = makePanel(i);
+    mesh.visible = (i === 0);
     panelGroup.add(mesh);
-    panels.push(mesh);
+    panels[i] = mesh;
   }
-  window._panels = panels;
-  window._panelGroup = panelGroup;
-  window._ring1 = r1; window._ring2 = r2;
 
-  // Marker found / lost
-  anchor.onTargetFound = () => {
-    $('target-prompt').style.opacity = '0';
-    $('hud-status').textContent = '✦ HOLOGRAM LOCKED';
-  };
-  anchor.onTargetLost = () => {
-    $('target-prompt').style.opacity = '1';
-    $('hud-status').textContent = '◎ SCANNING';
-  };
-
-  // Start MindAR
+  // Start
   await mindarThree.start();
 
   // Render loop
   renderer.setAnimationLoop(() => {
-    frameCount++;
-
-    // Float bob
+    frameN++;
     floatY += 0.008 * floatDir;
-    if (floatY>0.03) floatDir=-1;
-    if (floatY<-0.03) floatDir=1;
+    if (floatY > 0.03) floatDir = -1;
+    if (floatY < -0.03) floatDir = 1;
     panelGroup.position.y = 0.5 + floatY;
 
-    // Ring spin
     ring1Rot += 0.012; ring2Rot -= 0.007;
-    r1.rotation.z = ring1Rot; r2.rotation.z = ring2Rot;
+    ring1.rotation.z = ring1Rot; ring2.rotation.z = ring2Rot;
 
-    // Scan line + clock every 2 frames
-    if (frameCount % 2 === 0) {
-      scanLineY = (scanLineY + 5) % 580;
+    // Redraw active panel every 2 frames (scan line animation + clock)
+    if (frameN % 2 === 0) {
+      scanY = (scanY + 5) % 580;
       const p = panels[currentPanel];
-      if (p) {
-        p.material.map.dispose();
-        p.material.map = makePanelTexture(currentPanel);
-        p.material.needsUpdate = true;
-      }
+      if (p) { p.material.map.dispose(); p.material.map = drawTex(currentPanel); p.material.needsUpdate = true; }
     }
-
     renderer.render(scene, camera);
   });
 
-  // MediaPipe — reads from MindAR's video element
-  setTimeout(initMediaPipe, 2000);
-
-  // Clock tick
   setInterval(tickClock, 1000);
+  setTimeout(initMediaPipe, 2000);
 }
 
 // ── THREE helpers ─────────────────────────────────────────────────────────────
-function makeRing(inner, outer, color, opacity) {
-  const geo = new THREE_ref.RingGeometry(inner, outer, 48);
-  const mat = new THREE_ref.MeshBasicMaterial({color, side:THREE_ref.DoubleSide, transparent:true, opacity});
-  return new THREE_ref.Mesh(geo, mat);
+function makeRing(inner, outer, col, opacity) {
+  const g = new THREE.RingGeometry(inner, outer, 48);
+  const m = new THREE.MeshBasicMaterial({color:col, side:THREE.DoubleSide, transparent:true, opacity});
+  return new THREE.Mesh(g, m);
 }
-function makePlane(w, h, color, opacity, pos) {
-  const geo = new THREE_ref.PlaneGeometry(w, h);
-  const mat = new THREE_ref.MeshBasicMaterial({color, side:THREE_ref.DoubleSide, transparent:true, opacity});
-  const m = new THREE_ref.Mesh(geo, mat);
-  m.position.set(...pos);
-  return m;
+function makeLine(x, y, z) {
+  const g = new THREE.PlaneGeometry(0.002, 0.55);
+  const m = new THREE.MeshBasicMaterial({color:0x00f5ff, side:THREE.DoubleSide, transparent:true, opacity:0.1});
+  const mesh = new THREE.Mesh(g, m);
+  mesh.position.set(x, y, z);
+  return mesh;
+}
+function makePanel(idx) {
+  const g = new THREE.PlaneGeometry(0.76, 0.44);
+  const m = new THREE.MeshBasicMaterial({map: drawTex(idx), transparent:true, side:THREE.DoubleSide});
+  return new THREE.Mesh(g, m);
 }
 
-// ── Panel canvas textures ──────────────────────────────────────────────────────
-const DAYS  = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
-const MONS  = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+// ── Canvas panel textures ─────────────────────────────────────────────────────
+const DAYS = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
+const MONS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
 
-function makePanelTexture(idx) {
-  const W=1024, H=580;
-  const cv=document.createElement('canvas');
+function drawTex(idx) {
+  const W=1024, H=580, cv=document.createElement('canvas');
   cv.width=W; cv.height=H;
   const c=cv.getContext('2d');
 
   // Dark bg
   c.fillStyle='rgba(0,13,28,0.88)'; c.fillRect(0,0,W,H);
 
-  // Top/bottom glow border
-  const g=c.createLinearGradient(0,0,W,0);
-  g.addColorStop(0,'rgba(0,245,255,0)');
-  g.addColorStop(0.5,'rgba(0,245,255,1)');
-  g.addColorStop(1,'rgba(0,245,255,0)');
-  c.fillStyle=g; c.fillRect(0,0,W,3); c.fillRect(0,H-3,W,3);
-
+  // Glow borders top/bottom
+  const gb=c.createLinearGradient(0,0,W,0);
+  gb.addColorStop(0,'rgba(0,245,255,0)');
+  gb.addColorStop(0.5,'rgba(0,245,255,1)');
+  gb.addColorStop(1,'rgba(0,245,255,0)');
+  c.fillStyle=gb; c.fillRect(0,0,W,3); c.fillRect(0,H-3,W,3);
   // Side lines
-  c.fillStyle='rgba(0,245,255,0.4)';
-  c.fillRect(0,0,2,H); c.fillRect(W-2,0,2,H);
-
+  c.fillStyle='rgba(0,245,255,0.4)'; c.fillRect(0,0,2,H); c.fillRect(W-2,0,2,H);
   // Corner accents
   c.fillStyle='rgba(0,245,255,0.9)';
   [[0,0,60,3],[0,0,3,60],[W-60,0,60,3],[W-3,0,3,60],
    [0,H-3,60,3],[0,H-60,3,60],[W-60,H-3,60,3],[W-3,H-60,3,60]
   ].forEach(([x,y,w,h])=>c.fillRect(x,y,w,h));
-
   // Scan line
-  const sl=c.createLinearGradient(0,scanLineY-8,0,scanLineY+8);
+  const sl=c.createLinearGradient(0,scanY-8,0,scanY+8);
   sl.addColorStop(0,'rgba(0,245,255,0)');
   sl.addColorStop(0.5,'rgba(0,245,255,0.2)');
   sl.addColorStop(1,'rgba(0,245,255,0)');
-  c.fillStyle=sl; c.fillRect(0,scanLineY-8,W,16);
+  c.fillStyle=sl; c.fillRect(0,scanY-8,W,16);
 
   c.textAlign='center';
 
   if (idx===0) {
-    // AKSHAT
     c.font='bold 130px Rajdhani,monospace';
     c.fillStyle='#00f5ff'; c.shadowColor='#00f5ff'; c.shadowBlur=28;
     c.fillText('AKSHAT',W/2,215); c.shadowBlur=0;
-
-    const dv=c.createLinearGradient(150,0,W-150,0);
-    dv.addColorStop(0,'rgba(0,245,255,0)');
-    dv.addColorStop(0.5,'rgba(0,245,255,0.5)');
-    dv.addColorStop(1,'rgba(0,245,255,0)');
-    c.fillStyle=dv; c.fillRect(80,258,W-160,2);
-
+    const dv=c.createLinearGradient(80,0,W-80,0);
+    dv.addColorStop(0,'rgba(0,245,255,0)'); dv.addColorStop(0.5,'rgba(0,245,255,0.5)'); dv.addColorStop(1,'rgba(0,245,255,0)');
+    c.fillStyle=dv; c.fillRect(80,260,W-160,2);
     c.font='40px "Share Tech Mono",monospace';
-    c.fillStyle='rgba(160,240,255,0.65)'; c.fillText('WELCOME BACK, SIR',W/2,328);
-
+    c.fillStyle='rgba(160,240,255,0.65)'; c.fillText('WELCOME BACK, SIR',W/2,330);
     c.font='38px "Share Tech Mono",monospace';
     c.fillStyle='#00ff88'; c.shadowColor='#00ff88'; c.shadowBlur=14;
-    c.fillText('SYSTEM ONLINE',W/2,430); c.shadowBlur=0;
+    c.fillText('SYSTEM ONLINE',W/2,432); c.shadowBlur=0;
 
   } else if (idx===1) {
-    // TIME
     const now=new Date(), h=now.getHours(), ampm=h>=12?'PM':'AM', h12=h%12||12;
     const ts=String(h12).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
-
-    c.font='34px "Share Tech Mono",monospace';
-    c.fillStyle='rgba(0,245,255,0.4)'; c.fillText('LOCAL TIME',W/2,88);
-
+    c.font='34px "Share Tech Mono",monospace'; c.fillStyle='rgba(0,245,255,0.4)'; c.fillText('LOCAL TIME',W/2,88);
     c.font='bold 115px "Share Tech Mono",monospace';
     c.fillStyle='#00f5ff'; c.shadowColor='#00f5ff'; c.shadowBlur=22;
     c.fillText(ts,W/2,242); c.shadowBlur=0;
-
     c.font='bold 62px Rajdhani,monospace';
     c.fillStyle='#00ff88'; c.shadowColor='#00ff88'; c.shadowBlur=14;
     c.fillText(ampm,W/2,375); c.shadowBlur=0;
-
-    c.font='28px "Share Tech Mono",monospace';
-    c.fillStyle='rgba(0,245,255,0.3)';
-    const off=new Date().getTimezoneOffset();
+    const off=now.getTimezoneOffset();
+    c.font='28px "Share Tech Mono",monospace'; c.fillStyle='rgba(0,245,255,0.3)';
     c.fillText('UTC'+(off<=0?'+':'-')+String(Math.abs(off/60)).padStart(2,'0')+':00',W/2,475);
 
   } else {
-    // DATE
     const now=new Date();
-    c.font='34px "Share Tech Mono",monospace';
-    c.fillStyle='rgba(0,245,255,0.4)'; c.fillText('EARTH DATE',W/2,88);
-
-    c.font='bold 72px Rajdhani,monospace';
-    c.fillStyle='rgba(0,245,255,0.55)'; c.fillText(DAYS[now.getDay()],W/2,198);
-
+    c.font='34px "Share Tech Mono",monospace'; c.fillStyle='rgba(0,245,255,0.4)'; c.fillText('EARTH DATE',W/2,88);
+    c.font='bold 72px Rajdhani,monospace'; c.fillStyle='rgba(0,245,255,0.55)'; c.fillText(DAYS[now.getDay()],W/2,198);
     const ds=String(now.getDate()).padStart(2,'0')+' '+MONS[now.getMonth()]+' '+now.getFullYear();
     c.font='bold 92px "Share Tech Mono",monospace';
     c.fillStyle='#00f5ff'; c.shadowColor='#00f5ff'; c.shadowBlur=20;
     c.fillText(ds,W/2,335); c.shadowBlur=0;
-
-    c.font='34px Rajdhani,monospace';
-    c.fillStyle='rgba(160,240,255,0.42)'; c.fillText('GREGORIAN CALENDAR',W/2,432);
+    c.font='34px Rajdhani,monospace'; c.fillStyle='rgba(160,240,255,0.42)'; c.fillText('GREGORIAN CALENDAR',W/2,432);
   }
 
-  const t=new THREE_ref.CanvasTexture(cv);
-  t.needsUpdate=true;
-  return t;
+  const t = new THREE.CanvasTexture(cv); t.needsUpdate=true; return t;
 }
 
 function tickClock() {
-  if (!window._panels || currentPanel===0) return;
-  const p=window._panels[currentPanel];
-  if (p) { p.material.map.dispose(); p.material.map=makePanelTexture(currentPanel); p.material.needsUpdate=true; }
+  if (currentPanel===0 || !panels[currentPanel]) return;
+  panels[currentPanel].material.map.dispose();
+  panels[currentPanel].material.map = drawTex(currentPanel);
+  panels[currentPanel].material.needsUpdate = true;
 }
 
-// ── Panel cycling ─────────────────────────────────────────────────────────────
+// ── Panel cycle ───────────────────────────────────────────────────────────────
 function showPanel(i) {
-  if (!window._panels) return;
-  window._panels.forEach((p,j)=>{ if(p) p.visible=(j===i); });
-  [0,1,2].forEach(j=>$('d'+j).classList.toggle('on',j===i));
-  currentPanel=i;
-  const p=window._panels[i];
-  if (p) { p.material.map.dispose(); p.material.map=makePanelTexture(i); p.material.needsUpdate=true; }
+  panels.forEach((p,j) => { if(p) p.visible=(j===i); });
+  [0,1,2].forEach(j => $('d'+j).classList.toggle('on',j===i));
+  currentPanel = i;
+  panels[i].material.map.dispose();
+  panels[i].material.map = drawTex(i);
+  panels[i].material.needsUpdate = true;
 }
-
 function doSwipe() {
   if (swipeCooldown) return;
-  swipeCooldown=true;
+  swipeCooldown = true;
   showPanel((currentPanel+1)%3);
   const f=$('flash'); f.style.opacity='1'; setTimeout(()=>f.style.opacity='0',180);
-  setTimeout(()=>swipeCooldown=false,900);
+  setTimeout(()=>swipeCooldown=false, 900);
 }
-
-// Touch swipe
 let tx0=0;
 document.addEventListener('touchstart',e=>{tx0=e.touches[0].clientX;},{passive:true});
-document.addEventListener('touchend',e=>{
-  if(!arLaunched) return;
-  if(e.changedTouches[0].clientX-tx0>55) doSwipe();
-});
+document.addEventListener('touchend',e=>{if(arLaunched && e.changedTouches[0].clientX-tx0>55) doSwipe();});
 
-// ── MediaPipe Hands ───────────────────────────────────────────────────────────
-// Reads from MindAR's own <video> element — no second camera stream
+// ── MediaPipe — reads from MindAR's video element (no second stream) ──────────
 function initMediaPipe() {
   if (typeof Hands==='undefined') return;
+  // MindAR puts its <video> inside #container
+  const vid = $('container').querySelector('video');
+  if (!vid || !vid.srcObject) { setTimeout(initMediaPipe, 700); return; }
 
-  // Find the video MindAR created in #ar-container
-  const findVid=()=>{
-    const v=document.querySelector('#ar-container video');
-    if (v && v.srcObject) return v;
-    return null;
-  };
-
-  const zapVid=findVid();
-  if (!zapVid) { setTimeout(initMediaPipe,800); return; }
-
-  const hands=new Hands({ locateFile:f=>'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/'+f });
-  hands.setOptions({ maxNumHands:1, modelComplexity:0, minDetectionConfidence:0.65, minTrackingConfidence:0.55 });
-
+  const hands = new Hands({ locateFile: f => 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/'+f });
+  hands.setOptions({maxNumHands:1, modelComplexity:0, minDetectionConfidence:0.65, minTrackingConfidence:0.55});
   let lastX=null, lastT=0;
-  hands.onResults(r=>{
-    if (!r.multiHandLandmarks?.length) {
-      $('hand-dot').style.display='none'; lastX=null; return;
-    }
+  hands.onResults(r => {
+    if (!r.multiHandLandmarks?.length) { $('hand-dot').style.display='none'; lastX=null; return; }
     const lm=r.multiHandLandmarks[0];
     const hd=$('hand-dot');
     hd.style.display='block';
     hd.style.left=(lm[8].x*window.innerWidth)+'px';
     hd.style.top=(lm[8].y*window.innerHeight)+'px';
-
     const now=Date.now(), dx=lm[0].x-(lastX??lm[0].x);
     if (lastX!==null && dx>0.09 && now-lastT>1000) { lastT=now; doSwipe(); }
     lastX=lm[0].x;
   });
-
   async function loop() {
-    if (zapVid.readyState>=2) { try{await hands.send({image:zapVid});}catch(e){} }
+    if (vid.readyState>=2) { try{await hands.send({image:vid});}catch(e){} }
     requestAnimationFrame(loop);
   }
   requestAnimationFrame(loop);
