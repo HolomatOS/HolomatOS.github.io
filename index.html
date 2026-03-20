@@ -7,16 +7,6 @@
 <meta name="theme-color" content="#000000">
 <title>J.A.R.V.I.S</title>
 
-<!--
-  FIX: The "Hiro" text image from CDN has almost NO visual features.
-  MindAR needs the actual pixel-checkerboard Hiro pattern (the one with
-  the black/white squares inside). We draw it precisely in canvas and use
-  that same canvas for BOTH display AND MindAR compilation.
-  Same image = guaranteed match.
-
-  TF.js duplicate kernel warnings = harmless, both MindAR + MediaPipe
-  bundle their own TF.js. Does not affect tracking.
--->
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.1.5/dist/mindar-image.prod.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.1.5/dist/mindar-image-three.prod.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js" crossorigin="anonymous"></script>
@@ -35,8 +25,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
 
 /* ── PERMISSION ── */
 #perm-screen{
-  position:fixed;inset:0;z-index:999;
-  background:rgba(0,4,14,0.97);
+  position:fixed;inset:0;z-index:999;background:rgba(0,4,14,0.97);
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   padding:32px 24px;text-align:center;
 }
@@ -55,8 +44,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
 
 /* ── COMPILE ── */
 #compile-screen{
-  position:fixed;inset:0;z-index:950;
-  background:rgba(0,4,14,0.97);
+  position:fixed;inset:0;z-index:950;background:rgba(0,4,14,0.97);
   display:none;flex-direction:column;align-items:center;justify-content:center;
   padding:32px 24px;text-align:center;
 }
@@ -72,12 +60,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
   position:fixed;inset:0;z-index:800;
   display:none;flex-direction:column;align-items:center;
   background:linear-gradient(180deg,rgba(0,5,15,0.82) 0%,rgba(0,8,20,0.76) 55%,rgba(0,4,12,0.9) 100%);
-  padding:max(env(safe-area-inset-top,0px),14px) 20px 175px;
-  overflow-y:auto;
+  padding:max(env(safe-area-inset-top,0px),14px) 20px 175px;overflow-y:auto;
 }
 .logo{font-family:'Rajdhani',sans-serif;font-size:36px;font-weight:700;
-  letter-spacing:14px;color:#00f5ff;
-  text-shadow:0 0 24px #00f5ffaa,0 0 50px #00f5ff44;
+  letter-spacing:14px;color:#00f5ff;text-shadow:0 0 24px #00f5ffaa,0 0 50px #00f5ff44;
   margin-top:14px;margin-bottom:2px;text-align:center;}
 .logo-s{font-size:9px;letter-spacing:5px;color:#00f5ff44;margin-bottom:18px;text-align:center;}
 .status-bar{
@@ -91,6 +77,18 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
 .ldot.on{background:#00ff88;animation:none;}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0.15}}
 
+/* Marker tabs */
+.marker-tabs{
+  width:100%;max-width:400px;display:flex;gap:8px;margin-bottom:10px;
+}
+.mtab{
+  flex:1;padding:10px 6px;
+  background:rgba(0,0,0,0.45);border:1px solid rgba(0,245,255,0.15);
+  border-radius:10px;font-size:9px;letter-spacing:2px;color:#00f5ff77;
+  cursor:pointer;text-align:center;
+}
+.mtab.active{border-color:#00f5ff;color:#00f5ff;background:rgba(0,245,255,0.08);}
+
 .hiro-card{
   width:100%;max-width:400px;
   background:rgba(0,0,0,0.55);border:1px solid rgba(0,245,255,0.14);
@@ -98,11 +96,18 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
   display:flex;gap:16px;align-items:center;
   backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
 }
-#hiro-preview{width:90px;height:90px;flex-shrink:0;border-radius:8px;image-rendering:pixelated;}
+.marker-thumb{width:90px;height:90px;flex-shrink:0;border-radius:8px;image-rendering:pixelated;}
 .hi-t{font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:500;
   letter-spacing:2px;color:#fff;margin-bottom:4px;}
 .hi-d{font-size:10px;color:#00f5ff66;line-height:1.75;}
 .hi-d span{color:#00ff88;}
+
+/* Which marker badge */
+#which-badge{
+  display:inline-block;font-size:9px;letter-spacing:2px;padding:3px 10px;
+  border-radius:20px;margin-bottom:8px;
+  background:rgba(0,245,255,0.1);color:#00f5ff;
+}
 
 .steps-card{
   width:100%;max-width:400px;
@@ -140,13 +145,13 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
 @keyframes shine{to{left:210%;}}
 #btn-launch:active{background:rgba(0,245,255,0.1);box-shadow:0 0 26px rgba(0,245,255,0.28);}
 #btn-launch:disabled{opacity:0.35;pointer-events:none;}
-#btn-save-marker{
+#btn-save{
   width:100%;height:50px;
   background:rgba(0,0,0,0.5);border:1px solid rgba(0,245,255,0.18);
   border-radius:14px;color:#00f5ff77;font-family:'Share Tech Mono',monospace;
   font-size:11px;letter-spacing:3px;cursor:pointer;
 }
-#btn-save-marker:active{background:rgba(0,245,255,0.07);}
+#btn-save:active{background:rgba(0,245,255,0.07);}
 
 /* ── HUD ── */
 #hud{position:fixed;inset:0;z-index:10;pointer-events:none;display:none;}
@@ -210,7 +215,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
 <!-- ══ COMPILE ══ -->
 <div id="compile-screen">
   <div class="c-title">COMPILING TARGET</div>
-  <div class="c-sub">EXTRACTING FEATURES FROM HIRO MARKER<br>ONE TIME ONLY — TAKES ~15 SECONDS</div>
+  <div class="c-sub" id="compile-sub">PROCESSING MARKER — ONE TIME ONLY</div>
   <div class="prog-wrap"><div id="prog-bar"></div></div>
   <div id="prog-txt">0%</div>
 </div>
@@ -225,16 +230,21 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
     <span id="status-lbl">READY</span>
   </div>
 
+  <!-- Marker selector: choose which one you printed -->
+  <div class="marker-tabs">
+    <div class="mtab active" id="tab-text" onclick="selectMarker('text')">HIRO TEXT<br>(ALREADY PRINTED)</div>
+    <div class="mtab" id="tab-pixel" onclick="selectMarker('pixel')">PIXEL PATTERN<br>(BETTER TRACKING)</div>
+  </div>
+
   <div class="hiro-card">
-    <!-- This exact canvas image is what MindAR compiles against -->
-    <canvas id="hiro-preview"></canvas>
+    <canvas id="marker-canvas" class="marker-thumb"></canvas>
     <div>
-      <div class="hi-t">HIRO MARKER</div>
-      <div class="hi-d">
-        Screenshot and print at A5+.<br>
-        Place flat on your desk.<br>
-        <span>This pixel pattern is what JARVIS tracks.</span><br>
-        Tap below to save full size.
+      <div id="which-badge">YOU HAVE THIS PRINTED</div>
+      <div class="hi-t" id="marker-title">HIRO TEXT MARKER</div>
+      <div class="hi-d" id="marker-desc">
+        This is the marker you already have.<br>
+        No reprinting needed — tap Activate.<br>
+        <span>Tap "PIXEL PATTERN" tab for better tracking.</span>
       </div>
     </div>
   </div>
@@ -243,22 +253,22 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
     <div class="s-row">
       <div class="s-n">1</div>
       <div>
-        <div class="s-t">SAVE AND PRINT THE MARKER ABOVE</div>
-        <div class="s-d">Tap "SAVE FULL SIZE MARKER". Print at A5 minimum. Place on desk.</div>
+        <div class="s-t">SELECT YOUR MARKER ABOVE</div>
+        <div class="s-d">Already printed the "Hiro" text? Select that tab. Want better tracking? Select Pixel Pattern and reprint.</div>
       </div>
     </div>
     <div class="s-row">
       <div class="s-n">2</div>
       <div>
-        <div class="s-t">TAP ACTIVATE — COMPILES ONCE</div>
-        <div class="s-d">Takes ~15 sec first time. Goes fullscreen. Camera starts.</div>
+        <div class="s-t">TAP ACTIVATE</div>
+        <div class="s-d">Compiles selected marker once (~15s). Goes fullscreen.</div>
       </div>
     </div>
     <div class="s-row">
       <div class="s-n">3</div>
       <div>
-        <div class="s-t">POINT CAMERA — SWIPE TO CYCLE</div>
-        <div class="s-d">Hologram locks on marker. AKSHAT → TIME → DATE.</div>
+        <div class="s-t">POINT AT MARKER — SWIPE RIGHT</div>
+        <div class="s-d">Hold ~40cm above marker. Good light, no glare. AKSHAT → TIME → DATE.</div>
       </div>
     </div>
   </div>
@@ -270,9 +280,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
     <span style="font-size:18px;">⬡</span>
     ACTIVATE J.A.R.V.I.S
   </button>
-  <button id="btn-save-marker" onclick="saveMarker()">
-    ↓ SAVE FULL SIZE MARKER
-  </button>
+  <button id="btn-save" onclick="saveMarker()">↓ SAVE SELECTED MARKER AS PNG</button>
 </div>
 
 <!-- ══ HUD ══ -->
@@ -302,75 +310,119 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;
 'use strict';
 const $ = id => document.getElementById(id);
 
-// ── Draw the REAL Hiro pixel-pattern marker ───────────────────────────────────
-// This is the actual checkerboard pattern from your first screenshot —
-// NOT the "Hiro" text version. This has rich features MindAR can track.
-function drawRealHiro(canvas, size) {
-  canvas.width = size;
-  canvas.height = size;
+// ── Draw the TEXT Hiro marker (what user printed) ─────────────────────────────
+function drawHiroText(canvas, size) {
+  canvas.width = size; canvas.height = size;
   const ctx = canvas.getContext('2d');
-  const u = size / 14; // 14 units across
 
   // White background
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, size, size);
 
-  // Black outer border (1 unit thick on each side)
+  // Full black background (like the printed one)
   ctx.fillStyle = '#000000';
-  ctx.fillRect(0, 0, size, u);          // top
-  ctx.fillRect(0, size-u, size, u);     // bottom
-  ctx.fillRect(0, 0, u, size);          // left
-  ctx.fillRect(size-u, 0, u, size);     // right
+  ctx.fillRect(0, 0, size, size);
 
-  // Inner white padding (1 unit)
+  // Inner white box (about 55% of size, centered slightly upper)
+  const boxW = size * 0.55;
+  const boxH = size * 0.52;
+  const boxX = (size - boxW) / 2;
+  const boxY = size * 0.18;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(boxX, boxY, boxW, boxH);
+
+  // "Hiro" text inside the white box
+  ctx.fillStyle = '#000000';
+  ctx.font = `bold ${size * 0.18}px Georgia, serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('Hiro', size / 2, boxY + boxH * 0.72);
+
+  // Small dot above the "i" for the capital feel — draw the "H", "i", "r", "o" style
+  // Already done by the font above
+}
+
+// ── Draw the PIXEL pattern marker ─────────────────────────────────────────────
+function drawHiroPixel(canvas, size) {
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const u = size / 14;
+
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, size, size);
+  ctx.fillStyle = '#000000';
+  // Outer border (1u thick)
+  ctx.fillRect(0, 0, size, u);
+  ctx.fillRect(0, size-u, size, u);
+  ctx.fillRect(0, 0, u, size);
+  ctx.fillRect(size-u, 0, u, size);
+  // Inner white
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(u, u, size-2*u, size-2*u);
-
-  // The actual Hiro checkerboard pattern (rows 2-11, cols 2-11)
-  // Exact pixel pattern from the ARToolKit Hiro marker
+  // Pattern pixels
   ctx.fillStyle = '#000000';
-  const pattern = [
-    [0,1,1,0,1,0,1,0,0,0], // row 2
-    [1,0,0,1,0,1,1,0,0,1], // row 3
-    [1,0,1,1,0,1,0,0,1,0], // row 4
-    [1,1,0,0,0,0,0,1,0,0], // row 5
-    [0,1,0,1,0,1,0,1,1,0], // row 6
-    [0,0,1,0,1,0,1,0,1,0], // row 7
-    [0,1,1,0,0,1,0,1,0,1], // row 8
-    [1,0,0,1,0,0,1,0,0,1], // row 9
-    [0,0,1,1,1,0,0,1,0,1], // row 10
-    [0,1,0,0,0,1,1,0,1,0], // row 11
+  const px = [
+    [2,2],[3,2],[4,2],[6,2],[8,2],[9,2],[11,2],
+    [2,3],[5,3],[7,3],[9,3],[11,3],
+    [2,4],[4,4],[5,4],[7,4],[9,4],[11,4],
+    [2,5],[3,5],[7,5],[10,5],[11,5],
+    [2,6],[4,6],[6,6],[8,6],[9,6],[11,6],
+    [2,7],[4,7],[6,7],[8,7],[10,7],
+    [2,8],[3,8],[6,8],[8,8],[10,8],[11,8],
+    [2,9],[5,9],[8,9],[11,9],
+    [2,10],[3,10],[4,10],[7,10],[10,10],[11,10],
+    [2,11],[4,11],[8,11],[9,11],[11,11],
   ];
-  pattern.forEach((row, ri) => {
-    row.forEach((cell, ci) => {
-      if (cell) {
-        ctx.fillRect(
-          (ci + 2) * u,
-          (ri + 2) * u,
-          u, u
-        );
-      }
-    });
-  });
+  px.forEach(([x,y]) => ctx.fillRect(x*u, y*u, u, u));
 }
 
-// Shared canvas — drawn once, used for both preview and compilation
-const hiroCanvas = document.createElement('canvas');
-drawRealHiro(hiroCanvas, 512);
+// ── Marker selection ──────────────────────────────────────────────────────────
+let activeMarker = 'text'; // 'text' or 'pixel'
+let activeCanvas = null;
 
-// Draw small preview on setup screen
-window.addEventListener('DOMContentLoaded', () => {
-  const prev = $('hiro-preview');
-  drawRealHiro(prev, 90);
-});
+function selectMarker(type) {
+  activeMarker = type;
+  const cv = $('marker-canvas');
 
-// Save full size marker
+  if (type === 'text') {
+    drawHiroText(cv, 90);
+    $('tab-text').classList.add('active');
+    $('tab-pixel').classList.remove('active');
+    $('which-badge').textContent = 'YOU HAVE THIS PRINTED';
+    $('marker-title').textContent = 'HIRO TEXT MARKER';
+    $('marker-desc').innerHTML = 'This is the marker you already have.<br>No reprinting needed — tap Activate.<br><span style="color:#00ff88;">Tap Activate and point camera at it.</span>';
+  } else {
+    drawHiroPixel(cv, 90);
+    $('tab-pixel').classList.add('active');
+    $('tab-text').classList.remove('active');
+    $('which-badge').textContent = 'BETTER TRACKING';
+    $('marker-title').textContent = 'PIXEL PATTERN MARKER';
+    $('marker-desc').innerHTML = 'More features = more reliable tracking.<br>Tap "SAVE" below, print at A5+.<br><span style="color:#00ff88;">Recommended for best results.</span>';
+  }
+
+  // Build full-size canvas for compilation
+  activeCanvas = document.createElement('canvas');
+  if (type === 'text') {
+    drawHiroText(activeCanvas, 512);
+  } else {
+    drawHiroPixel(activeCanvas, 512);
+  }
+
+  // Reset compiled data when switching
+  compiledURL = null;
+}
+
 function saveMarker() {
+  if (!activeCanvas) return;
   const link = document.createElement('a');
-  link.download = 'jarvis-hiro-marker.png';
-  link.href = hiroCanvas.toDataURL('image/png');
+  link.download = activeMarker === 'text' ? 'hiro-text.png' : 'hiro-pixel.png';
+  link.href = activeCanvas.toDataURL('image/png');
   link.click();
 }
+
+// ── Init preview ──────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  selectMarker('text'); // default: text marker (what user has printed)
+});
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let selectedDevId = null;
@@ -398,8 +450,7 @@ async function grantCam() {
     const lbl = (uw||rear[1]||rear[0])?.label||'';
     $('ldot').classList.add('on');
     $('status-lbl').textContent = lbl.toLowerCase().includes('wide')
-      ? '0.5× ULTRA WIDE SELECTED'
-      : 'CAMERA READY · '+(lbl.substring(0,24)||'REAR LENS');
+      ? '0.5× ULTRA WIDE SELECTED' : 'CAMERA READY · '+(lbl.substring(0,22)||'REAR LENS');
   } catch(e) {
     $('status-lbl').textContent = 'CAMERA READY';
   }
@@ -407,20 +458,23 @@ async function grantCam() {
   $('bottom-btns').style.display = 'flex';
 }
 
-// ── Compile using the canvas-drawn Hiro ───────────────────────────────────────
+// ── Compile ───────────────────────────────────────────────────────────────────
 async function compileMarker() {
   $('compile-screen').style.display = 'flex';
   $('prog-bar').style.width = '0%';
   $('prog-txt').textContent = '0%';
+  $('compile-sub').textContent = activeMarker === 'text'
+    ? 'COMPILING HIRO TEXT MARKER'
+    : 'COMPILING PIXEL PATTERN MARKER';
 
   if (!window.MINDAR?.IMAGE?.Compiler) {
-    $('prog-txt').textContent = 'ERROR: MindAR not loaded. Check internet.';
+    $('prog-txt').textContent = 'ERROR: MindAR not loaded.';
     return null;
   }
 
-  // Convert our canvas to an Image element for the compiler
+  // Use the active canvas for compilation
   const img = new Image();
-  img.src = hiroCanvas.toDataURL('image/png');
+  img.src = activeCanvas.toDataURL('image/png');
   await new Promise(r => { img.onload = r; });
 
   try {
@@ -456,8 +510,7 @@ async function launchAR() {
     el.style.transition='opacity 0.4s';el.style.opacity='0';
   });
   await new Promise(r=>setTimeout(r,450));
-  $('setup').style.display='none';
-  $('bottom-btns').style.display='none';
+  $('setup').style.display='none';$('bottom-btns').style.display='none';
 
   if (!compiledURL) {
     const url = await compileMarker();
@@ -479,61 +532,36 @@ async function launchAR() {
 // ── MindAR + Three.js ─────────────────────────────────────────────────────────
 async function initMindAR() {
   THREE = window.MINDAR.IMAGE.THREE;
-
   const mindarThree = new window.MINDAR.IMAGE.MindARThree({
-    container:       $('container'),
-    imageTargetSrc:  compiledURL,
-    maxTrack:        1,
-    uiLoading:       'no',
-    uiScanning:      'no',
-    uiError:         'no',
-    filterMinCF:     0.001,
-    filterBeta:      1000,
-    missTolerance:   5,
-    warmupTolerance: 3,
+    container:$('container'), imageTargetSrc:compiledURL,
+    maxTrack:1, uiLoading:'no', uiScanning:'no', uiError:'no',
+    filterMinCF:0.001, filterBeta:1000, missTolerance:5, warmupTolerance:3,
   });
-
   const {renderer,scene,camera} = mindarThree;
   renderer.setPixelRatio(window.devicePixelRatio);
 
   const anchor = mindarThree.addAnchor(0);
-  anchor.onTargetFound = () => {
-    $('target-msg').style.opacity='0';
-    $('hud-st').textContent='✦ HOLOGRAM LOCKED';
-  };
-  anchor.onTargetLost = () => {
-    $('target-msg').style.opacity='1';
-    $('hud-st').textContent='◎ SCANNING';
-  };
+  anchor.onTargetFound = () => { $('target-msg').style.opacity='0'; $('hud-st').textContent='✦ HOLOGRAM LOCKED'; };
+  anchor.onTargetLost  = () => { $('target-msg').style.opacity='1'; $('hud-st').textContent='◎ SCANNING'; };
 
-  // Rings
-  ring1 = mkRing(0.19,0.24,0x00f5ff,0.55);
-  ring2 = mkRing(0.27,0.285,0x4af8ff,0.18);
+  ring1=mkRing(0.19,0.24,0x00f5ff,0.55); ring2=mkRing(0.27,0.285,0x4af8ff,0.18);
   ring1.rotation.x=ring2.rotation.x=-Math.PI/2;
-  ring1.position.y=0.005;ring2.position.y=0.003;
+  ring1.position.y=0.005; ring2.position.y=0.003;
   anchor.group.add(ring1,ring2);
   anchor.group.add(mkLine(-0.34,0.28,0),mkLine(0.34,0.28,0));
 
-  panelGroup=new THREE.Group();
-  panelGroup.position.y=0.5;
+  panelGroup=new THREE.Group(); panelGroup.position.y=0.5;
   anchor.group.add(panelGroup);
-
-  for(let i=0;i<3;i++){
-    const mesh=mkPanel(i);
-    mesh.visible=(i===0);
-    panelGroup.add(mesh);
-    panels[i]=mesh;
-  }
+  for(let i=0;i<3;i++){ const m=mkPanel(i); m.visible=(i===0); panelGroup.add(m); panels[i]=m; }
 
   await mindarThree.start();
 
   renderer.setAnimationLoop(()=>{
     frameN++;
-    floatY+=0.008*floatDir;
-    if(floatY>0.03)floatDir=-1;if(floatY<-0.03)floatDir=1;
+    floatY+=0.008*floatDir; if(floatY>0.03)floatDir=-1; if(floatY<-0.03)floatDir=1;
     panelGroup.position.y=0.5+floatY;
-    ring1Rot+=0.012;ring2Rot-=0.007;
-    ring1.rotation.z=ring1Rot;ring2.rotation.z=ring2Rot;
+    ring1Rot+=0.012; ring2Rot-=0.007;
+    ring1.rotation.z=ring1Rot; ring2.rotation.z=ring2Rot;
     if(frameN%2===0){
       scanY=(scanY+5)%580;
       const p=panels[currentPanel];
@@ -546,24 +574,20 @@ async function initMindAR() {
   setTimeout(initMediaPipe,2000);
 }
 
-// ── THREE helpers ─────────────────────────────────────────────────────────────
 function mkRing(i,o,col,op){
-  const g=new THREE.RingGeometry(i,o,48);
-  const m=new THREE.MeshBasicMaterial({color:col,side:THREE.DoubleSide,transparent:true,opacity:op});
-  return new THREE.Mesh(g,m);
+  return new THREE.Mesh(new THREE.RingGeometry(i,o,48),
+    new THREE.MeshBasicMaterial({color:col,side:THREE.DoubleSide,transparent:true,opacity:op}));
 }
 function mkLine(x,y,z){
-  const g=new THREE.PlaneGeometry(0.002,0.55);
-  const m=new THREE.MeshBasicMaterial({color:0x00f5ff,side:THREE.DoubleSide,transparent:true,opacity:0.1});
-  const mesh=new THREE.Mesh(g,m);mesh.position.set(x,y,z);return mesh;
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(0.002,0.55),
+    new THREE.MeshBasicMaterial({color:0x00f5ff,side:THREE.DoubleSide,transparent:true,opacity:0.1}));
+  m.position.set(x,y,z);return m;
 }
 function mkPanel(idx){
-  const g=new THREE.PlaneGeometry(0.76,0.44);
-  const m=new THREE.MeshBasicMaterial({map:drawTex(idx),transparent:true,side:THREE.DoubleSide});
-  return new THREE.Mesh(g,m);
+  return new THREE.Mesh(new THREE.PlaneGeometry(0.76,0.44),
+    new THREE.MeshBasicMaterial({map:drawTex(idx),transparent:true,side:THREE.DoubleSide}));
 }
 
-// ── Panel textures ─────────────────────────────────────────────────────────────
 const DAYS=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
 const MONS=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
 
@@ -583,8 +607,7 @@ function drawTex(idx){
   c.fillStyle=sl;c.fillRect(0,scanY-8,W,16);
   c.textAlign='center';
   if(idx===0){
-    c.font='bold 130px Rajdhani,monospace';
-    c.fillStyle='#00f5ff';c.shadowColor='#00f5ff';c.shadowBlur=28;
+    c.font='bold 130px Rajdhani,monospace';c.fillStyle='#00f5ff';c.shadowColor='#00f5ff';c.shadowBlur=28;
     c.fillText('AKSHAT',W/2,215);c.shadowBlur=0;
     const dv=c.createLinearGradient(80,0,W-80,0);
     dv.addColorStop(0,'rgba(0,245,255,0)');dv.addColorStop(0.5,'rgba(0,245,255,0.5)');dv.addColorStop(1,'rgba(0,245,255,0)');
@@ -614,15 +637,12 @@ function drawTex(idx){
   }
   const t=new THREE.CanvasTexture(cv);t.needsUpdate=true;return t;
 }
-
 function tickClock(){
   if(currentPanel===0||!panels[currentPanel])return;
   panels[currentPanel].material.map.dispose();
   panels[currentPanel].material.map=drawTex(currentPanel);
   panels[currentPanel].material.needsUpdate=true;
 }
-
-// ── Panel cycle ───────────────────────────────────────────────────────────────
 function showPanel(i){
   panels.forEach((p,j)=>{if(p)p.visible=(j===i);});
   [0,1,2].forEach(j=>$('d'+j).classList.toggle('on',j===i));
@@ -639,7 +659,6 @@ let tx0=0;
 document.addEventListener('touchstart',e=>{tx0=e.touches[0].clientX;},{passive:true});
 document.addEventListener('touchend',e=>{if(arLaunched&&e.changedTouches[0].clientX-tx0>55)doSwipe();});
 
-// ── MediaPipe ─────────────────────────────────────────────────────────────────
 function initMediaPipe(){
   if(typeof Hands==='undefined')return;
   const vid=$('container').querySelector('video');
@@ -650,10 +669,8 @@ function initMediaPipe(){
   hands.onResults(r=>{
     if(!r.multiHandLandmarks?.length){$('hand-dot').style.display='none';lastX=null;return;}
     const lm=r.multiHandLandmarks[0];
-    const hd=$('hand-dot');
-    hd.style.display='block';
-    hd.style.left=(lm[8].x*window.innerWidth)+'px';
-    hd.style.top=(lm[8].y*window.innerHeight)+'px';
+    const hd=$('hand-dot');hd.style.display='block';
+    hd.style.left=(lm[8].x*window.innerWidth)+'px';hd.style.top=(lm[8].y*window.innerHeight)+'px';
     const now=Date.now(),dx=lm[0].x-(lastX??lm[0].x);
     if(lastX!==null&&dx>0.09&&now-lastT>1000){lastT=now;doSwipe();}
     lastX=lm[0].x;
