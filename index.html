@@ -15,39 +15,42 @@ body { background:#000510; overflow:hidden; font-family:'Courier New',monospace;
 }
 .logo {
   font-size:clamp(1.4rem,6vw,2.6rem); letter-spacing:.4rem;
-  color:#00aaff; text-shadow:0 0 40px rgba(0,170,255,.9);
-  margin-bottom:.4rem;
+  color:#00aaff; text-shadow:0 0 40px rgba(0,170,255,.9); margin-bottom:.3rem;
 }
-.sub { font-size:.65rem; letter-spacing:.3rem; color:#00aaff; opacity:.35; margin-bottom:2.2rem }
+.sub { font-size:.65rem; letter-spacing:.3rem; color:#00aaff; opacity:.35; margin-bottom:2rem }
 .btn {
   padding:.7rem 2rem; font-size:.75rem; background:transparent;
   border:1px solid rgba(0,170,255,.5); color:#00aaff; cursor:pointer;
   font-family:inherit; letter-spacing:.18rem; text-transform:uppercase;
-  transition:all .2s; margin:.3rem; display:block; width:270px; text-align:center;
+  transition:all .2s; margin:.3rem; display:block; width:280px; text-align:center;
 }
 .btn:hover { background:rgba(0,170,255,.09); border-color:rgba(0,170,255,.95) }
 .note {
   margin-top:1rem; font-size:.58rem; color:#00aaff; opacity:.24;
-  text-align:center; max-width:280px; line-height:2;
+  text-align:center; max-width:290px; line-height:2.1;
 }
 
 #hud {
   display:none; position:fixed; top:14px; left:14px;
-  font-size:.58rem; letter-spacing:.08rem; color:#00aaff; opacity:.5;
-  z-index:50; line-height:2.2; pointer-events:none; text-transform:uppercase;
+  font-size:.58rem; letter-spacing:.08rem; color:#00aaff; opacity:.55;
+  z-index:50; line-height:2.3; pointer-events:none; text-transform:uppercase;
 }
 #status {
   display:none; position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
-  font-size:.6rem; letter-spacing:.14rem; color:#00aaff; opacity:.4;
+  font-size:.62rem; letter-spacing:.14rem; color:#00aaff; opacity:.45;
   z-index:50; pointer-events:none; text-transform:uppercase; white-space:nowrap;
 }
 #toast {
-  position:fixed; bottom:56px; left:50%; transform:translateX(-50%);
-  font-size:.6rem; color:#00aaff; opacity:0; z-index:50; pointer-events:none;
-  letter-spacing:.12rem; text-transform:uppercase; white-space:nowrap;
-  transition:opacity .3s;
+  position:fixed; bottom:58px; left:50%; transform:translateX(-50%);
+  font-size:.62rem; color:#00aaff; opacity:0; z-index:50; pointer-events:none;
+  letter-spacing:.12rem; text-transform:uppercase; white-space:nowrap; transition:opacity .35s;
 }
-#toast.show { opacity:.5 }
+#toast.show { opacity:.55 }
+
+/* hand tracking indicator dots */
+#hand-dots {
+  display:none; position:fixed; inset:0; z-index:40; pointer-events:none;
+}
 canvas { display:block; position:fixed; top:0; left:0 }
 </style>
 </head>
@@ -59,17 +62,19 @@ canvas { display:block; position:fixed; top:0; left:0 }
   <button class="btn" onclick="startAR()">⬡ AR Mode (Quest)</button>
   <button class="btn" onclick="startDemo()">⬡ Preview Mode</button>
   <p class="note">
-    AR: Close your whole hand to grab<br>
-    Open hand to release world-locked<br>
-    Preview: click to spawn · drag to move
+    Slowly scan floor until ring locks green<br>
+    Tap to spawn · Close full hand to grab<br>
+    Open hand to release world-locked
   </p>
 </div>
 
 <div id="hud">
   <div>SYS: <span style="color:#00ff88">ONLINE</span></div>
-  <div id="h-state">STATE: IDLE</div>
-  <div id="h-curl">CURL: —</div>
   <div id="h-surface">SURFACE: SCANNING</div>
+  <div id="h-hands">HANDS: WAITING</div>
+  <div id="h-curl-l">L CURL: —</div>
+  <div id="h-curl-r">R CURL: —</div>
+  <div id="h-state">CUBE: NONE</div>
 </div>
 <div id="status"></div>
 <div id="toast"></div>
@@ -78,18 +83,44 @@ canvas { display:block; position:fixed; top:0; left:0 }
 <script>
 "use strict";
 
-// ─── globals ────────────────────────────────────────────────
+// ═══════════════════════════════════════════════
+// GLOBALS
+// ═══════════════════════════════════════════════
 var scene, camera, renderer, clock, scanT = 0;
-var reticleGroup;
+var reticleGroup, reticleRings = [], reticleLocked = false;
 var holoCube = null, cubeSpawned = false;
 var grabbed = false, grabHand = null;
-var xrSession = null, hitSrc = null, refSpace = null;
-var handState = {
-  left:  { wHist:[], curl:0, wasClosed:false, wasPinch:false },
-  right: { wHist:[], curl:0, wasClosed:false, wasPinch:false }
-};
 
-// ─── helpers ────────────────────────────────────────────────
+// XR
+var xrSession = null, hitSrc = null;
+var refSpaceLocal = null;   // local-floor — best for plane detection
+var refSpaceViewer = null;  // viewer — for hit-test source
+
+// Hand tracking state — keyed by handedness string
+var handState = {
+  left:  { curl:0, wasClosed:false, wasPinch:false, palmPos:null, hasJoints:false },
+  right: { curl:0, wasClosed:false, wasPinch:false, palmPos:null, hasJoints:false }
+};
+var handsDetected = false;
+
+// Joint name arrays
+var KNUCKLE_JOINTS = [
+  'index-finger-metacarpal',
+  'middle-finger-metacarpal',
+  'ring-finger-metacarpal',
+  'pinky-metacarpal'
+];
+var FINGERTIP_JOINTS = [
+  'thumb-tip',
+  'index-finger-tip',
+  'middle-finger-tip',
+  'ring-finger-tip',
+  'pinky-finger-tip'
+];
+
+// ═══════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════
 function holo(c, o) {
   o = (o === undefined) ? 1 : o;
   return new THREE.MeshBasicMaterial({
@@ -101,400 +132,565 @@ function lmat(c, o) {
   o = (o === undefined) ? 1 : o;
   return new THREE.LineBasicMaterial({ color:c, transparent:o<1, opacity:o });
 }
-function setHUD(id, t) { var e=document.getElementById(id); if(e) e.textContent=t; }
+function el(id) { return document.getElementById(id); }
+function setHUD(id, t) { var e=el(id); if(e) e.textContent=t; }
 function setStatus(t) { setHUD('status', t); }
 function toast(msg, ms) {
   ms = ms || 2000;
-  var e = document.getElementById('toast');
+  var e = el('toast');
   e.textContent = msg; e.classList.add('show');
   setTimeout(function(){ e.classList.remove('show'); }, ms);
 }
 
-// ─── TESSERACT ───────────────────────────────────────────────
-var KNUCKLES  = ['index-finger-metacarpal','middle-finger-metacarpal','ring-finger-metacarpal','pinky-metacarpal'];
-var TIPS      = ['thumb-tip','index-finger-tip','middle-finger-tip','ring-finger-tip','pinky-finger-tip'];
+// ═══════════════════════════════════════════════
+// RETICLE  — animated, color-shifts on lock
+// ═══════════════════════════════════════════════
+function buildReticle() {
+  var g = new THREE.Group();
+  g.visible = false;
 
+  // ── Outer spinning dashed ring ─────────────────
+  var outerRing = new THREE.Mesh(
+    new THREE.RingGeometry(0.14, 0.155, 64),
+    holo(0x00aaff, 0.5));
+  outerRing.rotation.x = -Math.PI/2;
+  outerRing.userData.spinRing = true;
+  g.add(outerRing);
+
+  // ── Mid solid ring ─────────────────────────────
+  var midRing = new THREE.Mesh(
+    new THREE.RingGeometry(0.095, 0.108, 48),
+    holo(0x00ccff, 0.75));
+  midRing.rotation.x = -Math.PI/2;
+  midRing.userData.midRing = true;
+  g.add(midRing);
+
+  // ── Inner dot ──────────────────────────────────
+  var innerDot = new THREE.Mesh(
+    new THREE.CircleGeometry(0.012, 24),
+    holo(0x00ffff, 0.9));
+  innerDot.rotation.x = -Math.PI/2;
+  innerDot.userData.innerDot = true;
+  g.add(innerDot);
+
+  // ── 4 corner brackets in plane ────────────────
+  var bLen = 0.055, bOff = 0.17;
+  var brackets = [
+    [[bOff,0,bOff],[bOff,0,bOff-bLen]], [[bOff,0,bOff],[bOff-bLen,0,bOff]],
+    [[-bOff,0,bOff],[-bOff,0,bOff-bLen]], [[-bOff,0,bOff],[-(bOff-bLen),0,bOff]],
+    [[bOff,0,-bOff],[bOff,0,-(bOff-bLen)]], [[bOff,0,-bOff],[bOff-bLen,0,-bOff]],
+    [[-bOff,0,-bOff],[-bOff,0,-(bOff-bLen)]], [[-bOff,0,-bOff],[-(bOff-bLen),0,-bOff]]
+  ];
+  for (var bi=0; bi<brackets.length; bi++) {
+    var pts=[new THREE.Vector3(brackets[bi][0][0],brackets[bi][0][1],brackets[bi][0][2]),
+             new THREE.Vector3(brackets[bi][1][0],brackets[bi][1][1],brackets[bi][1][2])];
+    var bl=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lmat(0x00aaff,.85));
+    bl.userData.bracket=true; g.add(bl);
+  }
+
+  // ── 4 axis ticks ──────────────────────────────
+  var tickDirs = [[.13,0,0],[-.13,0,0],[0,0,.13],[0,0,-.13]];
+  for (var ti=0; ti<4; ti++) {
+    var tk = new THREE.Mesh(new THREE.BoxGeometry(.022,.001,.003), holo(0x00aaff,.55));
+    tk.position.set(tickDirs[ti][0],0,tickDirs[ti][2]);
+    g.add(tk);
+  }
+
+  // ── Scan line (sweeps across floor) ───────────
+  var scanLine = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.32, 0.003),
+    holo(0x00ffff, 0.45));
+  scanLine.rotation.x = -Math.PI/2;
+  scanLine.userData.scanLine = true;
+  g.add(scanLine);
+
+  // ── Pulse ring (expands outward on detect) ────
+  var pulseRing = new THREE.Mesh(
+    new THREE.RingGeometry(0.16, 0.168, 48),
+    holo(0x00aaff, 0.0));
+  pulseRing.rotation.x = -Math.PI/2;
+  pulseRing.userData.pulseRing = true;
+  g.add(pulseRing);
+
+  reticleRings = [outerRing, midRing, innerDot, pulseRing];
+  return g;
+}
+
+function tickReticle(detected) {
+  if (!reticleGroup || !reticleGroup.visible) return;
+  var T = scanT;
+
+  reticleGroup.traverse(function(c) {
+    // outer ring rotates
+    if (c.userData.spinRing) {
+      c.rotation.z = T * 0.9;
+      c.material.color.setHex(reticleLocked ? 0x00ff88 : 0x00aaff);
+      c.material.opacity = 0.35 + Math.sin(T*3)*0.15;
+    }
+    // mid ring pulses
+    if (c.userData.midRing) {
+      c.material.color.setHex(reticleLocked ? 0x00ff88 : 0x00ccff);
+      var s = 1 + Math.sin(T*4)*0.04;
+      c.scale.set(s,1,s);
+      c.material.opacity = 0.6 + Math.sin(T*3)*0.2;
+    }
+    // inner dot
+    if (c.userData.innerDot) {
+      c.material.color.setHex(reticleLocked ? 0x88ffaa : 0x00ffff);
+      c.material.opacity = 0.7 + Math.sin(T*6)*0.2;
+    }
+    // scan line sweeps
+    if (c.userData.scanLine) {
+      c.position.x = Math.sin(T*2) * 0.14;
+      c.material.opacity = 0.3 + Math.sin(T*2)*0.2;
+    }
+    // bracket color
+    if (c.userData.bracket) {
+      c.material.color.setHex(reticleLocked ? 0x00ff88 : 0x00aaff);
+      c.material.opacity = reticleLocked ? 0.95 : 0.7;
+    }
+    // pulse ring expands
+    if (c.userData.pulseRing) {
+      var ps = 1 + (T % 1.2) / 1.2 * 0.6;
+      c.scale.set(ps,1,ps);
+      c.material.opacity = Math.max(0, 0.35 - (T%1.2)/1.2*0.35);
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════
+// TESSERACT CUBE
+// ═══════════════════════════════════════════════
 function buildCube() {
   var g = new THREE.Group();
   var S = 0.11, h = S/2;
 
-  // outer wireframe
   g.add(new THREE.LineSegments(
     new THREE.EdgesGeometry(new THREE.BoxGeometry(S,S,S)),
     lmat(0x22ccff, 0.92)));
 
-  // inner counter-spinning wireframe
   var inn = new THREE.LineSegments(
     new THREE.EdgesGeometry(new THREE.BoxGeometry(S*.52,S*.52,S*.52)),
     lmat(0x88eeff, 0.65));
   inn.userData.inner = true; g.add(inn);
 
-  // faint solid body
   g.add(new THREE.Mesh(new THREE.BoxGeometry(S,S,S), holo(0x002266, 0.05)));
 
-  // glow layers
-  var g3 = new THREE.Mesh(new THREE.SphereGeometry(S*.52,16,16), holo(0x0033aa, 0.07));
-  g3.userData.g3 = true; g.add(g3);
-  var g2 = new THREE.Mesh(new THREE.SphereGeometry(S*.30,14,14), holo(0x0099ff, 0.22));
-  g2.userData.g2 = true; g.add(g2);
-  var g1 = new THREE.Mesh(new THREE.SphereGeometry(S*.15,12,12), holo(0x55ddff, 0.65));
-  g1.userData.g1 = true; g.add(g1);
-  var cr = new THREE.Mesh(new THREE.SphereGeometry(S*.07,10,10), holo(0xeeffff, 1.0));
-  cr.userData.core = true; g.add(cr);
+  var gw3=new THREE.Mesh(new THREE.SphereGeometry(S*.52,16,16),holo(0x0033aa,0.07)); gw3.userData.g3=true; g.add(gw3);
+  var gw2=new THREE.Mesh(new THREE.SphereGeometry(S*.30,14,14),holo(0x0099ff,0.22)); gw2.userData.g2=true; g.add(gw2);
+  var gw1=new THREE.Mesh(new THREE.SphereGeometry(S*.15,12,12),holo(0x55ddff,0.65)); gw1.userData.g1=true; g.add(gw1);
+  var cr =new THREE.Mesh(new THREE.SphereGeometry(S*.07,10,10),holo(0xeeffff,1.00)); cr.userData.core=true; g.add(cr);
 
-  // corner dots
-  var cx = [-h,h], cy = [-h,h], cz = [-h,h];
   for (var xi=0;xi<2;xi++) for (var yi=0;yi<2;yi++) for (var zi=0;zi<2;zi++) {
-    var d = new THREE.Mesh(new THREE.SphereGeometry(.0055,6,6), holo(0x88eeff, 0.85));
-    d.position.set(cx[xi], cy[yi], cz[zi]); g.add(d);
+    var d=new THREE.Mesh(new THREE.SphereGeometry(.0055,6,6),holo(0x88eeff,.85));
+    d.position.set(xi?h:-h, yi?h:-h, zi?h:-h); g.add(d);
   }
-
-  // energy tendrils center→corners
-  var tc = [[-h,-h,-h],[h,h,h],[h,-h,-h],[-h,h,h]];
-  for (var ti=0; ti<tc.length; ti++) {
-    var pts = [new THREE.Vector3(0,0,0), new THREE.Vector3(tc[ti][0],tc[ti][1],tc[ti][2])];
-    var tl = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lmat(0x44bbff, 0.28));
-    tl.userData.tendril = true; g.add(tl);
+  var tc=[[-h,-h,-h],[h,h,h],[h,-h,-h],[-h,h,h]];
+  for (var ti=0;ti<tc.length;ti++) {
+    var pts=[new THREE.Vector3(0,0,0),new THREE.Vector3(tc[ti][0],tc[ti][1],tc[ti][2])];
+    var tl=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),lmat(0x44bbff,.28));
+    tl.userData.tendril=true; g.add(tl);
   }
-
-  // ground rings
-  var r1 = new THREE.Mesh(new THREE.RingGeometry(S*.88,S*.96,40), holo(0x0088ff, 0.28));
+  var r1=new THREE.Mesh(new THREE.RingGeometry(S*.88,S*.96,40),holo(0x0088ff,.28));
   r1.rotation.x=-Math.PI/2; r1.userData.ring1=true; g.add(r1);
-  var r2 = new THREE.Mesh(new THREE.RingGeometry(S*1.28,S*1.35,48), holo(0x0055ff, 0.12));
+  var r2=new THREE.Mesh(new THREE.RingGeometry(S*1.28,S*1.35,48),holo(0x0055ff,.12));
   r2.rotation.x=-Math.PI/2; r2.userData.ring2=true; g.add(r2);
 
-  g.userData.sx = 0.008; g.userData.sy = 0.012; g.userData.sz = 0.005;
-  g.userData.fp = Math.random()*Math.PI*2;
+  g.userData.sx=0.008; g.userData.sy=0.012; g.userData.sz=0.005;
+  g.userData.fp=Math.random()*Math.PI*2;
   return g;
 }
 
 function tickCube(isGrabbed) {
   if (!holoCube) return;
-  var T = scanT, sp = isGrabbed ? 5.5 : 2.2;
+  var T=scanT, sp=isGrabbed?5.5:2.2;
 
   if (!isGrabbed) {
     holoCube.rotation.x += holoCube.userData.sx;
     holoCube.rotation.y += holoCube.userData.sy;
     holoCube.rotation.z += holoCube.userData.sz;
-    holoCube.position.y += Math.sin(T*1.4 + holoCube.userData.fp) * 0.00035;
+    holoCube.position.y += Math.sin(T*1.4+holoCube.userData.fp)*0.00035;
   }
-
-  // smooth spin speed
-  var tx = isGrabbed ? 0.001 : 0.008;
-  var ty = isGrabbed ? 0.002 : 0.012;
-  var tz = isGrabbed ? 0.0005: 0.005;
-  holoCube.userData.sx += (tx - holoCube.userData.sx) * 0.06;
-  holoCube.userData.sy += (ty - holoCube.userData.sy) * 0.06;
-  holoCube.userData.sz += (tz - holoCube.userData.sz) * 0.06;
+  var tx=isGrabbed?.001:.008, ty=isGrabbed?.002:.012, tz=isGrabbed?.0005:.005;
+  holoCube.userData.sx += (tx-holoCube.userData.sx)*0.06;
+  holoCube.userData.sy += (ty-holoCube.userData.sy)*0.06;
+  holoCube.userData.sz += (tz-holoCube.userData.sz)*0.06;
 
   holoCube.traverse(function(c) {
-    if (c.userData.inner) { c.rotation.x -= 0.011; c.rotation.y += 0.008; }
-    if (c.userData.core)
-      c.material.opacity = (isGrabbed?.95:.70) + Math.sin(T*sp)*.05;
-    if (c.userData.g1)
-      c.material.opacity = (isGrabbed?.62:.25) + Math.sin(T*sp+1)*.08;
-    if (c.userData.g2)
-      c.material.opacity = (isGrabbed?.22:.12) + Math.sin(T*sp+2)*.05;
+    if (c.userData.inner) { c.rotation.x-=.011; c.rotation.y+=.008; }
+    if (c.userData.core)  c.material.opacity=(isGrabbed?.95:.70)+Math.sin(T*sp)*.05;
+    if (c.userData.g1)    c.material.opacity=(isGrabbed?.62:.25)+Math.sin(T*sp+1)*.08;
+    if (c.userData.g2)    c.material.opacity=(isGrabbed?.22:.12)+Math.sin(T*sp+2)*.05;
     if (c.userData.g3) {
-      var s = (isGrabbed?1.35:1.0) + Math.sin(T*sp*.7)*.12;
+      var s=(isGrabbed?1.35:1.0)+Math.sin(T*sp*.7)*.12;
       c.scale.set(s,s,s);
-      c.material.opacity = (isGrabbed?.20:.06) + Math.sin(T*sp)*.03;
+      c.material.opacity=(isGrabbed?.20:.06)+Math.sin(T*sp)*.03;
     }
-    if (c.userData.ring1) {
-      var s1=1+Math.sin(T*2)*.07; c.scale.set(s1,1,s1);
-      c.material.opacity = isGrabbed?.58:(.26+Math.sin(T*2)*.08);
-    }
-    if (c.userData.ring2) {
-      var s2=1+Math.sin(T*1.5+1)*.1; c.scale.set(s2,1,s2);
-      c.material.opacity = isGrabbed?.22:(.11+Math.sin(T*1.8)*.04);
-    }
-    if (c.userData.tendril)
-      c.material.opacity = (isGrabbed?.60:.22) + Math.sin(T*4)*.08;
+    if (c.userData.ring1) { var s1=1+Math.sin(T*2)*.07; c.scale.set(s1,1,s1); c.material.opacity=isGrabbed?.58:(.26+Math.sin(T*2)*.08); }
+    if (c.userData.ring2) { var s2=1+Math.sin(T*1.5+1)*.1; c.scale.set(s2,1,s2); c.material.opacity=isGrabbed?.22:(.11+Math.sin(T*1.8)*.04); }
+    if (c.userData.tendril) c.material.opacity=(isGrabbed?.60:.22)+Math.sin(T*4)*.08;
   });
 }
 
 function spawnCube(pos) {
   if (holoCube) scene.remove(holoCube);
   holoCube = buildCube();
-  holoCube.position.set(pos.x, pos.y+0.06, pos.z);
+  holoCube.position.set(pos.x, pos.y+0.08, pos.z);
   scene.add(holoCube);
-  cubeSpawned = true; grabbed = false;
-  setHUD('h-state', 'STATE: ACTIVE');
+  cubeSpawned=true; grabbed=false;
+  reticleGroup.visible=false;
+  setHUD('h-state','CUBE: ACTIVE ✦');
   setStatus('CLOSE HAND TO GRAB');
-  toast('TESSERACT SPAWNED — CLOSE HAND TO GRAB', 2200);
+  toast('TESSERACT SPAWNED', 1800);
 }
 
-// ─── HAND TRACKING ──────────────────────────────────────────
-function getJP(frame, joint) {
+// ═══════════════════════════════════════════════
+// HAND TRACKING — WebXR Native Hand Input API
+// Critical fixes:
+//  1. Use refSpaceLocal (local-floor), not viewer
+//  2. Proper joint iteration with try/catch per joint
+//  3. Listen for inputsourceschange to detect hand connect
+//  4. Validate frame.getJointPose exists before calling
+// ═══════════════════════════════════════════════
+function getJointPos(frame, joint) {
+  // Guard: frame.getJointPose may not exist on all runtimes
+  if (!frame.getJointPose) return null;
   try {
-    var p = frame.getJointPose(joint, refSpace);
-    if (!p) return null;
+    var pose = frame.getJointPose(joint, refSpaceLocal);
+    if (!pose) return null;
+    // Return a fresh Vector3 — NEVER assign XR objects to Three.js properties
     return new THREE.Vector3(
-      p.transform.position.x,
-      p.transform.position.y,
-      p.transform.position.z);
+      pose.transform.position.x,
+      pose.transform.position.y,
+      pose.transform.position.z
+    );
   } catch(e) { return null; }
 }
 
-function getPalm(frame, hand) {
+function getPalmCenter(frame, hand) {
   var total = new THREE.Vector3(), n = 0;
-  for (var i=0; i<KNUCKLES.length; i++) {
-    try {
-      var j = hand.get(KNUCKLES[i]);
-      var p = j ? getJP(frame,j) : null;
-      if (p) { total.add(p); n++; }
-    } catch(e) {}
+  // Metacarpals
+  for (var i=0; i<KNUCKLE_JOINTS.length; i++) {
+    var joint = null;
+    try { joint = hand.get(KNUCKLE_JOINTS[i]); } catch(e) {}
+    if (!joint) continue;
+    var p = getJointPos(frame, joint);
+    if (p) { total.add(p); n++; }
   }
-  try {
-    var wj = hand.get('wrist');
-    var wp = wj ? getJP(frame,wj) : null;
+  // Wrist
+  var wj = null;
+  try { wj = hand.get('wrist'); } catch(e) {}
+  if (wj) {
+    var wp = getJointPos(frame, wj);
     if (wp) { total.add(wp); n++; }
-  } catch(e) {}
-  if (n===0) return null;
+  }
+  if (n === 0) return null;
   return total.divideScalar(n);
 }
 
-function getCurl(frame, hand, palm) {
+function getCurlScore(frame, hand, palm) {
   if (!palm) return 0;
-  var sum=0, n=0;
-  for (var i=0; i<TIPS.length; i++) {
-    try {
-      var j = hand.get(TIPS[i]);
-      var tp = j ? getJP(frame,j) : null;
-      if (!tp) continue;
-      // open ~0.10-0.14m, closed ~0.03-0.07m
-      var score = 1 - Math.min(1, Math.max(0, (tp.distanceTo(palm)-0.035)/0.08));
-      sum += score; n++;
-    } catch(e) {}
+  var sum = 0, n = 0;
+  for (var i=0; i<FINGERTIP_JOINTS.length; i++) {
+    var joint = null;
+    try { joint = hand.get(FINGERTIP_JOINTS[i]); } catch(e) {}
+    if (!joint) continue;
+    var tp = getJointPos(frame, joint);
+    if (!tp) continue;
+    var dist = tp.distanceTo(palm);
+    // Calibration: open ~0.10-0.14m, closed ~0.03-0.07m from palm
+    var score = 1.0 - Math.min(1, Math.max(0, (dist - 0.035) / 0.075));
+    sum += score; n++;
   }
-  return n===0 ? 0 : sum/n;
+  return n === 0 ? 0 : sum / n;
 }
 
 function processHands(frame) {
-  if (!xrSession) return;
+  if (!xrSession || !refSpaceLocal) return;
+
+  var anyHands = false;
+
   for (var si=0; si<xrSession.inputSources.length; si++) {
     var src = xrSession.inputSources[si];
-    if (!src.hand) continue;
-    var side = src.handedness;
-    var hs = handState[side]; if (!hs) continue;
+    if (!src || !src.hand) continue;
+
+    anyHands = true;
+    var side = src.handedness; // 'left' or 'right'
+    var hs = handState[side];
+    if (!hs) continue;
+
     var hand = src.hand;
 
-    var palm = getPalm(frame, hand);
-    var curl = getCurl(frame, hand, palm);
+    // Get palm center
+    var palm = getPalmCenter(frame, hand);
+    if (!palm) continue; // joints not tracked yet this frame
+    hs.palmPos = palm;
+    hs.hasJoints = true;
+
+    // Curl score
+    var curl = getCurlScore(frame, hand, palm);
     hs.curl = curl;
 
-    if (side==='right') setHUD('h-curl', 'CURL: '+Math.round(curl*100)+'%');
+    // Update HUD
+    var pct = Math.round(curl * 100);
+    setHUD(side==='left' ? 'h-curl-l' : 'h-curl-r',
+           (side==='left'?'L':'R') + ' CURL: ' + pct + '%');
 
-    var closed = curl > 0.60;
+    var isClosed  = curl > 0.58;
     var wasClosed = hs.wasClosed;
-    hs.wasClosed = closed;
+    hs.wasClosed  = isClosed;
 
-    // CLOSE: grab or spawn
-    if (closed && !wasClosed && palm) {
-      if (cubeSpawned && holoCube && palm.distanceTo(holoCube.position) < 0.28) {
-        grabbed=true; grabHand=side;
-        setHUD('h-state','STATE: GRABBED');
-        toast('TESSERACT IN HAND', 1200);
+    // ── HAND CLOSED → grab or spawn ───────────────
+    if (isClosed && !wasClosed && palm) {
+      if (cubeSpawned && holoCube) {
+        var dist = palm.distanceTo(holoCube.position);
+        if (dist < 0.30) {
+          grabbed=true; grabHand=side;
+          setHUD('h-state','CUBE: ✦ GRABBED');
+          toast('GRABBED', 1000);
+        }
       } else if (!cubeSpawned) {
+        // closed fist in air = spawn at palm
         spawnCube(palm);
       }
     }
 
-    // OPEN: release
-    if (!closed && wasClosed && grabbed && grabHand===side) {
+    // ── HAND OPENED → release ─────────────────────
+    if (!isClosed && wasClosed && grabbed && grabHand===side) {
       grabbed=false; grabHand=null;
-      setHUD('h-state','STATE: RELEASED');
-      setStatus('WORLD LOCKED — CLOSE HAND TO GRAB AGAIN');
-      setTimeout(function(){ setHUD('h-state','STATE: ACTIVE'); }, 1200);
+      setHUD('h-state','CUBE: RELEASED');
+      setStatus('WORLD LOCKED — CLOSE HAND TO GRAB');
+      setTimeout(function(){ if(cubeSpawned) setHUD('h-state','CUBE: ACTIVE ✦'); }, 1200);
     }
 
-    // FOLLOW palm while grabbed
+    // ── While grabbed: cube follows palm ─────────
     if (grabbed && grabHand===side && palm && holoCube) {
       holoCube.position.x += (palm.x - holoCube.position.x) * 0.5;
-      holoCube.position.y += (palm.y+0.018 - holoCube.position.y) * 0.5;
+      holoCube.position.y += ((palm.y + 0.02) - holoCube.position.y) * 0.5;
       holoCube.position.z += (palm.z - holoCube.position.z) * 0.5;
     }
 
-    // pinch = spawn fallback (if cube not yet placed)
-    try {
-      var ij=hand.get('index-finger-tip'), tj=hand.get('thumb-tip');
-      var ip=ij?getJP(frame,ij):null, tp2=tj?getJP(frame,tj):null;
-      if (ip&&tp2) {
-        var pinch = ip.distanceTo(tp2)<0.032;
-        var wasP = hs.wasPinch; hs.wasPinch=pinch;
-        if (pinch&&!wasP&&!cubeSpawned&&palm) spawnCube(palm);
+    // ── Pinch fallback: spawn if no cube yet ─────
+    var ij=null, tj=null;
+    try { ij=hand.get('index-finger-tip'); } catch(e) {}
+    try { tj=hand.get('thumb-tip'); } catch(e) {}
+    if (ij && tj) {
+      var ip=getJointPos(frame,ij), tp=getJointPos(frame,tj);
+      if (ip && tp) {
+        var pinch = ip.distanceTo(tp) < 0.032;
+        var wasPinch = hs.wasPinch; hs.wasPinch = pinch;
+        if (pinch && !wasPinch && !cubeSpawned && palm) {
+          spawnCube(palm);
+        }
       }
-    } catch(e) {}
+    }
+  }
+
+  if (anyHands !== handsDetected) {
+    handsDetected = anyHands;
+    setHUD('h-hands', anyHands ? 'HANDS: TRACKED ✓' : 'HANDS: WAITING');
   }
 }
 
-// ─── SCENE ──────────────────────────────────────────────────
+// ═══════════════════════════════════════════════
+// SCENE INIT
+// ═══════════════════════════════════════════════
 function initScene(xrMode) {
-  clock  = new THREE.Clock();
-  scene  = new THREE.Scene();
+  clock = new THREE.Clock();
+  scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.01, 100);
 
   renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
   renderer.setPixelRatio(devicePixelRatio);
   renderer.setSize(innerWidth, innerHeight);
   renderer.setClearColor(0x000000, 0);
-  renderer.xr.enabled = (xrMode === true);   // KEY: only true in AR mode
+  // KEY: only activate XR subsystem when actually entering AR
+  // When xr.enabled=true in demo mode it locks camera.position as read-only
+  renderer.xr.enabled = (xrMode === true);
   document.body.appendChild(renderer.domElement);
 
-  // Reticle
-  reticleGroup = new THREE.Group();
-  var rO=new THREE.Mesh(new THREE.RingGeometry(.09,.106,40), holo(0x00aaff,.78));
-  var rI=new THREE.Mesh(new THREE.RingGeometry(.013,.022,16), holo(0x00ffff,.72));
-  var rP=new THREE.Mesh(new THREE.RingGeometry(.135,.14,44),  holo(0x0066ff,.20));
-  rO.rotation.x=rI.rotation.x=rP.rotation.x=-Math.PI/2;
-  reticleGroup.add(rO,rI,rP);
-  var ticks=[[ .13,0,0],[-.13,0,0],[0,0, .13],[0,0,-.13]];
-  for (var ti=0;ti<ticks.length;ti++) {
-    var tk=new THREE.Mesh(new THREE.BoxGeometry(.016,.001,.002),holo(0x00aaff,.58));
-    tk.position.set(ticks[ti][0],ticks[ti][1],ticks[ti][2]);
-    reticleGroup.add(tk);
-  }
-  reticleGroup.visible=false;
+  reticleGroup = buildReticle();
   scene.add(reticleGroup);
 
   window.addEventListener('resize', function() {
-    camera.aspect=innerWidth/innerHeight;
+    camera.aspect = innerWidth/innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth,innerHeight);
   });
 }
 
-// ─── AR MODE ────────────────────────────────────────────────
+// ═══════════════════════════════════════════════
+// AR MODE
+// ═══════════════════════════════════════════════
 async function startAR() {
   if (!navigator.xr) { alert('WebXR not available'); return; }
   var ok = await navigator.xr.isSessionSupported('immersive-ar').catch(function(){ return false; });
-  if (!ok) { alert('AR not supported — use Preview Mode'); return; }
+  if (!ok) { alert('AR not supported on this device.\nUse Preview Mode.'); return; }
 
   initScene(true);
 
   try {
     xrSession = await navigator.xr.requestSession('immersive-ar', {
-      requiredFeatures: ['hit-test'],
-      optionalFeatures: ['hand-tracking','dom-overlay','local-floor'],
+      // local-floor gives the best ground plane / hit-test results
+      requiredFeatures: ['hit-test', 'local-floor'],
+      optionalFeatures: ['hand-tracking', 'dom-overlay', 'plane-detection'],
       domOverlay: { root: document.body }
     });
+
     renderer.xr.setSession(xrSession);
 
-    var vSp = await xrSession.requestReferenceSpace('viewer');
-    hitSrc   = await xrSession.requestHitTestSource({ space: vSp });
-    refSpace = await xrSession.requestReferenceSpace('local');
+    // local-floor reference space: y=0 IS the floor
+    // This gives dramatically better plane detection than 'local'
+    refSpaceLocal = await xrSession.requestReferenceSpace('local-floor');
 
-    xrSession.addEventListener('select', function() {
-      // tap = spawn cube at reticle / in front of camera
-      if (!cubeSpawned) {
-        if (reticleGroup.visible) {
-          spawnCube(reticleGroup.position);
-        } else {
-          var d=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
-          spawnCube(camera.position.clone().addScaledVector(d,.55));
+    // Hit-test MUST use 'viewer' space as its source
+    refSpaceViewer = await xrSession.requestReferenceSpace('viewer');
+    hitSrc = await xrSession.requestHitTestSource({ space: refSpaceViewer });
+
+    // Log when input sources change (hand connect/disconnect)
+    xrSession.addEventListener('inputsourceschange', function(e) {
+      var added = e.added || [];
+      for (var i=0; i<added.length; i++) {
+        if (added[i].hand) {
+          setHUD('h-hands','HANDS: TRACKED ✓');
+          toast('HAND DETECTED', 1200);
         }
       }
     });
-    xrSession.addEventListener('end', function(){ xrSession=null; hitSrc=null; });
+
+    xrSession.addEventListener('select', function() {
+      if (!cubeSpawned && reticleGroup.visible) {
+        spawnCube(reticleGroup.position);
+      } else if (!cubeSpawned) {
+        var d = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+        spawnCube(camera.position.clone().addScaledVector(d, .55));
+      }
+    });
+
+    xrSession.addEventListener('end', function() {
+      xrSession=null; hitSrc=null; refSpaceLocal=null;
+    });
 
     renderer.setAnimationLoop(arLoop);
-    showUI('POINT AT SURFACE · TAP TO SPAWN · CLOSE HAND TO GRAB');
-  } catch(e) { alert('AR Error: '+e.message); }
+    showUI('SCAN FLOOR SLOWLY UNTIL RING TURNS GREEN');
+
+  } catch(e) {
+    // If local-floor not supported, fallback to local
+    console.warn('local-floor failed, trying local:', e);
+    try {
+      refSpaceLocal = await xrSession.requestReferenceSpace('local');
+      renderer.setAnimationLoop(arLoop);
+      showUI('SCAN FLOOR · TAP TO SPAWN · CLOSE HAND TO GRAB');
+    } catch(e2) {
+      alert('AR Error: ' + e2.message);
+    }
+  }
 }
 
 function arLoop(ts, frame) {
   if (!frame) return;
   var dt = clock.getDelta(); scanT += dt;
 
-  if (hitSrc && refSpace && !cubeSpawned) {
+  // ── Hit-test for plane detection ─────────────────────────
+  // Uses refSpaceLocal so the hit pose is in floor-relative coordinates
+  if (hitSrc && refSpaceLocal && !cubeSpawned) {
     var hits = frame.getHitTestResults(hitSrc);
     if (hits.length > 0) {
-      var pose = hits[0].getPose(refSpace);
-      var pp=pose.transform.position, po=pose.transform.orientation;
-      reticleGroup.position.set(pp.x, pp.y, pp.z);
-      reticleGroup.quaternion.set(po.x, po.y, po.z, po.w);
-      reticleGroup.visible=true;
-      var rs=1+Math.sin(scanT*3)*.03;
-      reticleGroup.scale.set(rs,1,rs);
-      setHUD('h-surface','SURFACE: DETECTED ✓');
+      var pose = hits[0].getPose(refSpaceLocal);
+      if (pose) {
+        var pp = pose.transform.position;
+        var po = pose.transform.orientation;
+        // SAFE: copy values into our Vector3/Quaternion — never assign XR objects
+        reticleGroup.position.set(pp.x, pp.y, pp.z);
+        reticleGroup.quaternion.set(po.x, po.y, po.z, po.w);
+        reticleGroup.visible = true;
+        reticleLocked = true;
+        setHUD('h-surface','SURFACE: LOCKED ✓');
+      }
     } else {
-      reticleGroup.visible=false;
+      reticleLocked = false;
+      reticleGroup.visible = true; // keep visible, just unlocked color
       setHUD('h-surface','SURFACE: SCANNING...');
     }
   }
 
+  tickReticle(reticleLocked);
   processHands(frame);
   tickCube(grabbed);
   renderer.render(scene, camera);
 }
 
-// ─── DEMO MODE ──────────────────────────────────────────────
+// ═══════════════════════════════════════════════
+// PREVIEW / DEMO MODE
+// ═══════════════════════════════════════════════
 function startDemo() {
-  initScene(false);   // xr.enabled stays FALSE → camera.position is writable
-  camera.position.set(0, 1.4, 0.6);
-  camera.lookAt(0, 1.1, -0.5);
-  showUI('CLICK TO SPAWN · DRAG CUBE · SPACE = RESPAWN');
+  initScene(false); // xr.enabled=false → camera fully writable
+  camera.position.set(0, 1.4, 0.7);
+  camera.lookAt(0, 1.0, -0.4);
+  showUI('CLICK TO SPAWN · DRAG TO MOVE · SPACE = RESPAWN');
+
+  // Animated reticle on demo floor
+  reticleGroup.visible = true;
+  reticleGroup.position.set(0, 0, -0.8);
 
   var drag=false, pM={x:0,y:0}, camA={x:0,y:0};
 
   renderer.domElement.addEventListener('mousedown', function(e) {
     if (e.button!==0) return;
-    drag=true; pM={x:e.clientX,y:e.clientY};
+    drag=true; pM={x:e.clientX, y:e.clientY};
     if (holoCube && nearCube(e.clientX,e.clientY)) {
       grabbed=true; grabHand='mouse';
-      setHUD('h-state','STATE: GRABBED');
+      setHUD('h-state','CUBE: ✦ GRABBED');
     }
   });
   renderer.domElement.addEventListener('mousemove', function(e) {
     if (!drag) return;
     if (grabbed && grabHand==='mouse') {
-      moveCubeTo(e.clientX,e.clientY);
+      moveCubeTo(e.clientX, e.clientY);
     } else {
       camA.y += (e.clientX-pM.x)*.005;
       camA.x += (e.clientY-pM.y)*.004;
       camA.x = Math.max(-.45, Math.min(.45, camA.x));
       camera.position.x = Math.sin(camA.y)*.7;
-      camera.position.y = 1.1+camA.x*.4;
-      camera.lookAt(0,.9,-0.5);
+      camera.position.y = 1.1 + camA.x*.4;
+      camera.lookAt(0, .9, -0.4);
     }
-    pM={x:e.clientX,y:e.clientY};
+    pM={x:e.clientX, y:e.clientY};
   });
   renderer.domElement.addEventListener('mouseup', function() {
     if (grabbed&&grabHand==='mouse') {
       grabbed=false; grabHand=null;
-      setHUD('h-state','STATE: RELEASED');
-      setTimeout(function(){ if(cubeSpawned) setHUD('h-state','STATE: ACTIVE'); },1000);
+      setHUD('h-state','CUBE: RELEASED');
+      setTimeout(function(){ if(cubeSpawned) setHUD('h-state','CUBE: ACTIVE ✦'); },1000);
     }
     drag=false;
   });
   renderer.domElement.addEventListener('click', function(e) {
     if (grabbed || nearCube(e.clientX,e.clientY)) return;
-    var ray=castRay(e.clientX,e.clientY);
-    // spawn on virtual floor or just in front of camera
-    var t=(0.9-ray.origin.y)/ray.direction.y;
-    if (t>0&&t<6) spawnCube(ray.origin.clone().addScaledVector(ray.direction,t));
+    var ray = castRay(e.clientX,e.clientY);
+    var t = (0.9 - ray.origin.y) / ray.direction.y;
+    if (t>0 && t<8) spawnCube(ray.origin.clone().addScaledVector(ray.direction, t));
     else {
       var d=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
       spawnCube(camera.position.clone().addScaledVector(d,.8));
     }
   });
 
-  // touch drag
   var tStart=null;
   renderer.domElement.addEventListener('touchstart',function(e){
-    var tx=e.touches[0].clientX,ty=e.touches[0].clientY;
+    var tx=e.touches[0].clientX, ty=e.touches[0].clientY;
     tStart={x:tx,y:ty};
     if (holoCube&&nearCube(tx,ty)){grabbed=true;grabHand='touch';}
   },{passive:true});
   renderer.domElement.addEventListener('touchmove',function(e){
     if (grabbed&&grabHand==='touch') moveCubeTo(e.touches[0].clientX,e.touches[0].clientY);
   },{passive:true});
-  renderer.domElement.addEventListener('touchend',function(e){
+  renderer.domElement.addEventListener('touchend',function(){
     if (grabbed&&grabHand==='touch'){grabbed=false;grabHand=null;} tStart=null;
   });
 
-  window.addEventListener('keydown', function(e) {
-    if (e.key===' ') {
+  window.addEventListener('keydown',function(e){
+    if (e.key===' '){
       e.preventDefault();
       var d=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
       spawnCube(camera.position.clone().addScaledVector(d,.8));
@@ -502,13 +698,14 @@ function startDemo() {
   });
 
   renderer.setAnimationLoop(function() {
-    scanT += clock.getDelta();
+    var dt = clock.getDelta(); scanT += dt;
+    tickReticle(false);
     tickCube(grabbed);
     renderer.render(scene,camera);
   });
 }
 
-// ─── RAY / PICK ─────────────────────────────────────────────
+// ─── pick helpers ───────────────────────────────
 function castRay(mx,my) {
   var ndc=new THREE.Vector2((mx/innerWidth)*2-1, -(my/innerHeight)*2+1);
   var rc=new THREE.Raycaster(); rc.setFromCamera(ndc,camera); return rc.ray;
@@ -518,23 +715,23 @@ function nearCube(mx,my) {
   if (!holoCube) return false;
   _sc.copy(holoCube.position).project(camera);
   var sx=((_sc.x+1)/2)*innerWidth, sy=((-_sc.y+1)/2)*innerHeight;
-  return Math.hypot(mx-sx,my-sy)<70;
+  return Math.hypot(mx-sx, my-sy) < 70;
 }
 function moveCubeTo(mx,my) {
   if (!holoCube) return;
   var ray=castRay(mx,my);
   var d=camera.position.distanceTo(holoCube.position);
   var tgt=ray.origin.clone().addScaledVector(ray.direction,d);
-  holoCube.position.x+=(tgt.x-holoCube.position.x)*.42;
-  holoCube.position.y+=(tgt.y-holoCube.position.y)*.42;
-  holoCube.position.z+=(tgt.z-holoCube.position.z)*.42;
+  holoCube.position.x += (tgt.x-holoCube.position.x)*.42;
+  holoCube.position.y += (tgt.y-holoCube.position.y)*.42;
+  holoCube.position.z += (tgt.z-holoCube.position.z)*.42;
 }
 
-// ─── SHOW UI ────────────────────────────────────────────────
+// ─── show UI ────────────────────────────────────
 function showUI(msg) {
-  document.getElementById('overlay').style.display='none';
-  document.getElementById('hud').style.display='block';
-  document.getElementById('status').style.display='block';
+  el('overlay').style.display='none';
+  el('hud').style.display='block';
+  el('status').style.display='block';
   setStatus(msg);
   toast('TESSERACT SYSTEM ONLINE');
 }
