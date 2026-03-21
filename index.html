@@ -26,37 +26,30 @@
         }
         #hand-video {
             position: absolute;
-            top: 10px;
-            right: 10px;
-            width: 160px;
-            height: 120px;
-            border: 2px solid #00ff00;
-            border-radius: 8px;
-            z-index: 100;
-            transform: scaleX(-1);
-            opacity: 0.8;
+            top: 0;
+            left: 0;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
+            pointer-events: none;
+            visibility: hidden;
         }
         #hand-canvas {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            width: 160px;
-            height: 120px;
-            z-index: 101;
-            pointer-events: none;
+            display: none;
         }
         #info {
             position: absolute;
             top: 20px;
             left: 20px;
             color: #00ff00;
-            background: rgba(0, 0, 0, 0.9);
+            background: rgba(0, 0, 0, 0.75);
             padding: 15px 20px;
             border-radius: 10px;
             font-size: 13px;
             border: 2px solid #00ff00;
             z-index: 100;
             max-width: 250px;
+            backdrop-filter: blur(5px);
         }
         #start-button {
             position: absolute;
@@ -111,9 +104,15 @@
         <div id="info">
             <div><strong>📱 Moto G AR Cube</strong></div>
             <div class="status">
-                🎥 Camera hand tracking<br>
+                You'll see your room + hand<br>
                 📱 Tap to place cube<br>
-                ✋ Show palm to grab
+                ✋ Move hand near cube to grab
+            </div>
+            <div style="font-size: 10px; margin-top: 8px; opacity: 0.7; border-top: 1px solid #00ff0044; padding-top: 8px;">
+                <strong>Black screen?</strong><br>
+                • Install ARCore from Play Store<br>
+                • Use Chrome browser<br>
+                • Allow camera access
             </div>
         </div>
         
@@ -376,16 +375,40 @@
 
             async startXR() {
                 try {
+                    // Check if AR is really supported
+                    const supported = await navigator.xr.isSessionSupported('immersive-ar');
+                    if (!supported) {
+                        alert('AR not supported on this device. Make sure:\n1. Chrome browser is updated\n2. ARCore is installed\n3. Camera permissions are granted');
+                        return;
+                    }
+                    
                     this.xrSession = await navigator.xr.requestSession('immersive-ar', {
                         requiredFeatures: ['hit-test'],
-                        optionalFeatures: ['dom-overlay'],
+                        optionalFeatures: ['dom-overlay', 'camera-access'],
                         domOverlay: { root: document.getElementById('container') }
                     });
                     
                     await this.onSessionStarted();
                 } catch (error) {
                     console.error('Failed to start XR:', error);
-                    alert('Failed to start AR session');
+                    let errorMsg = 'Failed to start AR. ';
+                    
+                    if (error.name === 'NotAllowedError') {
+                        errorMsg += 'Please allow camera access and try again.';
+                    } else if (error.name === 'NotSupportedError') {
+                        errorMsg += 'AR not supported. Install Google ARCore from Play Store.';
+                    } else {
+                        errorMsg += 'Make sure Chrome is updated and ARCore is installed.';
+                    }
+                    
+                    alert(errorMsg);
+                    
+                    // Show helpful info
+                    document.querySelector('#info .status').innerHTML = 
+                        '❌ AR Failed<br>' +
+                        '1. Install ARCore<br>' +
+                        '2. Update Chrome<br>' +
+                        '3. Allow camera';
                 }
             }
 
@@ -403,11 +426,18 @@
                 
                 document.getElementById('start-button').style.display = 'none';
                 
+                // Show initial instructions
                 document.querySelector('#info .status').innerHTML = 
-                    '✅ AR Active<br>🎥 Hand tracking ON<br>📱 Tap to place';
+                    '✅ AR Starting...<br>👁️ You should see your room<br>🔄 Loading camera...';
                 
                 // Start hand tracking
                 await this.startHandTracking();
+                
+                // Update status after camera loads
+                setTimeout(() => {
+                    document.querySelector('#info .status').innerHTML = 
+                        '✅ AR Active<br>🎥 Hand tracking ON<br>📱 Tap to place cube';
+                }, 2000);
                 
                 this.renderer.setAnimationLoop((time, frame) => this.render(time, frame));
             }
@@ -470,6 +500,30 @@
                     // Check grab
                     for (const cube of this.cubes) {
                         const distance = handWorld.distanceTo(cube.position);
+                        
+                        // Show grab zone when hand is nearby
+                        if (distance < grabRadius * 1.5) {
+                            if (!cube.userData.grabZone) {
+                                const zoneGeometry = new THREE.SphereGeometry(grabRadius, 16, 16);
+                                const zoneMaterial = new THREE.MeshBasicMaterial({
+                                    color: 0x00ff00,
+                                    transparent: true,
+                                    opacity: 0.2,
+                                    wireframe: true
+                                });
+                                cube.userData.grabZone = new THREE.Mesh(zoneGeometry, zoneMaterial);
+                                cube.add(cube.userData.grabZone);
+                            }
+                            cube.userData.grabZone.visible = true;
+                            
+                            // Pulse the grab zone
+                            const time = Date.now() / 1000;
+                            const scale = 1 + Math.sin(time * 6) * 0.1;
+                            cube.userData.grabZone.scale.set(scale, scale, scale);
+                        } else if (cube.userData.grabZone) {
+                            cube.userData.grabZone.visible = false;
+                        }
+                        
                         if (distance < grabRadius) {
                             // Grab!
                             this.grabbedCube = cube;
@@ -477,6 +531,11 @@
                             cube.material.color.setHex(0x00ff88);
                             cube.children[0].material.opacity = 1.0;
                             cube.children[1].material.opacity = 0.5;
+                            
+                            // Hide grab zone
+                            if (cube.userData.grabZone) {
+                                cube.userData.grabZone.visible = false;
+                            }
                             
                             // Scale based on hand size
                             if (this.handSize) {
@@ -584,13 +643,13 @@
                     document.querySelector('#info .status').innerHTML = 
                         `🟢 <strong>GRABBED!</strong><br>` +
                         `📏 Hand: ${handWidthCm}cm<br>` +
-                        `🔽 Scale: ${scalePercent}%`;
+                        `🔽 Cube: ${scalePercent}%`;
                 } else if (this.handDetected) {
                     document.querySelector('#info .status').innerHTML = 
-                        '✅ AR Active<br>👋 Hand detected<br>📱 Tap to place';
+                        '✅ AR Active<br>👋 Hand detected!<br>Move near cube to grab';
                 } else {
                     document.querySelector('#info .status').innerHTML = 
-                        '✅ AR Active<br>🎥 Tracking...<br>📱 Show palm';
+                        '✅ AR Active<br>Show your hand<br>📱 Tap to place cube';
                 }
                 
                 // Hit testing
