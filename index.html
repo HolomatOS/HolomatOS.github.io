@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebXR Hand Tracking Cube Grab</title>
+    <title>WebXR Cube Grab - Moto G Stylus</title>
     <style>
         body {
             margin: 0;
@@ -11,32 +11,52 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: #000;
         }
-        canvas {
-            display: block;
+        #container {
+            position: relative;
             width: 100%;
-            height: 100%;
-            touch-action: none;
+            height: 100vh;
         }
-        #ui-overlay {
+        #ar-canvas {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
+            z-index: 1;
+        }
+        #hand-video {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 160px;
+            height: 120px;
+            border: 2px solid #00ff00;
+            border-radius: 8px;
+            z-index: 100;
+            transform: scaleX(-1);
+            opacity: 0.8;
+        }
+        #hand-canvas {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 160px;
+            height: 120px;
+            z-index: 101;
             pointer-events: none;
-            z-index: 10;
         }
         #info {
             position: absolute;
             top: 20px;
             left: 20px;
             color: #00ff00;
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.9);
             padding: 15px 20px;
             border-radius: 10px;
-            font-size: 14px;
+            font-size: 13px;
             border: 2px solid #00ff00;
-            pointer-events: auto;
+            z-index: 100;
+            max-width: 250px;
         }
         #start-button {
             position: absolute;
@@ -52,44 +72,62 @@
             border-radius: 50px;
             cursor: pointer;
             box-shadow: 0 8px 16px rgba(0, 212, 255, 0.4);
-            pointer-events: auto;
+            z-index: 100;
             transition: all 0.3s;
         }
         #start-button:hover {
             transform: translateX(-50%) scale(1.05);
-            box-shadow: 0 12px 24px rgba(0, 212, 255, 0.6);
         }
         #start-button:disabled {
             background: #555;
             cursor: not-allowed;
-            box-shadow: none;
         }
         .status {
             margin-top: 10px;
             padding-top: 10px;
             border-top: 1px solid #00ff00;
-            font-size: 12px;
-            opacity: 0.8;
+            font-size: 11px;
+            opacity: 0.9;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 18px;
+            z-index: 1000;
+            display: none;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px 30px;
+            border-radius: 10px;
         }
     </style>
 </head>
 <body>
-    <div id="ui-overlay">
+    <div id="container">
+        <div id="loading">Loading hand tracker...</div>
+        
         <div id="info">
-            <div><strong>🎮 Smart Cube Grabbing</strong></div>
+            <div><strong>📱 Moto G AR Cube</strong></div>
             <div class="status">
-                📱 Tap screen to place cube (15cm)<br>
-                ✋ Grab with palm - cube auto-fits!<br>
-                🔄 Expands when released
+                🎥 Camera hand tracking<br>
+                📱 Tap to place cube<br>
+                ✋ Show palm to grab
             </div>
         </div>
+        
+        <video id="hand-video" autoplay playsinline></video>
+        <canvas id="hand-canvas"></canvas>
+        
         <button id="start-button">Start AR Experience</button>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/handtrackjs@0.0.13/dist/handtrack.min.js"></script>
     <script type="module">
         import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 
-        class WebXRCubeGrab {
+        class MotoGARCubeGrab {
             constructor() {
                 this.scene = null;
                 this.camera = null;
@@ -98,14 +136,20 @@
                 this.xrRefSpace = null;
                 this.hitTestSource = null;
                 this.cubes = [];
-                this.hands = { left: null, right: null };
+                this.handModel = null;
+                this.handVideo = null;
+                this.handCanvas = null;
+                this.handCtx = null;
+                this.handDetected = false;
+                this.handPosition = null;
+                this.handSize = null;
                 this.grabbedCube = null;
-                this.grabHand = null;
+                this.isTracking = false;
                 
                 this.init();
             }
 
-            init() {
+            async init() {
                 // Scene setup
                 this.scene = new THREE.Scene();
                 
@@ -120,31 +164,133 @@
                 this.renderer.setPixelRatio(window.devicePixelRatio);
                 this.renderer.setSize(window.innerWidth, window.innerHeight);
                 this.renderer.xr.enabled = true;
-                document.body.appendChild(this.renderer.domElement);
+                this.renderer.domElement.id = 'ar-canvas';
+                document.getElementById('container').appendChild(this.renderer.domElement);
                 
                 // Lighting
-                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
                 this.scene.add(ambientLight);
                 
-                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
                 directionalLight.position.set(1, 2, 3);
                 this.scene.add(directionalLight);
                 
-                // Add a point light that follows camera
                 this.cameraLight = new THREE.PointLight(0xffffff, 1, 10);
                 this.camera.add(this.cameraLight);
                 this.scene.add(this.camera);
                 
-                // Reticle for placement (visual indicator where cube will spawn)
+                // Reticle
                 this.reticle = this.createReticle();
                 this.reticle.visible = false;
                 this.scene.add(this.reticle);
                 
-                // Handle window resize
+                // Hand tracking setup
+                this.handVideo = document.getElementById('hand-video');
+                this.handCanvas = document.getElementById('hand-canvas');
+                this.handCtx = this.handCanvas.getContext('2d');
+                
+                // Window resize
                 window.addEventListener('resize', () => this.onWindowResize());
                 
                 // Setup button
                 this.setupButton();
+                
+                // Load hand tracking model
+                await this.loadHandTracking();
+            }
+
+            async loadHandTracking() {
+                document.getElementById('loading').style.display = 'block';
+                
+                const modelParams = {
+                    flipHorizontal: true,
+                    maxNumBoxes: 1,
+                    iouThreshold: 0.5,
+                    scoreThreshold: 0.6,
+                };
+                
+                try {
+                    this.handModel = await handTrack.load(modelParams);
+                    console.log('Hand tracking model loaded');
+                    document.getElementById('loading').style.display = 'none';
+                } catch (error) {
+                    console.error('Failed to load hand tracking:', error);
+                    document.getElementById('loading').innerHTML = 'Failed to load hand tracker';
+                }
+            }
+
+            async startHandTracking() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { 
+                            facingMode: 'user',
+                            width: { ideal: 640 },
+                            height: { ideal: 480 }
+                        } 
+                    });
+                    
+                    this.handVideo.srcObject = stream;
+                    this.handCanvas.width = 160;
+                    this.handCanvas.height = 120;
+                    
+                    await this.handVideo.play();
+                    this.isTracking = true;
+                    this.detectHands();
+                    
+                } catch (error) {
+                    console.error('Failed to start camera:', error);
+                    alert('Cannot access camera for hand tracking');
+                }
+            }
+
+            detectHands() {
+                if (!this.isTracking || !this.handModel) return;
+                
+                this.handModel.detect(this.handVideo).then(predictions => {
+                    // Clear canvas
+                    this.handCtx.clearRect(0, 0, this.handCanvas.width, this.handCanvas.height);
+                    
+                    if (predictions.length > 0) {
+                        const hand = predictions[0];
+                        this.handDetected = true;
+                        
+                        // Draw bounding box
+                        this.handCtx.strokeStyle = '#00ff00';
+                        this.handCtx.lineWidth = 2;
+                        this.handCtx.strokeRect(
+                            hand.bbox[0] * (160/640),
+                            hand.bbox[1] * (120/480),
+                            hand.bbox[2] * (160/640),
+                            hand.bbox[3] * (120/480)
+                        );
+                        
+                        // Calculate hand center in normalized coordinates
+                        const centerX = (hand.bbox[0] + hand.bbox[2] / 2) / 640;
+                        const centerY = (hand.bbox[1] + hand.bbox[3] / 2) / 480;
+                        
+                        // Hand width (used for sizing)
+                        const handWidth = hand.bbox[2] / 640;
+                        
+                        this.handPosition = { x: centerX, y: centerY };
+                        this.handSize = handWidth;
+                        
+                        // Draw center point
+                        this.handCtx.fillStyle = '#00ffff';
+                        this.handCtx.beginPath();
+                        this.handCtx.arc(
+                            centerX * 160,
+                            centerY * 120,
+                            5, 0, Math.PI * 2
+                        );
+                        this.handCtx.fill();
+                        
+                    } else {
+                        this.handDetected = false;
+                    }
+                    
+                    // Continue detection
+                    requestAnimationFrame(() => this.detectHands());
+                });
             }
 
             createReticle() {
@@ -161,7 +307,6 @@
             }
 
             createCube(position) {
-                // Outer glowing cube - starts at 15cm
                 const geometry = new THREE.BoxGeometry(0.15, 0.15, 0.15);
                 const material = new THREE.MeshStandardMaterial({ 
                     color: 0x00d4ff,
@@ -174,7 +319,7 @@
                 });
                 const cube = new THREE.Mesh(geometry, material);
                 
-                // Inner bright core
+                // Inner core
                 const coreGeometry = new THREE.BoxGeometry(0.08, 0.08, 0.08);
                 const coreMaterial = new THREE.MeshBasicMaterial({ 
                     color: 0xffffff,
@@ -184,7 +329,7 @@
                 const core = new THREE.Mesh(coreGeometry, coreMaterial);
                 cube.add(core);
                 
-                // Outer glow shell
+                // Outer glow
                 const glowGeometry = new THREE.BoxGeometry(0.18, 0.18, 0.18);
                 const glowMaterial = new THREE.MeshBasicMaterial({ 
                     color: 0x00d4ff,
@@ -196,13 +341,12 @@
                 cube.add(glow);
                 
                 cube.position.copy(position);
-                cube.position.y += 0.2; // Float above surface
+                cube.position.y += 0.2;
                 
-                // Store initial position for floating animation
                 cube.userData.initialY = cube.position.y;
                 cube.userData.time = 0;
                 cube.userData.rotationSpeed = Math.random() * 2 + 1;
-                cube.userData.targetScale = 1.0; // For dynamic shrinking
+                cube.userData.targetScale = 1.0;
                 cube.userData.currentScale = 1.0;
                 cube.scale.set(1, 1, 1);
                 
@@ -232,179 +376,131 @@
 
             async startXR() {
                 try {
-                    // Request AR session with hand tracking
                     this.xrSession = await navigator.xr.requestSession('immersive-ar', {
-                        requiredFeatures: ['hit-test', 'hand-tracking'],
+                        requiredFeatures: ['hit-test'],
                         optionalFeatures: ['dom-overlay'],
-                        domOverlay: { root: document.getElementById('ui-overlay') }
+                        domOverlay: { root: document.getElementById('container') }
                     });
                     
                     await this.onSessionStarted();
                 } catch (error) {
                     console.error('Failed to start XR:', error);
-                    alert('Failed to start AR session. Make sure you are on a device that supports WebXR with hand tracking.');
+                    alert('Failed to start AR session');
                 }
             }
 
             async onSessionStarted() {
                 this.xrSession.addEventListener('end', () => this.onSessionEnded());
                 
-                // Setup render target
                 await this.renderer.xr.setSession(this.xrSession);
                 
-                // Get reference space
                 this.xrRefSpace = await this.xrSession.requestReferenceSpace('local');
                 
-                // Setup hit testing for surface detection
                 const viewerSpace = await this.xrSession.requestReferenceSpace('viewer');
                 this.hitTestSource = await this.xrSession.requestHitTestSource({ space: viewerSpace });
                 
-                // Handle screen tap for placing cubes
                 this.xrSession.addEventListener('select', (event) => this.onSelect(event));
                 
-                // Hide start button
                 document.getElementById('start-button').style.display = 'none';
                 
-                // Update info
                 document.querySelector('#info .status').innerHTML = 
-                    '✅ AR Active<br>📱 Tap to place cube<br>✋ Grab with palm';
+                    '✅ AR Active<br>🎥 Hand tracking ON<br>📱 Tap to place';
                 
-                // Start render loop
+                // Start hand tracking
+                await this.startHandTracking();
+                
                 this.renderer.setAnimationLoop((time, frame) => this.render(time, frame));
             }
 
             onSessionEnded() {
                 this.hitTestSource = null;
                 this.xrSession = null;
+                this.isTracking = false;
+                
+                if (this.handVideo.srcObject) {
+                    this.handVideo.srcObject.getTracks().forEach(track => track.stop());
+                }
+                
                 document.getElementById('start-button').style.display = 'block';
             }
 
             onSelect(event) {
-                // Place cube at reticle position when user taps
                 if (this.reticle.visible) {
                     this.createCube(this.reticle.position);
                 }
             }
 
-            updateHands(frame) {
-                if (!frame) return;
+            get3DHandPosition() {
+                if (!this.handPosition || !this.camera) return null;
                 
-                // Get hand tracking data
-                for (const inputSource of this.xrSession.inputSources) {
-                    if (inputSource.hand) {
-                        const hand = inputSource.hand;
-                        const handedness = inputSource.handedness; // 'left' or 'right'
-                        
-                        // Get hand joint positions
-                        const wristJoint = hand.get('wrist');
-                        const indexTipJoint = hand.get('index-finger-tip');
-                        const thumbTipJoint = hand.get('thumb-tip');
-                        const pinkyTipJoint = hand.get('pinky-finger-tip');
-                        
-                        if (wristJoint) {
-                            const wristPose = frame.getJointPose(wristJoint, this.xrRefSpace);
-                            if (wristPose) {
-                                const palmPosition = new THREE.Vector3(
-                                    wristPose.transform.position.x,
-                                    wristPose.transform.position.y,
-                                    wristPose.transform.position.z
-                                );
-                                
-                                // Measure finger width (index to pinky distance)
-                                let fingerWidth = null;
-                                if (indexTipJoint && pinkyTipJoint) {
-                                    const indexPose = frame.getJointPose(indexTipJoint, this.xrRefSpace);
-                                    const pinkyPose = frame.getJointPose(pinkyTipJoint, this.xrRefSpace);
-                                    
-                                    if (indexPose && pinkyPose) {
-                                        const indexPos = new THREE.Vector3(
-                                            indexPose.transform.position.x,
-                                            indexPose.transform.position.y,
-                                            indexPose.transform.position.z
-                                        );
-                                        const pinkyPos = new THREE.Vector3(
-                                            pinkyPose.transform.position.x,
-                                            pinkyPose.transform.position.y,
-                                            pinkyPose.transform.position.z
-                                        );
-                                        
-                                        fingerWidth = indexPos.distanceTo(pinkyPos);
-                                    }
-                                }
-                                
-                                this.hands[handedness] = {
-                                    palm: palmPosition,
-                                    fingerWidth: fingerWidth
-                                };
-                                
-                                // Check for grab/release
-                                this.handleGrabbing(palmPosition, fingerWidth, handedness);
+                // Convert 2D hand position to 3D world space
+                // Hand is in front of camera
+                const handX = (this.handPosition.x - 0.5) * 2; // -1 to 1
+                const handY = -(this.handPosition.y - 0.5) * 2; // -1 to 1 (inverted)
+                
+                // Project from camera
+                const distance = 0.5; // 50cm from camera
+                const worldPos = new THREE.Vector3(handX * 0.3, handY * 0.3, -distance);
+                worldPos.applyMatrix4(this.camera.matrixWorld);
+                
+                return worldPos;
+            }
+
+            handleGrabbing() {
+                if (!this.handDetected || !this.handPosition) {
+                    // Release cube if hand lost
+                    if (this.grabbedCube) {
+                        this.grabbedCube.userData.targetScale = 1.0;
+                        this.grabbedCube.material.emissiveIntensity = 0.5;
+                        this.grabbedCube.material.color.setHex(0x00d4ff);
+                        this.grabbedCube.children[0].material.opacity = 0.9;
+                        this.grabbedCube.children[1].material.opacity = 0.3;
+                        this.grabbedCube.userData.initialY = this.grabbedCube.position.y;
+                        this.grabbedCube = null;
+                    }
+                    return;
+                }
+                
+                const handWorld = this.get3DHandPosition();
+                if (!handWorld) return;
+                
+                const grabRadius = 0.15;
+                
+                if (!this.grabbedCube) {
+                    // Check grab
+                    for (const cube of this.cubes) {
+                        const distance = handWorld.distanceTo(cube.position);
+                        if (distance < grabRadius) {
+                            // Grab!
+                            this.grabbedCube = cube;
+                            cube.material.emissiveIntensity = 1.0;
+                            cube.material.color.setHex(0x00ff88);
+                            cube.children[0].material.opacity = 1.0;
+                            cube.children[1].material.opacity = 0.5;
+                            
+                            // Scale based on hand size
+                            if (this.handSize) {
+                                const targetSize = this.handSize * 0.5; // Smaller for better fit
+                                cube.userData.targetScale = Math.max(0.3, Math.min(1.0, targetSize / 0.15));
                             }
+                            
+                            this.createEnergyRing(cube);
+                            break;
                         }
+                    }
+                } else {
+                    // Update position
+                    this.grabbedCube.position.copy(handWorld);
+                    
+                    // Update scale based on hand size
+                    if (this.handSize) {
+                        const targetSize = this.handSize * 0.5;
+                        this.grabbedCube.userData.targetScale = Math.max(0.3, Math.min(1.0, targetSize / 0.15));
                     }
                 }
             }
 
-            createShimmerParticle(cube) {
-                // Only create particles occasionally to avoid performance issues
-                if (Math.random() > 0.3) return;
-                
-                const particleGeometry = new THREE.SphereGeometry(0.005, 8, 8);
-                const particleMaterial = new THREE.MeshBasicMaterial({ 
-                    color: 0x00ffff,
-                    transparent: true,
-                    opacity: 1.0
-                });
-                const particle = new THREE.Mesh(particleGeometry, particleMaterial);
-                
-                // Random position around cube
-                const angle = Math.random() * Math.PI * 2;
-                const radius = cube.userData.currentScale * 0.1;
-                particle.position.copy(cube.position);
-                particle.position.x += Math.cos(angle) * radius;
-                particle.position.z += Math.sin(angle) * radius;
-                particle.position.y += (Math.random() - 0.5) * radius;
-                
-                // Random velocity
-                particle.userData.velocity = new THREE.Vector3(
-                    (Math.random() - 0.5) * 0.2,
-                    Math.random() * 0.3,
-                    (Math.random() - 0.5) * 0.2
-                );
-                particle.userData.startTime = Date.now();
-                particle.userData.lifetime = 500; // 0.5 seconds
-                
-                this.scene.add(particle);
-                
-                // Animate particle
-                const animateParticle = () => {
-                    const elapsed = Date.now() - particle.userData.startTime;
-                    const progress = elapsed / particle.userData.lifetime;
-                    
-                    if (progress < 1) {
-                        // Move particle
-                        particle.position.add(particle.userData.velocity.clone().multiplyScalar(0.016));
-                        
-                        // Fade out
-                        particle.material.opacity = 1 - progress;
-                        
-                        // Shrink
-                        const scale = 1 - progress * 0.5;
-                        particle.scale.set(scale, scale, scale);
-                        
-                        requestAnimationFrame(animateParticle);
-                    } else {
-                        this.scene.remove(particle);
-                        particle.geometry.dispose();
-                        particle.material.dispose();
-                    }
-                };
-                
-                animateParticle();
-            }
-
             createEnergyRing(cube) {
-                // Create expanding energy rings when cube is grabbed
                 for (let i = 0; i < 3; i++) {
                     setTimeout(() => {
                         const ringGeometry = new THREE.RingGeometry(0.05, 0.08, 32);
@@ -416,162 +512,53 @@
                         });
                         const ring = new THREE.Mesh(ringGeometry, ringMaterial);
                         ring.position.copy(cube.position);
-                        
-                        // Store animation data
                         ring.userData.startTime = Date.now();
-                        ring.userData.duration = 1000; // 1 second
-                        
+                        ring.userData.duration = 1000;
                         this.scene.add(ring);
                         
-                        // Animate ring expansion and fade
                         const animateRing = () => {
                             const elapsed = Date.now() - ring.userData.startTime;
                             const progress = elapsed / ring.userData.duration;
                             
                             if (progress < 1) {
-                                // Expand
                                 const scale = 1 + progress * 3;
                                 ring.scale.set(scale, scale, 1);
-                                
-                                // Fade out
                                 ring.material.opacity = 0.8 * (1 - progress);
-                                
                                 requestAnimationFrame(animateRing);
                             } else {
-                                // Remove ring
                                 this.scene.remove(ring);
                                 ring.geometry.dispose();
                                 ring.material.dispose();
                             }
                         };
-                        
                         animateRing();
                     }, i * 150);
                 }
             }
 
-            handleGrabbing(palmPosition, fingerWidth, handedness) {
-                const grabRadius = 0.15; // Distance threshold for grabbing (15cm for 15cm cube)
-                
-                if (!this.grabbedCube) {
-                    // Check if palm is close to any cube
-                    for (const cube of this.cubes) {
-                        const distance = palmPosition.distanceTo(cube.position);
-                        
-                        // Show grab zone when hand is nearby
-                        if (distance < grabRadius * 1.5) {
-                            if (!cube.userData.grabZone) {
-                                // Create grab zone indicator
-                                const zoneGeometry = new THREE.SphereGeometry(grabRadius, 16, 16);
-                                const zoneMaterial = new THREE.MeshBasicMaterial({
-                                    color: 0x00ff00,
-                                    transparent: true,
-                                    opacity: 0.15,
-                                    wireframe: true
-                                });
-                                cube.userData.grabZone = new THREE.Mesh(zoneGeometry, zoneMaterial);
-                                cube.add(cube.userData.grabZone);
-                            }
-                            cube.userData.grabZone.visible = true;
-                        } else if (cube.userData.grabZone) {
-                            cube.userData.grabZone.visible = false;
-                        }
-                        
-                        if (distance < grabRadius) {
-                            // Grab the cube
-                            this.grabbedCube = cube;
-                            this.grabHand = handedness;
-                            cube.material.emissiveIntensity = 1.0;
-                            cube.material.color.setHex(0x00ff88);
-                            // Make core super bright when grabbed
-                            cube.children[0].material.opacity = 1.0;
-                            cube.children[1].material.opacity = 0.5;
-                            
-                            // Hide grab zone
-                            if (cube.userData.grabZone) {
-                                cube.userData.grabZone.visible = false;
-                            }
-                            
-                            // Calculate scale based on finger width
-                            if (fingerWidth) {
-                                // Cube should be 70% of finger width to fit comfortably
-                                const targetSize = fingerWidth * 0.7;
-                                // Original cube is 0.15m, so scale accordingly
-                                cube.userData.targetScale = targetSize / 0.15;
-                                // Clamp scale between 0.3 and 1.0
-                                cube.userData.targetScale = Math.max(0.3, Math.min(1.0, cube.userData.targetScale));
-                            }
-                            
-                            // Create energy ring effect
-                            this.createEnergyRing(cube);
-                            
-                            break;
-                        }
-                    }
-                } else if (this.grabHand === handedness) {
-                    // Update grabbed cube position
-                    this.grabbedCube.position.copy(palmPosition);
-                    
-                    // Continuously update scale if finger width changes
-                    if (fingerWidth) {
-                        const targetSize = fingerWidth * 0.7;
-                        const newTargetScale = targetSize / 0.15;
-                        this.grabbedCube.userData.targetScale = Math.max(0.3, Math.min(1.0, newTargetScale));
-                    }
-                    
-                    // Check if hand moved away (release)
-                    const distance = palmPosition.distanceTo(this.grabbedCube.position);
-                    if (distance > grabRadius * 2) {
-                        // Release - return to original size
-                        this.grabbedCube.userData.targetScale = 1.0;
-                        this.grabbedCube.material.emissiveIntensity = 0.5;
-                        this.grabbedCube.material.color.setHex(0x00d4ff);
-                        this.grabbedCube.children[0].material.opacity = 0.9;
-                        this.grabbedCube.children[1].material.opacity = 0.3;
-                        this.grabbedCube.userData.initialY = this.grabbedCube.position.y;
-                        this.grabbedCube = null;
-                        this.grabHand = null;
-                        
-                        // Reset UI
-                        document.querySelector('#info .status').innerHTML = 
-                            '✅ AR Active<br>📱 Tap to place cube<br>✋ Grab with palm';
-                    }
-                }
-            }
-
             updateCubes(deltaTime) {
                 for (const cube of this.cubes) {
-                    // Smooth scale interpolation
-                    const scaleLerpSpeed = 8.0; // How fast the cube shrinks/grows
-                    const oldScale = cube.userData.currentScale;
+                    // Smooth scaling
+                    const scaleLerpSpeed = 8.0;
                     cube.userData.currentScale += (cube.userData.targetScale - cube.userData.currentScale) * scaleLerpSpeed * deltaTime;
                     cube.scale.set(cube.userData.currentScale, cube.userData.currentScale, cube.userData.currentScale);
                     
-                    // Add shimmer particles when scaling changes significantly
-                    if (Math.abs(cube.userData.currentScale - oldScale) > 0.01 && cube === this.grabbedCube) {
-                        this.createShimmerParticle(cube);
-                    }
-                    
                     if (cube !== this.grabbedCube) {
-                        // Floating animation
+                        // Float animation
                         cube.userData.time += deltaTime;
                         const floatOffset = Math.sin(cube.userData.time * 2) * 0.03;
                         cube.position.y = cube.userData.initialY + floatOffset;
                         
-                        // Rotation animation
                         cube.rotation.x += deltaTime * cube.userData.rotationSpeed * 0.5;
                         cube.rotation.y += deltaTime * cube.userData.rotationSpeed;
                         
-                        // Pulsing core glow
                         const pulse = 0.7 + Math.sin(cube.userData.time * 3) * 0.2;
-                        cube.children[0].material.opacity = pulse; // Core
-                        cube.children[1].material.opacity = pulse * 0.4; // Outer glow
+                        cube.children[0].material.opacity = pulse;
+                        cube.children[1].material.opacity = pulse * 0.4;
                     } else {
-                        // Keep grabbed cube rotating faster
                         cube.rotation.y += deltaTime * 4;
                         cube.rotation.x += deltaTime * 2;
                         
-                        // Intense pulsing when grabbed
                         const time = Date.now() / 1000;
                         const pulse = 0.9 + Math.sin(time * 8) * 0.1;
                         cube.children[0].material.opacity = pulse;
@@ -584,24 +571,29 @@
                 
                 const deltaTime = time / 1000;
                 
-                // Update hand tracking
-                this.updateHands(frame);
+                // Handle grabbing with hand tracking
+                this.handleGrabbing();
                 
-                // Update cube animations
+                // Update cubes
                 this.updateCubes(deltaTime);
                 
-                // Update UI status
-                if (this.grabbedCube) {
+                // Update UI
+                if (this.grabbedCube && this.handSize) {
                     const scalePercent = Math.round(this.grabbedCube.userData.currentScale * 100);
-                    const fingerWidthCm = this.hands[this.grabHand]?.fingerWidth ? 
-                        Math.round(this.hands[this.grabHand].fingerWidth * 100) : '?';
+                    const handWidthCm = Math.round(this.handSize * 100);
                     document.querySelector('#info .status').innerHTML = 
                         `🟢 <strong>GRABBED!</strong><br>` +
-                        `📏 Finger Width: ${fingerWidthCm}cm<br>` +
-                        `🔽 Cube Scale: ${scalePercent}%`;
+                        `📏 Hand: ${handWidthCm}cm<br>` +
+                        `🔽 Scale: ${scalePercent}%`;
+                } else if (this.handDetected) {
+                    document.querySelector('#info .status').innerHTML = 
+                        '✅ AR Active<br>👋 Hand detected<br>📱 Tap to place';
+                } else {
+                    document.querySelector('#info .status').innerHTML = 
+                        '✅ AR Active<br>🎥 Tracking...<br>📱 Show palm';
                 }
                 
-                // Hit test for surface detection
+                // Hit testing
                 if (this.hitTestSource) {
                     const hitTestResults = frame.getHitTestResults(this.hitTestSource);
                     
@@ -609,7 +601,6 @@
                         const hit = hitTestResults[0];
                         const pose = hit.getPose(this.xrRefSpace);
                         
-                        // Show and update reticle
                         this.reticle.visible = true;
                         this.reticle.position.set(
                             pose.transform.position.x,
@@ -617,7 +608,6 @@
                             pose.transform.position.z
                         );
                         
-                        // Pulse animation
                         const scale = 1 + Math.sin(time / 200) * 0.1;
                         this.reticle.scale.set(scale, scale, scale);
                     } else {
@@ -625,7 +615,6 @@
                     }
                 }
                 
-                // Render scene
                 this.renderer.render(this.scene, this.camera);
             }
 
@@ -636,8 +625,8 @@
             }
         }
 
-        // Initialize the experience
-        const app = new WebXRCubeGrab();
+        // Initialize
+        const app = new MotoGARCubeGrab();
     </script>
 </body>
 </html>
