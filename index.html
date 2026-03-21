@@ -1,549 +1,767 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#000000">
-<title>J.A.R.V.I.S</title>
-<script src="https://cdn.jsdelivr.net/npm/three@0.139.0/build/three.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>JARVIS AR — Tesseract</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-html,body{width:100%;height:100%;overflow:hidden;background:#000;
-  font-family:'Share Tech Mono',monospace;color:#00f5ff;}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000510;overflow:hidden;font-family:'Courier New',monospace;color:#00aaff;touch-action:none}
 
-/* Three.js canvas fills screen — WebXR draws camera feed into it */
-#c{position:fixed;inset:0;z-index:1;}
-
-/* ── LAUNCH PAGE ── */
-#launch{
-  position:fixed;inset:0;z-index:900;
-  background:#000a12;
-  background-image:repeating-linear-gradient(
-    0deg,transparent,transparent 3px,rgba(0,245,255,0.012) 3px,rgba(0,245,255,0.012) 4px);
-  display:flex;flex-direction:column;
+#overlay{
+  position:fixed;inset:0;display:flex;flex-direction:column;
   align-items:center;justify-content:center;
-  padding:32px 24px;
+  background:rgba(0,5,16,.97);z-index:100
 }
-.logo{font-family:'Rajdhani',sans-serif;font-size:48px;font-weight:700;
-  letter-spacing:16px;color:#00f5ff;
-  text-shadow:0 0 30px #00f5ffaa,0 0 60px #00f5ff44;
-  margin-bottom:4px;text-align:center;}
-.logo-s{font-size:10px;letter-spacing:5px;color:#00f5ff44;margin-bottom:44px;text-align:center;}
+.logo{font-size:clamp(1.4rem,5vw,2.5rem);letter-spacing:.4rem;
+  color:#00aaff;text-shadow:0 0 40px rgba(0,170,255,.8);margin-bottom:.3rem}
+.sub{font-size:.66rem;letter-spacing:.28rem;opacity:.38;margin-bottom:2rem}
+.btn{
+  padding:.65rem 1.7rem;font-size:.75rem;background:transparent;
+  border:1px solid rgba(0,170,255,.5);color:#00aaff;cursor:pointer;
+  font-family:inherit;letter-spacing:.16rem;text-transform:uppercase;
+  transition:all .22s;margin:.3rem;display:block;width:290px;text-align:center
+}
+.btn:hover{background:rgba(0,170,255,.08);border-color:rgba(0,170,255,.9)}
+.note{margin-top:.9rem;font-size:.59rem;opacity:.26;text-align:center;max-width:320px;line-height:2}
 
-.step{
-  width:100%;max-width:340px;
-  background:rgba(0,30,50,0.6);border:1px solid rgba(0,245,255,0.15);
-  border-radius:12px;padding:14px 18px;margin-bottom:12px;
-  display:flex;align-items:center;gap:14px;
-}
-.step-n{font-family:'Rajdhani',sans-serif;font-size:28px;font-weight:700;
-  color:#00f5ff;min-width:28px;}
-.step-t{font-size:11px;letter-spacing:2px;color:#fff;margin-bottom:2px;}
-.step-d{font-size:10px;color:#00f5ff55;line-height:1.6;}
+#hud{display:none;position:fixed;top:14px;left:14px;font-size:.57rem;
+  letter-spacing:.08rem;opacity:.5;z-index:50;line-height:2.2;
+  pointer-events:none;text-transform:uppercase}
+#pname{display:none;position:fixed;top:14px;right:14px;font-size:.66rem;
+  letter-spacing:.16rem;z-index:50;pointer-events:none;text-shadow:0 0 10px #00aaff}
+#status{display:none;position:fixed;bottom:16px;left:50%;transform:translateX(-50%);
+  font-size:.59rem;letter-spacing:.12rem;opacity:.42;z-index:50;pointer-events:none;
+  text-transform:uppercase;white-space:nowrap}
+#swipe-hint{display:none;position:fixed;bottom:50px;left:50%;transform:translateX(-50%);
+  font-size:.88rem;color:#00aaff;z-index:50;pointer-events:none;
+  opacity:0;transition:opacity .28s;letter-spacing:.1rem}
+#swipe-hint.show{opacity:1}
+#toast{position:fixed;bottom:84px;left:50%;transform:translateX(-50%);
+  font-size:.59rem;opacity:0;z-index:50;pointer-events:none;
+  text-align:center;letter-spacing:.1rem;white-space:nowrap;
+  transition:opacity .3s}
+#toast.show{opacity:.45}
 
-/* unsupported warning */
-#unsupported{
-  width:100%;max-width:340px;
-  background:#FAEEDA;border:1px solid #EF9F27;
-  border-radius:12px;padding:14px 18px;margin-bottom:16px;
-  display:none;font-size:11px;color:#633806;line-height:1.8;
-}
-#unsupported strong{display:block;color:#412402;font-size:12px;margin-bottom:4px;letter-spacing:1px;}
-
-#btn-start{
-  margin-top:8px;width:100%;max-width:340px;height:64px;
-  background:transparent;border:1.5px solid #00f5ff;border-radius:16px;
-  color:#00f5ff;font-family:'Share Tech Mono',monospace;
-  font-size:15px;letter-spacing:5px;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;gap:12px;
-  position:relative;overflow:hidden;
-}
-#btn-start::before{
-  content:'';position:absolute;top:0;left:-110%;width:100%;height:100%;
-  background:linear-gradient(90deg,transparent,rgba(0,245,255,0.16),transparent);
-  animation:shine 2.6s ease-in-out infinite;
-}
-@keyframes shine{to{left:210%;}}
-#btn-start:active{background:rgba(0,245,255,0.1);}
-#btn-start:disabled{opacity:0.3;pointer-events:none;}
-
-/* ── HUD — shown during AR session, landscape-optimised ── */
-#hud{
-  position:fixed;inset:0;z-index:10;
-  pointer-events:none;display:none;
-}
-#hud::after{
-  content:'';position:absolute;inset:0;
-  background:repeating-linear-gradient(
-    0deg,transparent,transparent 3px,rgba(0,245,255,0.01) 3px,rgba(0,245,255,0.01) 4px);
-  pointer-events:none;
-}
-/* Top bar */
-#hud-top{
-  position:absolute;top:0;left:0;right:0;
-  padding:10px 18px;
-  display:flex;justify-content:space-between;align-items:center;
-  background:linear-gradient(180deg,rgba(0,4,12,0.82) 0%,transparent 100%);
-}
-.hbrand{font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;
-  letter-spacing:7px;color:#00f5ff;text-shadow:0 0 14px #00f5ff55;}
-#hud-zoom{font-size:8px;letter-spacing:2px;color:#00ff88;
-  background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.2);
-  border-radius:20px;padding:2px 8px;}
-#hud-st{font-size:8px;letter-spacing:2px;color:#00f5ff66;}
-
-/* Corner brackets */
-.brk{position:absolute;width:22px;height:22px;border-color:#00f5ff33;border-style:solid;}
-.brk-tl{top:10px;left:10px;border-width:1.5px 0 0 1.5px;}
-.brk-tr{top:10px;right:10px;border-width:1.5px 1.5px 0 0;}
-.brk-bl{bottom:56px;left:10px;border-width:0 0 1.5px 1.5px;}
-.brk-br{bottom:56px;right:10px;border-width:0 1.5px 1.5px 0;}
-
-/* Placement prompt — center */
-#place-msg{
-  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-  text-align:center;pointer-events:none;
-}
-.pm-ring{
-  width:64px;height:64px;border-radius:50%;
-  border:2px solid #00f5ff;background:rgba(0,245,255,0.07);
-  margin:0 auto 12px;
-  animation:pulse 1.5s ease-in-out infinite;
-}
-@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(0,245,255,0.5);}50%{box-shadow:0 0 0 16px rgba(0,245,255,0);}}
-.pm-t{font-size:12px;letter-spacing:3px;color:#00f5ff;margin-bottom:4px;}
-.pm-s{font-size:9px;color:#00f5ff55;letter-spacing:1.5px;line-height:1.6;}
-
-/* Panel dots */
-#dots{position:absolute;bottom:32px;left:50%;transform:translateX(-50%);display:flex;gap:14px;}
-.dot{width:7px;height:7px;border-radius:50%;border:1.5px solid #00f5ff33;transition:all 0.4s;}
-.dot.on{background:#00f5ff;border-color:#00f5ff;box-shadow:0 0 10px #00f5ff;}
-#swipe-hint{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);
-  font-size:8px;letter-spacing:2px;color:#00f5ff33;white-space:nowrap;}
-
-#flash{position:absolute;inset:0;background:rgba(0,245,255,0.05);
-  opacity:0;pointer-events:none;transition:opacity 0.15s;}
+/* Grab guide overlay — shows hand silhouette hint */
+#grab-guide{display:none;position:fixed;top:50%;left:50%;
+  transform:translate(-50%,-50%);z-index:60;pointer-events:none;
+  opacity:.18;font-size:4rem;filter:drop-shadow(0 0 12px #00aaff)}
+canvas{display:block}
 </style>
 </head>
 <body>
 
-<!-- Three.js renders WebXR camera + hologram here -->
-<canvas id="c"></canvas>
-
-<!-- ══ LAUNCH PAGE ══ -->
-<div id="launch">
-  <div class="logo">J.A.R.V.I.S</div>
-  <div class="logo-s">HOLOGRAPHIC INTERFACE v4.6</div>
-
-  <div id="unsupported">
-    <strong>⚠ WEBXR NOT AVAILABLE</strong>
-    Make sure:<br>
-    · Chrome is up to date<br>
-    · AR Core is installed (Play Store → "Google Play Services for AR")<br>
-    · This page is served over HTTPS (GitHub Pages)
-  </div>
-
-  <div class="step">
-    <div class="step-n">1</div>
-    <div>
-      <div class="step-t">TAP ACTIVATE</div>
-      <div class="step-d">Chrome asks for camera. Real ARCore scans your floor/table.</div>
-    </div>
-  </div>
-  <div class="step">
-    <div class="step-n">2</div>
-    <div>
-      <div class="step-t">POINT AT ANY FLAT SURFACE</div>
-      <div class="step-d">A glowing reticle dot appears on the detected plane.</div>
-    </div>
-  </div>
-  <div class="step">
-    <div class="step-n">3</div>
-    <div>
-      <div class="step-t">TAP TO PLACE HOLOGRAM</div>
-      <div class="step-d">JARVIS locks there. Swipe right — AKSHAT → TIME → DATE.</div>
-    </div>
-  </div>
-
-  <button id="btn-start" onclick="startXR()">
-    <span style="font-size:18px;">⬡</span>
-    ACTIVATE J.A.R.V.I.S
-  </button>
+<div id="overlay">
+  <div class="logo">◈ J.A.R.V.I.S ◈</div>
+  <div class="sub">HOLOGRAPHIC INTERFACE v3.1</div>
+  <button class="btn" onclick="startAR()">⬡ Initialize AR Mode</button>
+  <button class="btn" onclick="startDemo()">⬡ Preview Mode (Browser)</button>
+  <p class="note">
+    AR requires WebXR + Hand Tracking — Meta Quest 2/3/Pro<br>
+    <b style="opacity:.6">Close your hand around the cube to grab it</b><br>
+    Open your hand to release · Swipe wrist to switch panels<br>
+    Preview: SPACE = spawn · drag cube · ← → = panels
+  </p>
 </div>
 
-<!-- ══ HUD ══ -->
 <div id="hud">
-  <div class="brk brk-tl"></div><div class="brk brk-tr"></div>
-  <div class="brk brk-bl"></div><div class="brk brk-br"></div>
-  <div id="hud-top">
-    <span class="hbrand">J.A.R.V.I.S</span>
-    <span id="hud-zoom">ARCore · PLANE DETECTION</span>
-    <span id="hud-st">◎ SCANNING</span>
-  </div>
-  <div id="place-msg">
-    <div class="pm-ring"></div>
-    <div class="pm-t">SURFACE DETECTED</div>
-    <div class="pm-s">TAP TO PLACE HOLOGRAM</div>
-  </div>
-  <div id="flash"></div>
-  <div id="dots" style="display:none;">
-    <div class="dot on" id="d0"></div>
-    <div class="dot" id="d1"></div>
-    <div class="dot" id="d2"></div>
-  </div>
-  <div id="swipe-hint" style="display:none;">◀ SWIPE RIGHT TO CYCLE PANELS ▶</div>
+  <div>SYS: <span style="color:#00ff88">ONLINE</span></div>
+  <div id="h-gesture">GESTURE: —</div>
+  <div id="h-panel">PANEL: 1/3</div>
+  <div id="h-surface">SURFACE: SCANNING</div>
+  <div id="h-cube">CUBE: NONE</div>
+  <div id="h-curl">CURL: —</div>
 </div>
+<div id="pname"></div>
+<div id="status"></div>
+<div id="swipe-hint"></div>
+<div id="toast"></div>
+<div id="grab-guide">🖐</div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-'use strict';
-const $ = id => document.getElementById(id);
+// ══════════════════════════════════════════════════════════
+// GLOBALS
+// ══════════════════════════════════════════════════════════
+let scene, camera, renderer, clock
+let reticle, worldAnchor
+let panels = [], currentIdx = 0, placed = false
+let xrSession = null, hitSrc = null, refSpace = null
+let holoCube = null, cubeSpawned = false
+let grabbed = false, grabHand = null
+let scanT = 0, lastSwipe = 0
 
-// ── State ─────────────────────────────────────────────────────────────────────
-let placed    = false;
-let currentPanel = 0;
-let swipeCooldown = false;
-let scanY = 0, floatY = 0, floatDir = 1;
-let ring1Rot = 0, ring2Rot = 0, frameN = 0;
+// Hand state per hand
+const handState = {
+  left:  { wHist:[], curl:0, palmPos:null, wasClosed:false, pinch:false, wasPinch:false },
+  right: { wHist:[], curl:0, palmPos:null, wasClosed:false, pinch:false, wasPinch:false }
+}
 
-// Three.js
-let renderer, scene, camera;
-let reticle, hologramGroup, panelGroup;
-let ring1Mesh, ring2Mesh;
-let panels = [];
+// ── Joint names we care about ──────────────────────────────
+const FINGERTIPS = [
+  'thumb-tip',
+  'index-finger-tip',
+  'middle-finger-tip',
+  'ring-finger-tip',
+  'pinky-finger-tip'
+]
+// Proximal knuckles (MCP = metacarpophalangeal)
+const KNUCKLES = [
+  'index-finger-metacarpal',
+  'middle-finger-metacarpal',
+  'ring-finger-metacarpal',
+  'pinky-metacarpal'
+]
 
-// WebXR
-let xrSession  = null;
-let xrRefSpace = null;
-let hitTestSrc = null;
+// ── Helpers ────────────────────────────────────────────────
+const holo = (c,o=1) => new THREE.MeshBasicMaterial(
+  {color:c, transparent:o<1, opacity:o, side:THREE.DoubleSide, depthWrite:false})
+const lmat = (c,o=1) => new THREE.LineBasicMaterial(
+  {color:c, transparent:o<1, opacity:o})
+const setHUD = (id,t) => { const el=document.getElementById(id); if(el) el.textContent=t }
+const setStatus = t => setHUD('status',t)
+const _tmpV = new THREE.Vector3()
 
-// ── Check WebXR support on load ────────────────────────────────────────────────
-window.addEventListener('load', async () => {
-  if (!navigator.xr) {
-    showUnsupported(); return;
+function showToast(msg, ms=2000) {
+  const el=document.getElementById('toast')
+  el.textContent=msg; el.classList.add('show')
+  setTimeout(()=>el.classList.remove('show'), ms)
+}
+
+// ══════════════════════════════════════════════════════════
+// TESSERACT CUBE
+// ══════════════════════════════════════════════════════════
+function buildTesseract() {
+  const g = new THREE.Group()
+  const S = 0.11   // slightly smaller so it fits in the hand nicely
+
+  // Outer wireframe
+  g.add(new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(S,S,S)),
+    lmat(0x22ccff, 0.9)))
+
+  // Inner counter-rotating wireframe
+  const inner = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(S*.52,S*.52,S*.52)),
+    lmat(0x88eeff, 0.65))
+  inner.userData.innerCube = true; g.add(inner)
+
+  // Faint face fill
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(S,S,S), holo(0x003388, 0.05)))
+
+  // ── Core glow — 4 nested spheres ─────────────────────
+  const glow3 = new THREE.Mesh(new THREE.SphereGeometry(S*.52,16,16), holo(0x0044bb,0.07))
+  glow3.userData.glow3=true; g.add(glow3)
+
+  const glow2 = new THREE.Mesh(new THREE.SphereGeometry(S*.30,14,14), holo(0x0099ff,0.22))
+  glow2.userData.glow2=true; g.add(glow2)
+
+  const glow1 = new THREE.Mesh(new THREE.SphereGeometry(S*.15,12,12), holo(0x55ddff,0.65))
+  glow1.userData.glow1=true; g.add(glow1)
+
+  const core = new THREE.Mesh(new THREE.SphereGeometry(S*.07,10,10), holo(0xeeffff,1.0))
+  core.userData.core=true; g.add(core)
+
+  // Corner dots
+  const h=S/2
+  ;[[-h,-h,-h],[-h,-h,h],[-h,h,-h],[-h,h,h],
+    [h,-h,-h],[h,-h,h],[h,h,-h],[h,h,h]].forEach(([x,y,z])=>{
+    const d=new THREE.Mesh(new THREE.SphereGeometry(.0055,6,6), holo(0x88eeff,0.85))
+    d.position.set(x,y,z); g.add(d)
+  })
+
+  // Energy tendrils (center → corners)
+  ;[[-h,-h,-h],[h,h,h],[h,-h,-h],[-h,h,h]].forEach(([x,y,z])=>{
+    const pts=[new THREE.Vector3(0,0,0), new THREE.Vector3(x,y,z)]
+    const t=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lmat(0x44bbff,0.28))
+    t.userData.tendril=true; g.add(t)
+  })
+
+  // Ground rings
+  const r1=new THREE.Mesh(new THREE.RingGeometry(S*.88,S*.96,40), holo(0x0088ff,0.30))
+  r1.rotation.x=-Math.PI/2; r1.userData.ring1=true; g.add(r1)
+  const r2=new THREE.Mesh(new THREE.RingGeometry(S*1.28,S*1.35,48), holo(0x0055ff,0.13))
+  r2.rotation.x=-Math.PI/2; r2.userData.ring2=true; g.add(r2)
+
+  g.userData.spin = {x:.008, y:.012, z:.005}
+  g.userData.fPhase = Math.random()*Math.PI*2
+  return g
+}
+
+function animateCube(isGrabbed) {
+  if(!holoCube) return
+  const T = scanT
+
+  if(!isGrabbed) {
+    holoCube.rotation.x += holoCube.userData.spin.x
+    holoCube.rotation.y += holoCube.userData.spin.y
+    holoCube.rotation.z += holoCube.userData.spin.z
+    holoCube.position.y += Math.sin(T*1.4+holoCube.userData.fPhase)*.00035
   }
-  const supported = await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
-  if (!supported) showUnsupported();
-});
 
-function showUnsupported() {
-  $('unsupported').style.display = 'block';
-  $('btn-start').disabled = true;
-}
+  const spd = isGrabbed ? 5.5 : 2.2
+  holoCube.traverse(c=>{
+    if(c.userData.innerCube) { c.rotation.x-=.011; c.rotation.y+=.008 }
 
-// ── Start WebXR ───────────────────────────────────────────────────────────────
-async function startXR() {
-  // Fullscreen inside gesture
-  try {
-    const el = document.documentElement;
-    if (el.requestFullscreen) await el.requestFullscreen({navigationUI:'hide'});
-    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-  } catch(e){}
+    if(c.userData.core)
+      c.material.opacity = (isGrabbed?.95:.7) + Math.sin(T*spd)*.05
 
-  try {
-    xrSession = await navigator.xr.requestSession('immersive-ar', {
-      requiredFeatures: ['hit-test'],
-      optionalFeatures: ['dom-overlay', 'light-estimation'],
-      domOverlay: { root: $('hud') }
-    });
-  } catch(err) {
-    alert('Could not start AR session: ' + err.message);
-    return;
-  }
+    if(c.userData.glow1)
+      c.material.opacity = (isGrabbed?.62:.25) + Math.sin(T*spd+1)*.08
 
-  $('launch').style.display = 'none';
-  $('hud').style.display = 'block';
+    if(c.userData.glow2)
+      c.material.opacity = (isGrabbed?.22:.12) + Math.sin(T*spd+2)*.05
 
-  initThree();
-  xrSession.addEventListener('end', onSessionEnd);
-
-  // Reference space
-  xrRefSpace = await xrSession.requestReferenceSpace('local');
-
-  // Hit test source — real ARCore plane detection
-  const viewerSpace = await xrSession.requestReferenceSpace('viewer');
-  hitTestSrc = await xrSession.requestHitTestSource({ space: viewerSpace });
-
-  // Start render loop
-  xrSession.requestAnimationFrame(onXRFrame);
-}
-
-// ── Three.js setup ────────────────────────────────────────────────────────────
-function initThree() {
-  const canvas = $('c');
-  renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-  renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.xr.enabled = true;
-  renderer.xr.setReferenceSpaceType('local');
-  renderer.xr.setSession(xrSession);
-
-  scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 100);
-
-  // Reticle — shows where plane is detected
-  const rGeo = new THREE.RingGeometry(0.08, 0.12, 32);
-  rGeo.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI/2));
-  const rMat = new THREE.MeshBasicMaterial({
-    color: 0x00f5ff, side: THREE.DoubleSide, transparent: true, opacity: 0.85
-  });
-  reticle = new THREE.Mesh(rGeo, rMat);
-  reticle.visible = false;
-  scene.add(reticle);
-
-  // Outer reticle ring (decorative)
-  const r2Geo = new THREE.RingGeometry(0.14, 0.155, 32);
-  r2Geo.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI/2));
-  const r2Mat = new THREE.MeshBasicMaterial({color:0x00f5ff, side:THREE.DoubleSide, transparent:true, opacity:0.3});
-  const reticle2 = new THREE.Mesh(r2Geo, r2Mat);
-  reticle.add(reticle2);
-
-  // Hologram group — placed when user taps
-  hologramGroup = new THREE.Group();
-  hologramGroup.visible = false;
-  scene.add(hologramGroup);
-
-  buildHologram();
-
-  window.addEventListener('resize', () => {
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-  });
-}
-
-// ── Build JARVIS hologram ─────────────────────────────────────────────────────
-function buildHologram() {
-  // Base spinning rings
-  ring1Mesh = mkRing(0.19, 0.24, 0x00f5ff, 0.55);
-  ring2Mesh = mkRing(0.27, 0.285, 0x4af8ff, 0.18);
-  ring1Mesh.rotation.x = ring2Mesh.rotation.x = -Math.PI/2;
-  ring1Mesh.position.y = 0.005;
-  ring2Mesh.position.y = 0.003;
-  hologramGroup.add(ring1Mesh, ring2Mesh);
-
-  // Vertical guide lines
-  hologramGroup.add(mkLine(-0.34, 0.28, 0));
-  hologramGroup.add(mkLine( 0.34, 0.28, 0));
-
-  // 3 panels
-  panelGroup = new THREE.Group();
-  panelGroup.position.y = 0.5;
-  hologramGroup.add(panelGroup);
-
-  for (let i = 0; i < 3; i++) {
-    const mesh = mkPanel(i);
-    mesh.visible = (i === 0);
-    panelGroup.add(mesh);
-    panels[i] = mesh;
-  }
-}
-
-function mkRing(inner, outer, col, op) {
-  const g = new THREE.RingGeometry(inner, outer, 48);
-  const m = new THREE.MeshBasicMaterial({color:col, side:THREE.DoubleSide, transparent:true, opacity:op});
-  return new THREE.Mesh(g, m);
-}
-function mkLine(x, y, z) {
-  const g = new THREE.PlaneGeometry(0.002, 0.55);
-  const m = new THREE.MeshBasicMaterial({color:0x00f5ff, side:THREE.DoubleSide, transparent:true, opacity:0.1});
-  const mesh = new THREE.Mesh(g, m);
-  mesh.position.set(x, y, z);
-  return mesh;
-}
-function mkPanel(idx) {
-  const g = new THREE.PlaneGeometry(0.76, 0.44);
-  const m = new THREE.MeshBasicMaterial({map: drawTex(idx), transparent:true, side:THREE.DoubleSide});
-  return new THREE.Mesh(g, m);
-}
-
-// ── WebXR render loop ─────────────────────────────────────────────────────────
-function onXRFrame(t, frame) {
-  xrSession.requestAnimationFrame(onXRFrame);
-  frameN++;
-
-  const pose = frame.getViewerPose(xrRefSpace);
-  if (!pose) return;
-
-  // Hit test — real ARCore plane detection
-  if (hitTestSrc && !placed) {
-    const hits = frame.getHitTestResults(hitTestSrc);
-    if (hits.length > 0) {
-      const hitPose = hits[0].getPose(xrRefSpace);
-      reticle.visible = true;
-      reticle.matrix.fromArray(hitPose.transform.matrix);
-      reticle.matrix.decompose(reticle.position, reticle.quaternion, reticle.scale);
-      $('hud-st').textContent = '◉ SURFACE FOUND — TAP TO PLACE';
-    } else {
-      reticle.visible = false;
-      $('hud-st').textContent = '◎ SCANNING SURFACE...';
+    if(c.userData.glow3) {
+      const s=(isGrabbed?1.35:1)+Math.sin(T*spd*.7)*.12
+      c.scale.set(s,s,s)
+      c.material.opacity=(isGrabbed?.2:.06)+Math.sin(T*spd)*.03
     }
+
+    if(c.userData.ring1) {
+      const s=1+Math.sin(T*2)*.07; c.scale.set(s,1,s)
+      c.material.opacity=isGrabbed?.58:(.26+Math.sin(T*2)*.08)
+    }
+    if(c.userData.ring2) {
+      const s=1+Math.sin(T*1.5+1)*.1; c.scale.set(s,1,s)
+      c.material.opacity=isGrabbed?.22:(.11+Math.sin(T*1.8)*.04)
+    }
+    if(c.userData.tendril)
+      c.material.opacity=(isGrabbed?.6:.22)+Math.sin(T*4)*.08
+  })
+}
+
+// ══════════════════════════════════════════════════════════
+// GET JOINT POSITION — always returns a NEW Vector3
+// (never mutate XR read-only objects)
+// ══════════════════════════════════════════════════════════
+function getJP(frame, joint) {
+  if(!joint) return null
+  try {
+    const p = frame.getJointPose(joint, refSpace)
+    if(!p) return null
+    return new THREE.Vector3(
+      p.transform.position.x,
+      p.transform.position.y,
+      p.transform.position.z)
+  } catch(e) { return null }
+}
+
+// ══════════════════════════════════════════════════════════
+// PALM CENTER — average of 4 metacarpal bases
+// ══════════════════════════════════════════════════════════
+function getPalmCenter(frame, hand) {
+  const positions = []
+  for(const name of KNUCKLES) {
+    try {
+      const joint = hand.get(name)
+      const pos = joint ? getJP(frame, joint) : null
+      if(pos) positions.push(pos)
+    } catch(e) {}
+  }
+  // Also try wrist
+  try {
+    const wj = hand.get('wrist')
+    const wp = wj ? getJP(frame, wj) : null
+    if(wp) positions.push(wp)
+  } catch(e) {}
+
+  if(positions.length === 0) return null
+  const center = new THREE.Vector3()
+  positions.forEach(p => center.add(p))
+  center.divideScalar(positions.length)
+  return center
+}
+
+// ══════════════════════════════════════════════════════════
+// CURL SCORE — 0 = open hand, 1 = fist
+// Measures how close each fingertip is to the palm vs extended
+// ══════════════════════════════════════════════════════════
+function getCurlScore(frame, hand, palmCenter) {
+  if(!palmCenter) return 0
+  const scores = []
+
+  for(const name of FINGERTIPS) {
+    try {
+      const joint = hand.get(name)
+      const tipPos = joint ? getJP(frame, joint) : null
+      if(!tipPos) continue
+      const d = tipPos.distanceTo(palmCenter)
+      // Typical open: ~0.10-0.14m from palm
+      // Typical closed: ~0.04-0.07m from palm
+      const score = 1 - THREE.MathUtils.clamp((d - 0.04) / 0.08, 0, 1)
+      scores.push(score)
+    } catch(e) {}
   }
 
-  // Animate hologram
-  if (placed) {
-    frameN++;
-    floatY += 0.008 * floatDir;
-    if (floatY > 0.03) floatDir = -1;
-    if (floatY < -0.03) floatDir = 1;
-    panelGroup.position.y = 0.5 + floatY;
+  if(scores.length === 0) return 0
+  return scores.reduce((a,b)=>a+b,0) / scores.length
+}
 
-    ring1Rot += 0.012; ring2Rot -= 0.007;
-    ring1Mesh.rotation.z = ring1Rot;
-    ring2Mesh.rotation.z = ring2Rot;
+// ══════════════════════════════════════════════════════════
+// PROCESS HANDS EACH FRAME
+// ══════════════════════════════════════════════════════════
+function processHands(frame) {
+  if(!xrSession) return
 
-    // Redraw panel texture every 2 frames (scan line + clock)
-    if (frameN % 2 === 0) {
-      scanY = (scanY + 5) % 580;
-      const p = panels[currentPanel];
-      if (p) {
-        p.material.map.dispose();
-        p.material.map = drawTex(currentPanel);
-        p.material.needsUpdate = true;
+  for(const src of xrSession.inputSources) {
+    if(!src.hand) continue
+    const side = src.handedness
+    const hs = handState[side]
+    if(!hs) continue
+
+    const hand = src.hand
+
+    // ── Palm center ────────────────────────────────────────
+    const palmCenter = getPalmCenter(frame, hand)
+    hs.palmPos = palmCenter
+
+    // ── Curl score ─────────────────────────────────────────
+    const curlScore = getCurlScore(frame, hand, palmCenter)
+    hs.curl = curlScore
+
+    // Show debug in HUD
+    if(side === 'right') setHUD('h-curl', `CURL: ${(curlScore*100).toFixed(0)}%`)
+
+    // ── Closed fist = grab ─────────────────────────────────
+    const isClosed = curlScore > 0.62   // 62% curl threshold
+    const wasClose  = hs.wasClosed
+    hs.wasClosed = isClosed
+
+    // Hand just CLOSED
+    if(isClosed && !wasClose && palmCenter) {
+      if(cubeSpawned && holoCube) {
+        // Check if palm is near the cube
+        const dist = palmCenter.distanceTo(holoCube.position)
+        if(dist < 0.25) {
+          grabbed = true; grabHand = side
+          setHUD('h-cube', 'TESSERACT: ✦ IN HAND')
+          setHUD('h-gesture', `GESTURE: GRAB [${side.toUpperCase()}]`)
+          showToast('✦ TESSERACT LOCKED TO HAND', 1400)
+        }
+      } else if(!cubeSpawned) {
+        // Closed fist in air = SPAWN cube at palm
+        spawnCube(palmCenter)
+        setHUD('h-gesture', 'GESTURE: FIST → SPAWN')
+        setTimeout(()=>setHUD('h-gesture','GESTURE: —'), 1000)
       }
     }
+
+    // Hand just OPENED
+    if(!isClosed && wasClose && grabbed && grabHand === side) {
+      grabbed = false; grabHand = null
+      setHUD('h-cube', 'TESSERACT: FREE (world locked)')
+      setHUD('h-gesture', 'GESTURE: OPEN → RELEASE')
+      setTimeout(()=>setHUD('h-gesture','GESTURE: —'), 600)
+      setStatus('Tesseract released — world locked')
+    }
+
+    // While HOLDING — cube sits at palm center, slightly above
+    if(grabbed && grabHand === side && palmCenter && holoCube) {
+      // Sit cube right in the palm — slight upward offset so it appears held
+      _tmpV.copy(palmCenter)
+      _tmpV.y += 0.02   // float just above the palm surface
+      holoCube.position.lerp(_tmpV, 0.5)
+      // Slow the spin right down when held
+      holoCube.userData.spin.x = THREE.MathUtils.lerp(holoCube.userData.spin.x, 0.001, 0.08)
+      holoCube.userData.spin.y = THREE.MathUtils.lerp(holoCube.userData.spin.y, 0.002, 0.08)
+      holoCube.userData.spin.z = THREE.MathUtils.lerp(holoCube.userData.spin.z, 0.0005, 0.08)
+    } else if(!grabbed) {
+      // Restore spin when released
+      holoCube && (
+        holoCube.userData.spin.x = THREE.MathUtils.lerp(holoCube.userData.spin.x, 0.008, 0.04),
+        holoCube.userData.spin.y = THREE.MathUtils.lerp(holoCube.userData.spin.y, 0.012, 0.04),
+        holoCube.userData.spin.z = THREE.MathUtils.lerp(holoCube.userData.spin.z, 0.005, 0.04)
+      )
+    }
+
+    // ── Pinch (index + thumb) still used for SPAWN only ───
+    try {
+      const iJoint = hand.get('index-finger-tip')
+      const tJoint = hand.get('thumb-tip')
+      const iP = iJoint ? getJP(frame, iJoint) : null
+      const tP = tJoint ? getJP(frame, tJoint) : null
+      if(iP && tP) {
+        const pinch = iP.distanceTo(tP) < 0.03
+        const wasPinch = hs.wasPinch; hs.wasPinch = pinch
+        if(pinch && !wasPinch && !cubeSpawned && palmCenter) {
+          spawnCube(palmCenter)
+          setHUD('h-gesture','GESTURE: PINCH → SPAWN')
+          setTimeout(()=>setHUD('h-gesture','GESTURE: —'),800)
+        }
+      }
+    } catch(e) {}
+
+    // ── Wrist swipe (panel switch, only when not grabbing) ─
+    try {
+      const wJoint = hand.get('wrist')
+      const wP = wJoint ? getJP(frame, wJoint) : null
+      if(wP && !grabbed) {
+        hs.wHist.push({x:wP.x, y:wP.y, t:Date.now()})
+        if(hs.wHist.length > 18) hs.wHist.shift()
+        if(hs.wHist.length >= 10) detectSwipe(side, hs.wHist)
+      }
+    } catch(e) {}
   }
-
-  renderer.render(scene, camera);
 }
 
-// ── Place hologram on tap ──────────────────────────────────────────────────────
-$('hud').addEventListener('click', e => {
-  if (placed) return;
-  if (!reticle.visible) return;
-
-  placed = true;
-  reticle.visible = false;
-  hologramGroup.visible = true;
-
-  // Lock hologram to where reticle was
-  hologramGroup.position.copy(reticle.position);
-  hologramGroup.quaternion.copy(reticle.quaternion);
-
-  $('place-msg').style.display = 'none';
-  $('dots').style.display = 'flex';
-  $('swipe-hint').style.display = 'block';
-  $('hud-st').textContent = '✦ HOLOGRAM LOCKED';
-});
-
-// ── Panel cycle ────────────────────────────────────────────────────────────────
-function showPanel(i) {
-  panels.forEach((p, j) => { if(p) p.visible = (j===i); });
-  [0,1,2].forEach(j => $('d'+j).classList.toggle('on', j===i));
-  currentPanel = i;
-  const p = panels[i];
-  if (p) { p.material.map.dispose(); p.material.map = drawTex(i); p.material.needsUpdate = true; }
-}
-function doSwipe() {
-  if (swipeCooldown || !placed) return;
-  swipeCooldown = true;
-  showPanel((currentPanel + 1) % 3);
-  const f = $('flash'); f.style.opacity = '1'; setTimeout(() => f.style.opacity='0', 180);
-  setTimeout(() => swipeCooldown = false, 900);
-}
-let tx0 = 0;
-document.addEventListener('touchstart', e => { tx0 = e.touches[0].clientX; }, {passive:true});
-document.addEventListener('touchend',   e => {
-  const dx = e.changedTouches[0].clientX - tx0;
-  if (dx > 60) doSwipe();
-});
-
-// ── Session end ────────────────────────────────────────────────────────────────
-function onSessionEnd() {
-  placed = false; panels = []; currentPanel = 0;
-  $('launch').style.display = 'flex';
-  $('hud').style.display = 'none';
-  $('dots').style.display = 'none';
-  $('swipe-hint').style.display = 'none';
-  $('place-msg').style.display = 'block';
+function detectSwipe(side, hist) {
+  const a=hist[0], b=hist[hist.length-1], dt=b.t-a.t
+  if(dt<80||dt>520) return
+  const dx=b.x-a.x, dy=Math.abs(b.y-a.y)
+  if(Math.abs(dx)<0.13||dy>Math.abs(dx)*.85) return
+  if(Date.now()-lastSwipe<900) return
+  lastSwipe=Date.now(); hist.length=0
+  switchPanel(dx>0?1:-1)
 }
 
-// ── Clock tick ─────────────────────────────────────────────────────────────────
-setInterval(() => {
-  if (!placed || currentPanel === 0) return;
-  const p = panels[currentPanel];
-  if (p) { p.material.map.dispose(); p.material.map = drawTex(currentPanel); p.material.needsUpdate = true; }
-}, 1000);
+// ══════════════════════════════════════════════════════════
+// SPAWN CUBE
+// ══════════════════════════════════════════════════════════
+function spawnCube(pos) {
+  if(holoCube) scene.remove(holoCube)
+  holoCube = buildTesseract()
+  holoCube.position.copy(pos)
+  holoCube.position.y += 0.06
+  scene.add(holoCube)
+  cubeSpawned=true; grabbed=false
+  setHUD('h-cube','TESSERACT: ACTIVE ✦')
+  setStatus('Close your hand around the cube to grab it')
+  showToast('✦ TESSERACT SPAWNED — CLOSE HAND TO GRAB')
+}
 
-// ── Panel canvas textures ──────────────────────────────────────────────────────
-const DAYS = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
-const MONS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-
-function drawTex(idx) {
-  const W=1024, H=580;
-  const cv = document.createElement('canvas');
-  cv.width=W; cv.height=H;
-  const c = cv.getContext('2d');
-
-  c.fillStyle='rgba(0,13,28,0.88)'; c.fillRect(0,0,W,H);
-
-  const gb = c.createLinearGradient(0,0,W,0);
-  gb.addColorStop(0,'rgba(0,245,255,0)');
-  gb.addColorStop(0.5,'rgba(0,245,255,1)');
-  gb.addColorStop(1,'rgba(0,245,255,0)');
-  c.fillStyle=gb; c.fillRect(0,0,W,3); c.fillRect(0,H-3,W,3);
-
-  c.fillStyle='rgba(0,245,255,0.4)';
-  c.fillRect(0,0,2,H); c.fillRect(W-2,0,2,H);
-
-  c.fillStyle='rgba(0,245,255,0.9)';
-  [[0,0,60,3],[0,0,3,60],[W-60,0,60,3],[W-3,0,3,60],
-   [0,H-3,60,3],[0,H-60,3,60],[W-60,H-3,60,3],[W-3,H-60,3,60]
-  ].forEach(([x,y,w,h]) => c.fillRect(x,y,w,h));
-
-  const sl = c.createLinearGradient(0,scanY-8,0,scanY+8);
-  sl.addColorStop(0,'rgba(0,245,255,0)');
-  sl.addColorStop(0.5,'rgba(0,245,255,0.2)');
-  sl.addColorStop(1,'rgba(0,245,255,0)');
-  c.fillStyle=sl; c.fillRect(0,scanY-8,W,16);
-
-  c.textAlign='center';
-
-  if (idx===0) {
-    c.font='bold 130px Rajdhani,monospace';
-    c.fillStyle='#00f5ff'; c.shadowColor='#00f5ff'; c.shadowBlur=28;
-    c.fillText('AKSHAT',W/2,215); c.shadowBlur=0;
-    const dv=c.createLinearGradient(80,0,W-80,0);
-    dv.addColorStop(0,'rgba(0,245,255,0)');
-    dv.addColorStop(0.5,'rgba(0,245,255,0.5)');
-    dv.addColorStop(1,'rgba(0,245,255,0)');
-    c.fillStyle=dv; c.fillRect(80,260,W-160,2);
-    c.font='40px "Share Tech Mono",monospace';
-    c.fillStyle='rgba(160,240,255,0.65)'; c.fillText('WELCOME BACK, SIR',W/2,330);
-    c.font='38px "Share Tech Mono",monospace';
-    c.fillStyle='#00ff88'; c.shadowColor='#00ff88'; c.shadowBlur=14;
-    c.fillText('SYSTEM ONLINE',W/2,432); c.shadowBlur=0;
-
-  } else if (idx===1) {
-    const now=new Date(), h=now.getHours(), ampm=h>=12?'PM':'AM', h12=h%12||12;
-    const ts=String(h12).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
-    c.font='34px "Share Tech Mono",monospace'; c.fillStyle='rgba(0,245,255,0.4)'; c.fillText('LOCAL TIME',W/2,88);
-    c.font='bold 115px "Share Tech Mono",monospace';
-    c.fillStyle='#00f5ff'; c.shadowColor='#00f5ff'; c.shadowBlur=22;
-    c.fillText(ts,W/2,242); c.shadowBlur=0;
-    c.font='bold 62px Rajdhani,monospace';
-    c.fillStyle='#00ff88'; c.shadowColor='#00ff88'; c.shadowBlur=14;
-    c.fillText(ampm,W/2,375); c.shadowBlur=0;
-    const off=new Date().getTimezoneOffset();
-    c.font='28px "Share Tech Mono",monospace'; c.fillStyle='rgba(0,245,255,0.3)';
-    c.fillText('UTC'+(off<=0?'+':'-')+String(Math.abs(off/60)).padStart(2,'0')+':00',W/2,475);
-
-  } else {
-    const now=new Date();
-    c.font='34px "Share Tech Mono",monospace'; c.fillStyle='rgba(0,245,255,0.4)'; c.fillText('EARTH DATE',W/2,88);
-    c.font='bold 72px Rajdhani,monospace'; c.fillStyle='rgba(0,245,255,0.55)'; c.fillText(DAYS[now.getDay()],W/2,198);
-    const ds=String(now.getDate()).padStart(2,'0')+' '+MONS[now.getMonth()]+' '+now.getFullYear();
-    c.font='bold 92px "Share Tech Mono",monospace';
-    c.fillStyle='#00f5ff'; c.shadowColor='#00f5ff'; c.shadowBlur=20;
-    c.fillText(ds,W/2,335); c.shadowBlur=0;
-    c.font='34px Rajdhani,monospace'; c.fillStyle='rgba(160,240,255,0.42)';
-    c.fillText('GREGORIAN CALENDAR',W/2,432);
+// ══════════════════════════════════════════════════════════
+// FIGURE / PANELS (unchanged)
+// ══════════════════════════════════════════════════════════
+function buildFigure(col) {
+  const g=new THREE.Group(), m=lmat(col)
+  const seg=(geo,p,r)=>{
+    const ls=new THREE.LineSegments(new THREE.EdgesGeometry(geo),m.clone())
+    if(p)ls.position.set(...p); if(r)ls.rotation.set(...r); g.add(ls)
   }
+  seg(new THREE.BoxGeometry(.11,.13,.11),[0,.54,0])
+  seg(new THREE.CylinderGeometry(.03,.04,.06,8),[0,.46,0])
+  seg(new THREE.BoxGeometry(.21,.27,.09),[0,.28,0])
+  seg(new THREE.CylinderGeometry(.03,.025,.19,8),[-.15,.34,0],[0,0,.28])
+  seg(new THREE.CylinderGeometry(.03,.025,.19,8),[.15,.34,0],[0,0,-.28])
+  seg(new THREE.CylinderGeometry(.022,.022,.17,8),[-.23,.17,0],[0,0,.48])
+  seg(new THREE.CylinderGeometry(.022,.022,.17,8),[.23,.17,0],[0,0,-.48])
+  seg(new THREE.BoxGeometry(.19,.07,.09),[0,.11,0])
+  seg(new THREE.CylinderGeometry(.047,.038,.24,8),[-.065,-.09,0])
+  seg(new THREE.CylinderGeometry(.047,.038,.24,8),[.065,-.09,0])
+  seg(new THREE.CylinderGeometry(.032,.027,.21,8),[-.065,-.32,0])
+  seg(new THREE.CylinderGeometry(.032,.027,.21,8),[.065,-.32,0])
+  seg(new THREE.BoxGeometry(.065,.035,.09),[-.065,-.455,.01])
+  seg(new THREE.BoxGeometry(.065,.035,.09),[.065,-.455,.01])
+  const arc=new THREE.Mesh(new THREE.RingGeometry(.022,.032,16),holo(col,.85))
+  arc.position.set(0,.3,.055); g.add(arc)
+  const sl=new THREE.Mesh(new THREE.PlaneGeometry(.25,.008),holo(col,.55))
+  sl.userData.scanLine=true; sl.position.set(0,0,.06); g.add(sl)
+  return g
+}
 
-  const t = new THREE.CanvasTexture(cv);
-  t.needsUpdate = true;
-  return t;
+const PNAMES=['ARMOR SYSTEMS','BIOMETRICS','GLOBAL NETWORK']
+const PCOLS=[0x00aaff,0x00ffaa,0xbb44ff]
+
+function buildFrame(col) {
+  const g=new THREE.Group()
+  g.add(new THREE.Mesh(new THREE.PlaneGeometry(1.8,1.18),holo(0x001133,.09)))
+  g.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1.8,1.18,.001)),lmat(col,.72)))
+  ;[[-0.9,.59],[.9,.59],[-.9,-.59],[.9,-.59]].forEach(([x,y])=>{
+    const pts=[new THREE.Vector3(x+(x>0?-.11:.11),y,.002),new THREE.Vector3(x,y,.002),new THREE.Vector3(x,y+(y>0?-.075:.075),.002)]
+    g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),lmat(col,.88)))
+  })
+  g.add(Object.assign(new THREE.Mesh(new THREE.PlaneGeometry(1.8,.065),holo(col,.08)),{position:new THREE.Vector3(0,.558,.001)}))
+  return g
+}
+
+function panelArmor() {
+  const g=buildFrame(PCOLS[0])
+  for(let i=-4;i<=4;i++){
+    const p=[new THREE.Vector3(-.89,i*.13,.001),new THREE.Vector3(.89,i*.13,.001)]
+    g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(p),lmat(0x002244,.18)))
+  }
+  ;[-.56,0,.56].forEach((x,i)=>{
+    const f=buildFigure([0x00aaff,0x00ddff,0x0055dd][i])
+    f.scale.setScalar(.54); f.position.set(x,-.04,.02); f.userData.rotSpeed=.004+i*.002; g.add(f)
+  })
+  return g
+}
+
+function panelBio() {
+  const g=buildFrame(PCOLS[1]),c=PCOLS[1]
+  const ecg=[]
+  for(let i=0;i<64;i++){
+    const x=-.82+i*.026; let y=0; const p=i%16
+    if(p===5)y=.1;else if(p===6)y=-.07;else if(p===7)y=.22
+    else if(p===8)y=-.12;else if(p===9)y=.04; else y=Math.sin(i*.25)*.015
+    ecg.push(new THREE.Vector3(x,y-.27,.003))
+  }
+  g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(ecg),lmat(c,.88)))
+  ;[.27,.19,.12].forEach((r,i)=>{
+    const ring=new THREE.Mesh(new THREE.RingGeometry(r-.006,r,48),holo(c,.18+i*.1))
+    ring.position.set(-.47,.15,.002); g.add(ring)
+  })
+  ;[.68,.42,.88,.55,.78,.5,.72].forEach((v,i)=>{
+    const h=v*.45,x=.1+i*.095
+    const bar=new THREE.Mesh(new THREE.BoxGeometry(.055,h,.001),holo(c,.22))
+    bar.position.set(x,-.18+h/2,.002); g.add(bar)
+    const ed=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(.055,h,.001)),lmat(c,.55))
+    ed.position.copy(bar.position); g.add(ed)
+  })
+  return g
+}
+
+function panelGlobe() {
+  const g=buildFrame(PCOLS[2]),c=PCOLS[2]
+  const gg=new THREE.Group(); gg.position.set(-.22,.06,.02); gg.userData.isGlobe=true
+  gg.add(new THREE.LineSegments(new THREE.WireframeGeometry(new THREE.SphereGeometry(.31,12,8)),lmat(c,.17)))
+  ;[-60,-30,0,30,60].forEach(lat=>{
+    const r=Math.cos(lat*Math.PI/180)*.31,y=Math.sin(lat*Math.PI/180)*.31
+    const ring=new THREE.Mesh(new THREE.RingGeometry(r-.004,r,52),holo(c,.22))
+    ring.position.y=y; ring.rotation.x=Math.PI/2; gg.add(ring)
+  })
+  ;[[.1,.1,1],[-.2,.15,.8],[.25,-.1,.7],[-.1,-.2,.9],[.3,.2,.3]].forEach(([x,y,z])=>{
+    const len=Math.sqrt(x*x+y*y+z*z)
+    const dot=new THREE.Mesh(new THREE.SphereGeometry(.013,6,6),holo(0xffffff,.85))
+    dot.position.set(x/len*.32,y/len*.32,z/len*.32); gg.add(dot)
+    const pr=new THREE.Mesh(new THREE.RingGeometry(.022,.028,16),holo(c,.45))
+    pr.position.copy(dot.position); pr.lookAt(0,0,0); gg.add(pr)
+  })
+  g.add(gg)
+  ;[.32,.2,.45,.25,.38,.15].forEach((w,i)=>{
+    const y=.35-i*.105
+    const pts=[new THREE.Vector3(.28,y,.002),new THREE.Vector3(.28+w,y,.002)]
+    g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),lmat(c,.5)))
+    const dot=new THREE.Mesh(new THREE.SphereGeometry(.009,6,6),holo(c,.88))
+    dot.position.set(.28+w,y,.002); g.add(dot)
+  })
+  return g
+}
+
+// ══════════════════════════════════════════════════════════
+// PANEL SWITCH
+// ══════════════════════════════════════════════════════════
+function switchPanel(dir) {
+  panels[currentIdx].visible=false
+  currentIdx=(currentIdx+dir+3)%3
+  panels[currentIdx].visible=true; updateHUD()
+  const h=document.getElementById('swipe-hint')
+  h.textContent=dir>0?'▶  NEXT PANEL':'PREV PANEL  ◀'
+  h.classList.add('show'); setTimeout(()=>h.classList.remove('show'),650)
+  setHUD('h-gesture',`GESTURE: SWIPE ${dir>0?'RIGHT':'LEFT'}`)
+  setTimeout(()=>setHUD('h-gesture','GESTURE: —'),800)
+}
+function updateHUD() {
+  setHUD('pname',PNAMES[currentIdx]); setHUD('h-panel',`PANEL: ${currentIdx+1}/3`)
+}
+
+// ══════════════════════════════════════════════════════════
+// SCENE INIT
+// ══════════════════════════════════════════════════════════
+function initScene() {
+  clock=new THREE.Clock(); scene=new THREE.Scene()
+  camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,.01,100)
+  camera.position.set(0,1.6,0)
+  renderer=new THREE.WebGLRenderer({antialias:true,alpha:true})
+  renderer.setPixelRatio(devicePixelRatio); renderer.setSize(innerWidth,innerHeight)
+  renderer.xr.enabled=true; renderer.setClearColor(0x000000,0)
+  document.body.appendChild(renderer.domElement)
+
+  // Reticle — position set directly, NO matrixAutoUpdate=false
+  reticle=new THREE.Group()
+  const rO=new THREE.Mesh(new THREE.RingGeometry(.09,.106,40),holo(0x00aaff,.78))
+  const rI=new THREE.Mesh(new THREE.RingGeometry(.013,.022,16),holo(0x00ffff,.72))
+  const rP=new THREE.Mesh(new THREE.RingGeometry(.135,.14,44),holo(0x0066ff,.2))
+  ;[rO,rI,rP].forEach(r=>r.rotation.x=-Math.PI/2); reticle.add(rO,rI,rP)
+  ;[[.13,0,0],[-.13,0,0],[0,0,.13],[0,0,-.13]].forEach(([x,y,z])=>{
+    const t=new THREE.Mesh(new THREE.BoxGeometry(.016,.001,.002),holo(0x00aaff,.58))
+    t.position.set(x,0,z); reticle.add(t)
+  })
+  reticle.visible=false; scene.add(reticle)
+
+  worldAnchor=new THREE.Group(); worldAnchor.visible=false; scene.add(worldAnchor)
+  const p1=panelArmor(),p2=panelBio(),p3=panelGlobe()
+  p2.visible=false; p3.visible=false
+  ;[p1,p2,p3].forEach(p=>worldAnchor.add(p)); panels=[p1,p2,p3]
+  worldAnchor.position.set(0,.9,-1.6)
+  window.addEventListener('resize',()=>{
+    camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix()
+    renderer.setSize(innerWidth,innerHeight)
+  })
+}
+
+// ══════════════════════════════════════════════════════════
+// MAIN LOOP ANIMATION
+// ══════════════════════════════════════════════════════════
+function animateAll(dt) {
+  scanT+=dt
+  const panel=panels[currentIdx]
+  if(panel&&panel.visible) {
+    panel.traverse(c=>{
+      if(c.userData.rotSpeed)c.rotation.y+=c.userData.rotSpeed
+      if(c.userData.isGlobe)c.rotation.y+=.004
+      if(c.isMesh&&c.userData.scanLine)c.position.y=Math.sin(scanT*2.2)*.44
+    })
+    if(placed)panel.position.y=Math.sin(scanT*.6)*.008
+  }
+  animateCube(grabbed)
+}
+
+// ══════════════════════════════════════════════════════════
+// AR MODE
+// ══════════════════════════════════════════════════════════
+async function startAR() {
+  if(!navigator.xr){alert('WebXR not available');return}
+  const ok=await navigator.xr.isSessionSupported('immersive-ar').catch(()=>false)
+  if(!ok){alert('AR not supported. Use Preview Mode.');return}
+  initScene()
+  try {
+    xrSession=await navigator.xr.requestSession('immersive-ar',{
+      requiredFeatures:['hit-test'],
+      optionalFeatures:['hand-tracking','dom-overlay','anchors','local-floor'],
+      domOverlay:{root:document.body}
+    })
+    renderer.xr.setSession(xrSession)
+    const vSp=await xrSession.requestReferenceSpace('viewer')
+    hitSrc=await xrSession.requestHitTestSource({space:vSp})
+    refSpace=await xrSession.requestReferenceSpace('local')
+    xrSession.addEventListener('select',onSelectAR)
+    xrSession.addEventListener('end',()=>{xrSession=null;hitSrc=null})
+    renderer.setAnimationLoop(arLoop)
+    showUI('Point at surface · tap to place panel · close hand to grab cube')
+  } catch(e){alert('AR Error: '+e.message)}
+}
+
+function onSelectAR() {
+  if(reticle.visible&&!placed) {
+    worldAnchor.position.copy(reticle.position)
+    const cam=new THREE.Vector3(); camera.getWorldPosition(cam)
+    worldAnchor.rotation.y=Math.atan2(cam.x-worldAnchor.position.x,cam.z-worldAnchor.position.z)
+    worldAnchor.visible=true; placed=true; reticle.visible=false
+    setHUD('h-surface','SURFACE: LOCKED ✓')
+    setStatus('Close your fist to spawn Tesseract')
+  } else if(placed&&!cubeSpawned) {
+    const d=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion)
+    spawnCube(camera.position.clone().addScaledVector(d,.55))
+  }
+}
+
+function arLoop(ts,frame) {
+  if(!frame)return
+  const dt=clock.getDelta()
+  if(!placed&&hitSrc&&refSpace) {
+    const hits=frame.getHitTestResults(hitSrc)
+    if(hits.length>0) {
+      const pose=hits[0].getPose(refSpace)
+      const p=pose.transform.position, o=pose.transform.orientation
+      // safe: copy values into our objects, never assign XR objects
+      reticle.position.set(p.x,p.y,p.z)
+      reticle.quaternion.set(o.x,o.y,o.z,o.w)
+      reticle.visible=true
+      const s=1+Math.sin(scanT*3)*.03; reticle.scale.set(s,1,s)
+      setHUD('h-surface','SURFACE: DETECTED ✓')
+    } else {
+      reticle.visible=false; setHUD('h-surface','SURFACE: SCANNING...')
+    }
+  }
+  processHands(frame)
+  animateAll(dt)
+  renderer.render(scene,camera)
+}
+
+// ══════════════════════════════════════════════════════════
+// PREVIEW / DEMO MODE
+// ══════════════════════════════════════════════════════════
+function startDemo() {
+  initScene(); worldAnchor.visible=true; placed=true
+  camera.position.set(0,1.6,0); camera.lookAt(0,.55,-1.6)
+  showUI('Click floor = spawn cube · drag cube · ← → = panels · SPACE = respawn')
+
+  let drag=false, pM={x:0,y:0}, camA={x:0,y:0}
+
+  renderer.domElement.addEventListener('mousedown',e=>{
+    if(e.button!==0)return; drag=true; pM={x:e.clientX,y:e.clientY}
+    if(cubeSpawned&&holoCube&&nearCube(e.clientX,e.clientY)){
+      grabbed=true; grabHand='mouse'; setHUD('h-cube','TESSERACT: ✦ IN HAND')
+    }
+  })
+  renderer.domElement.addEventListener('mousemove',e=>{
+    if(!drag)return
+    if(grabbed&&grabHand==='mouse'){moveCubeTo(e.clientX,e.clientY)}
+    else {
+      camA.y+=(e.clientX-pM.x)*.005; camA.x+=(e.clientY-pM.y)*.004
+      camA.x=Math.max(-.45,Math.min(.45,camA.x))
+      camera.position.x=Math.sin(camA.y)*.7; camera.position.y=1.1+camA.x*.4
+      camera.lookAt(0,.55,-1.6)
+    }
+    pM={x:e.clientX,y:e.clientY}
+  })
+  renderer.domElement.addEventListener('mouseup',()=>{
+    if(grabbed&&grabHand==='mouse'){grabbed=false;grabHand=null;setHUD('h-cube','TESSERACT: FREE')}
+    drag=false
+  })
+  renderer.domElement.addEventListener('click',e=>{
+    if(grabbed||nearCube(e.clientX,e.clientY))return
+    const ray=castRay(e.clientX,e.clientY)
+    const t=(0.1-ray.origin.y)/ray.direction.y
+    if(t>0&&t<5)spawnCube(ray.origin.clone().addScaledVector(ray.direction,t))
+  })
+
+  let tStart=null
+  renderer.domElement.addEventListener('touchstart',e=>{
+    const tx=e.touches[0].clientX,ty=e.touches[0].clientY; tStart={x:tx,y:ty}
+    if(cubeSpawned&&holoCube&&nearCube(tx,ty)){grabbed=true;grabHand='touch'}
+  },{passive:true})
+  renderer.domElement.addEventListener('touchmove',e=>{
+    if(grabbed&&grabHand==='touch')moveCubeTo(e.touches[0].clientX,e.touches[0].clientY)
+  },{passive:true})
+  renderer.domElement.addEventListener('touchend',e=>{
+    if(grabbed&&grabHand==='touch'){grabbed=false;grabHand=null;return}
+    if(!tStart)return
+    const dx=e.changedTouches[0].clientX-tStart.x,dy=Math.abs(e.changedTouches[0].clientY-tStart.y)
+    if(Math.abs(dx)>55&&dy<70)switchPanel(dx>0?1:-1)
+    tStart=null
+  })
+
+  window.addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight')switchPanel(1)
+    else if(e.key==='ArrowLeft')switchPanel(-1)
+    else if(e.key>='1'&&e.key<='3'){
+      const i=parseInt(e.key)-1
+      panels[currentIdx].visible=false;currentIdx=i;panels[i].visible=true;updateHUD()
+    }
+    else if(e.key===' '){
+      e.preventDefault()
+      const d=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion)
+      spawnCube(camera.position.clone().addScaledVector(d,.9))
+    }
+  })
+
+  renderer.setAnimationLoop(()=>{animateAll(clock.getDelta());renderer.render(scene,camera)})
+}
+
+function castRay(mx,my){
+  const ndc=new THREE.Vector2((mx/innerWidth)*2-1,-(my/innerHeight)*2+1)
+  const rc=new THREE.Raycaster(); rc.setFromCamera(ndc,camera); return rc.ray
+}
+const _sc=new THREE.Vector3()
+function nearCube(mx,my){
+  if(!holoCube)return false
+  _sc.copy(holoCube.position).project(camera)
+  return Math.hypot(((_sc.x+1)/2)*innerWidth-mx,((-_sc.y+1)/2)*innerHeight-my)<64
+}
+function moveCubeTo(mx,my){
+  if(!holoCube)return
+  const ray=castRay(mx,my)
+  holoCube.position.lerp(ray.origin.clone().addScaledVector(ray.direction,camera.position.distanceTo(holoCube.position)),.4)
+}
+
+function showUI(msg){
+  document.getElementById('overlay').style.display='none'
+  ;['hud','pname','status','swipe-hint'].forEach(id=>document.getElementById(id).style.display='block')
+  setStatus(msg); updateHUD(); showToast('◈ JARVIS INTERFACE ONLINE')
 }
 </script>
 </body>
