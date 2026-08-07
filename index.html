@@ -2,941 +2,213 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>AR Panoramic Workspace</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Servo Calibration</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@300;400;500&display=swap');
-:root{
-  --gb:rgba(6,14,54,0.82);--gborder:rgba(60,130,255,0.42);
-  --grim:rgba(130,190,255,0.60);--tp:rgba(200,225,255,0.92);
-  --ts:rgba(120,170,230,0.70);--td:rgba(70,120,190,0.50);
-  --udot:rgba(100,200,255,0.95);
-}
-*{margin:0;padding:0;box-sizing:border-box;}
-html,body{width:100%;height:100%;overflow:hidden;font-family:'Inter',sans-serif;color:var(--tp);background:#03091f;}
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; min-height: 100vh;
+    background: #000000;
+    font-family: -apple-system, "SF Mono", ui-monospace, monospace;
+    color: #d8ecf5;
+  }
+  .app { max-width: 480px; margin: 0 auto; padding: 24px 20px; }
+  h1 { font-size: 15px; letter-spacing: 2px; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { color: #64808f; font-size: 11px; margin-bottom: 24px; }
 
-/* LAUNCH */
-#launch{position:fixed;inset:0;z-index:300;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:radial-gradient(ellipse at 50% 38%,rgba(10,30,100,0.55) 0%,#03091f 68%);overflow-y:auto;padding:24px 16px;}
-.l-logo{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.22em;color:var(--ts);text-transform:uppercase;}
-.l-title{font-family:'Space Mono',monospace;font-size:24px;font-weight:700;text-align:center;line-height:1.3;}
-.l-title span{color:rgba(100,180,255,0.85);}
-.l-card{background:rgba(8,20,70,0.68);border:0.5px solid var(--gborder);border-radius:14px;padding:16px 20px;width:min(360px,94vw);display:flex;flex-direction:column;gap:10px;}
-.l-lbl{font-size:9px;letter-spacing:.14em;color:var(--td);text-transform:uppercase;font-family:'Space Mono',monospace;}
-.l-input{width:100%;background:rgba(5,15,50,0.85);border:0.5px solid rgba(60,120,255,0.35);border-radius:8px;padding:9px 12px;color:var(--tp);font-size:12px;font-family:'Inter',sans-serif;outline:none;}
-.l-input:focus{border-color:rgba(80,160,255,0.65);}
-.l-input::placeholder{color:var(--td);}
-.l-hint{font-size:10px;color:var(--td);line-height:1.55;}
-.l-hint a{color:rgba(100,170,255,0.8);text-decoration:none;}
-.l-btn{padding:13px 44px;border-radius:999px;border:0.5px solid rgba(80,150,255,0.6);background:rgba(15,50,160,0.52);color:rgba(170,220,255,0.95);font-size:13px;letter-spacing:.1em;font-family:'Space Mono',monospace;cursor:pointer;text-transform:uppercase;margin-top:4px;}
-.l-btn:hover{background:rgba(25,70,200,0.65);}
-.l-sub{font-size:10px;color:var(--td);letter-spacing:.08em;font-family:'Space Mono',monospace;}
+  .status {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; border: 1px solid #64808f; border-radius: 4px;
+    margin-bottom: 24px; font-size: 12px;
+  }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #64808f; }
+  .status.connected { border-color: #35e08a; }
+  .status.connected .status-dot { background: #35e08a; }
 
-/* THREE.JS CANVAS */
-canvas{display:block;position:fixed;inset:0;z-index:1;}
+  .connect-btn {
+    width: 100%; padding: 16px; margin-bottom: 24px;
+    background: #0d141d; border: 1px solid #33e0ff; color: #33e0ff;
+    font-family: inherit; font-size: 13px; font-weight: 700; letter-spacing: 1px;
+    border-radius: 4px; cursor: pointer;
+  }
+  .connect-btn:disabled { opacity: 0.4; cursor: default; }
 
-/* PANEL BASE */
-.ar-panel{width:820px;height:600px;background:var(--gb);border:1px solid var(--gborder);border-radius:22px;overflow:hidden;position:relative;box-shadow:inset 0 1px 0 var(--grim),inset 0 0 80px rgba(10,60,255,0.06),inset 0 -1px 0 rgba(30,80,200,0.18);}
-.ar-panel::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;z-index:10;background:linear-gradient(90deg,transparent 0%,rgba(80,160,255,0.22) 18%,rgba(140,210,255,0.72) 50%,rgba(80,160,255,0.22) 82%,transparent 100%);border-radius:22px 22px 0 0;}
-.p-head{height:44px;background:rgba(8,22,80,0.72);border-bottom:0.5px solid rgba(60,120,255,0.26);display:flex;align-items:center;padding:0 14px;gap:9px;flex-shrink:0;}
-.p-pulse{width:7px;height:7px;border-radius:50%;background:rgba(80,200,255,0.9);box-shadow:0 0 6px rgba(80,200,255,0.65);animation:pulse 2.5s ease-in-out infinite;flex-shrink:0;}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.38}}
-.p-title{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.18em;color:var(--ts);text-transform:uppercase;flex-shrink:0;}
-.p-extra{font-family:'Space Mono',monospace;font-size:9px;color:var(--td);letter-spacing:.07em;margin-left:auto;flex-shrink:0;}
-.p-body{height:calc(100% - 44px);overflow:hidden;position:relative;}
+  .control { margin-bottom: 28px; }
+  .control-label {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 8px; font-size: 12px; letter-spacing: 1px; color: #9fb3c0;
+  }
+  .control-value { color: #33e0ff; font-size: 18px; font-weight: 700; }
+  input[type="range"] {
+    width: 100%; accent-color: #33e0ff; height: 6px;
+  }
+  input[type="range"]:disabled { opacity: 0.3; }
 
-/* PIPED PANEL */
-.pd-hsearch{display:flex;flex:1;border-radius:6px;overflow:hidden;border:0.5px solid rgba(60,120,255,0.28);margin:0 10px;max-width:430px;}
-.pd-hinput{flex:1;background:rgba(4,12,45,0.88);border:none;outline:none;padding:0 12px;color:var(--tp);font-size:11px;font-family:'Inter',sans-serif;height:28px;}
-.pd-hinput::placeholder{color:var(--td);}
-.pd-hgo{padding:0 14px;background:rgba(15,50,160,0.72);border:none;border-left:0.5px solid rgba(60,120,255,0.3);color:var(--ts);font-size:11px;cursor:pointer;font-family:'Space Mono',monospace;height:28px;transition:background .15s;}
-.pd-hgo:hover{background:rgba(25,70,200,0.88);color:var(--tp);}
-.pd-home{position:absolute;inset:0;background:rgba(3,9,31,0.96);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;z-index:5;}
-.pd-logo{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.22em;color:var(--td);text-transform:uppercase;}
-.pd-search-row{display:flex;width:88%;border-radius:10px;overflow:hidden;border:0.5px solid var(--gborder);}
-.pd-search-in{flex:1;background:rgba(5,15,60,0.92);border:none;outline:none;padding:11px 15px;color:var(--tp);font-size:13px;font-family:'Inter',sans-serif;}
-.pd-search-in::placeholder{color:var(--td);}
-.pd-search-btn{padding:0 20px;background:rgba(20,60,200,0.72);border:none;border-left:0.5px solid var(--gborder);color:var(--tp);font-size:13px;cursor:pointer;font-family:'Inter',sans-serif;transition:background .15s;}
-.pd-search-btn:hover{background:rgba(30,80,240,0.85);}
-.pd-chips{display:flex;gap:7px;flex-wrap:wrap;justify-content:center;width:88%;}
-.pd-chip{padding:6px 13px;border-radius:999px;background:rgba(10,30,100,0.62);border:0.5px solid rgba(60,120,255,0.32);color:var(--ts);font-size:11px;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s;white-space:nowrap;}
-.pd-chip:hover{background:rgba(20,55,180,0.75);border-color:rgba(80,150,255,0.6);color:var(--tp);}
-.pd-inst-row{display:flex;align-items:center;gap:8px;font-size:10px;color:var(--td);}
-.pd-inst-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:rgba(250,170,30,0.85);box-shadow:0 0 4px rgba(250,170,30,0.6);}
-.pd-inst-sel{background:rgba(5,15,50,0.85);border:0.5px solid rgba(60,120,255,0.3);border-radius:6px;padding:3px 8px;color:var(--ts);font-size:10px;font-family:'Space Mono',monospace;cursor:pointer;outline:none;}
-.pd-inst-sel option{background:#0d1a4a;}
-#pd-frame{width:100%;height:100%;border:none;display:none;background:#0f0f0f;border-radius:0 0 22px 22px;}
-.pd-back{position:absolute;top:8px;right:12px;z-index:10;padding:5px 13px;border-radius:999px;background:rgba(6,14,54,0.92);border:0.5px solid rgba(60,120,255,0.38);color:var(--ts);font-size:10px;font-family:'Space Mono',monospace;letter-spacing:.07em;cursor:pointer;display:none;}
-.pd-back:hover{border-color:rgba(80,150,255,0.7);color:var(--tp);}
+  .test-btn {
+    width: 100%; padding: 18px; margin-top: 8px;
+    background: #0d141d; border: 1px solid #ffb300; color: #ffb300;
+    font-family: inherit; font-size: 13px; font-weight: 700; letter-spacing: 2px;
+    border-radius: 4px; cursor: pointer;
+  }
+  .test-btn:disabled { opacity: 0.3; cursor: default; }
 
-/* LAUNCHER — gaze-aware tile grid + mini apps */
-.launcher-wrap{position:absolute;inset:0;display:flex;flex-direction:column;}
-.launcher-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding:18px 20px;overflow-y:auto;align-content:start;}
-.app-tile{display:flex;flex-direction:column;align-items:center;gap:7px;cursor:pointer;border-radius:16px;padding:12px 6px;transition:background .15s;border:1.5px solid transparent;position:relative;}
-.app-tile.gaze-on{background:rgba(30,80,220,0.28);border-color:rgba(100,180,255,0.55);}
-.app-tile.gaze-on::after{content:'';position:absolute;inset:-2px;border-radius:18px;border:1.5px solid rgba(100,200,255,0.7);animation:gz .6s linear forwards;}
-@keyframes gz{from{opacity:0}to{opacity:1}}
-.app-icon-wrap{width:64px;height:64px;border-radius:16px;background:rgba(15,40,130,0.62);border:0.5px solid rgba(60,120,255,0.32);display:flex;align-items:center;justify-content:center;font-size:26px;overflow:hidden;box-shadow:inset 0 1px 0 rgba(100,180,255,0.18);}
-.app-icon-wrap img{width:100%;height:100%;object-fit:cover;border-radius:14px;}
-.app-label{font-size:10px;color:var(--ts);text-align:center;letter-spacing:.03em;}
-
-/* dwell ring on tile */
-.tile-dwell{position:absolute;top:8px;right:8px;width:18px;height:18px;display:none;}
-.app-tile.gaze-on .tile-dwell{display:block;}
-.tile-dwell circle{fill:none;stroke:rgba(100,200,255,0.9);stroke-width:2.5;stroke-linecap:round;stroke-dasharray:44;stroke-dashoffset:44;transform-origin:9px 9px;transform:rotate(-90deg);transition:stroke-dashoffset .05s linear;}
-
-/* mini app view */
-.mini-app{position:absolute;inset:0;display:none;flex-direction:column;background:rgba(3,9,31,0.98);}
-.mini-app.show{display:flex;}
-.mini-head{height:40px;background:rgba(8,22,80,0.8);border-bottom:0.5px solid rgba(60,120,255,0.25);display:flex;align-items:center;padding:0 14px;gap:10px;flex-shrink:0;}
-.mini-back{padding:4px 12px;border-radius:999px;background:transparent;border:0.5px solid rgba(60,120,255,0.35);color:var(--ts);font-size:10px;font-family:'Space Mono',monospace;cursor:pointer;letter-spacing:.07em;}
-.mini-back:hover{border-color:rgba(80,150,255,0.7);color:var(--tp);}
-.mini-title{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.16em;color:var(--ts);text-transform:uppercase;}
-.mini-body{flex:1;overflow:hidden;position:relative;padding:16px;}
-
-/* clock */
-.clock-face{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:8px;}
-.clock-time{font-family:'Space Mono',monospace;font-size:72px;font-weight:700;color:var(--tp);letter-spacing:-.02em;line-height:1;}
-.clock-date{font-family:'Space Mono',monospace;font-size:13px;color:var(--ts);letter-spacing:.12em;}
-.clock-zones{display:flex;gap:20px;margin-top:16px;flex-wrap:wrap;justify-content:center;}
-.clock-zone{text-align:center;}
-.cz-city{font-size:9px;letter-spacing:.1em;color:var(--td);text-transform:uppercase;}
-.cz-time{font-family:'Space Mono',monospace;font-size:18px;color:var(--ts);}
-
-/* calculator */
-.calc-wrap{display:flex;flex-direction:column;height:100%;gap:8px;}
-.calc-screen{background:rgba(4,12,45,0.9);border:0.5px solid var(--gborder);border-radius:10px;padding:12px 16px;text-align:right;flex-shrink:0;}
-.calc-expr{font-size:11px;color:var(--td);font-family:'Space Mono',monospace;min-height:16px;}
-.calc-val{font-family:'Space Mono',monospace;font-size:36px;color:var(--tp);word-break:break-all;line-height:1.1;}
-.calc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;flex:1;}
-.calc-btn{border-radius:10px;border:0.5px solid rgba(60,120,255,0.28);background:rgba(10,28,90,0.65);color:var(--tp);font-size:16px;font-family:'Space Mono',monospace;cursor:pointer;transition:background .1s;padding:0;}
-.calc-btn:hover,.calc-btn:active{background:rgba(20,55,180,0.75);}
-.calc-btn.op{background:rgba(15,50,160,0.65);color:rgba(140,200,255,0.9);}
-.calc-btn.eq{background:rgba(20,80,220,0.75);color:rgba(180,220,255,0.95);}
-.calc-btn.span2{grid-column:span 2;}
-
-/* notes */
-.notes-area{width:100%;height:100%;background:rgba(4,12,45,0.7);border:0.5px solid var(--gborder);border-radius:10px;padding:14px;color:var(--tp);font-size:13px;font-family:'Inter',sans-serif;resize:none;outline:none;line-height:1.7;}
-.notes-area::placeholder{color:var(--td);}
-
-/* weather */
-.weather-wrap{display:flex;flex-direction:column;gap:12px;height:100%;}
-.weather-search{display:flex;gap:0;border-radius:8px;overflow:hidden;border:0.5px solid var(--gborder);}
-.weather-in{flex:1;background:rgba(4,12,45,0.9);border:none;outline:none;padding:9px 13px;color:var(--tp);font-size:12px;font-family:'Inter',sans-serif;}
-.weather-in::placeholder{color:var(--td);}
-.weather-go{padding:0 16px;background:rgba(15,50,160,0.72);border:none;border-left:0.5px solid var(--gborder);color:var(--tp);font-size:12px;cursor:pointer;}
-.weather-main{display:flex;align-items:center;gap:20px;padding:12px 0;}
-.weather-icon{font-size:52px;line-height:1;}
-.weather-temp{font-family:'Space Mono',monospace;font-size:48px;color:var(--tp);}
-.weather-desc{font-size:13px;color:var(--ts);margin-top:4px;}
-.weather-city{font-size:11px;color:var(--td);letter-spacing:.08em;}
-.weather-details{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
-.wd-box{background:rgba(8,20,70,0.6);border:0.5px solid var(--gborder);border-radius:8px;padding:10px;text-align:center;}
-.wd-val{font-family:'Space Mono',monospace;font-size:18px;color:var(--tp);}
-.wd-lbl{font-size:9px;color:var(--td);letter-spacing:.08em;text-transform:uppercase;margin-top:3px;}
-
-/* timer */
-.timer-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:20px;}
-.timer-disp{font-family:'Space Mono',monospace;font-size:64px;color:var(--tp);letter-spacing:.05em;}
-.timer-btns{display:flex;gap:12px;}
-.timer-btn{padding:10px 24px;border-radius:999px;border:0.5px solid rgba(60,120,255,0.45);background:rgba(10,30,110,0.65);color:var(--tp);font-size:13px;font-family:'Space Mono',monospace;cursor:pointer;letter-spacing:.08em;}
-.timer-btn:hover{background:rgba(20,55,180,0.75);}
-.timer-btn.go{background:rgba(15,60,200,0.7);border-color:rgba(80,150,255,0.6);}
-.timer-laps{overflow-y:auto;max-height:120px;width:80%;display:flex;flex-direction:column;gap:4px;}
-.timer-lap{font-family:'Space Mono',monospace;font-size:11px;color:var(--ts);text-align:center;}
-
-/* spotify */
-#spotify-frame{width:100%;height:100%;border:none;border-radius:10px;}
-.spotify-home{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:16px;}
-.spotify-hint{font-size:11px;color:var(--td);text-align:center;line-height:1.6;}
-.spotify-links{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
-.spotify-link{padding:8px 16px;border-radius:999px;background:rgba(10,30,100,0.62);border:0.5px solid rgba(60,120,255,0.32);color:var(--ts);font-size:11px;cursor:pointer;font-family:'Inter',sans-serif;}
-.spotify-link:hover{background:rgba(20,55,180,0.75);color:var(--tp);}
-
-/* draw */
-#draw-canvas{border-radius:10px;cursor:crosshair;touch-action:none;}
-.draw-toolbar{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;}
-.draw-color{width:22px;height:22px;border-radius:50%;cursor:pointer;border:2px solid transparent;flex-shrink:0;}
-.draw-color.active{border-color:rgba(140,200,255,0.9);}
-.draw-size{accent-color:rgba(80,160,255,0.8);}
-.draw-clear{padding:4px 12px;border-radius:6px;border:0.5px solid rgba(60,120,255,0.35);background:transparent;color:var(--ts);font-size:10px;cursor:pointer;font-family:'Space Mono',monospace;margin-left:auto;}
-
-/* wikipedia */
-.wiki-wrap{display:flex;flex-direction:column;height:100%;gap:10px;}
-.wiki-search{display:flex;gap:0;border-radius:8px;overflow:hidden;border:0.5px solid var(--gborder);flex-shrink:0;}
-.wiki-in{flex:1;background:rgba(4,12,45,0.9);border:none;outline:none;padding:9px 13px;color:var(--tp);font-size:12px;font-family:'Inter',sans-serif;}
-.wiki-in::placeholder{color:var(--td);}
-.wiki-go{padding:0 16px;background:rgba(15,50,160,0.72);border:none;border-left:0.5px solid var(--gborder);color:var(--tp);font-size:12px;cursor:pointer;}
-.wiki-result{flex:1;overflow-y:auto;background:rgba(4,12,45,0.7);border:0.5px solid var(--gborder);border-radius:8px;padding:14px;}
-.wiki-result-title{font-family:'Space Mono',monospace;font-size:13px;color:var(--tp);margin-bottom:10px;}
-.wiki-result-text{font-size:12px;color:var(--ts);line-height:1.7;}
-
-/* GMAIL */
-.gmail-auth-wrap{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;}
-.gmail-auth-lbl{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.14em;color:var(--ts);}
-.gmail-sign-btn{padding:11px 26px;border-radius:999px;border:0.5px solid rgba(80,150,255,0.55);background:rgba(12,45,160,0.45);color:var(--tp);font-size:13px;font-family:'Inter',sans-serif;cursor:pointer;transition:all .2s;}
-.gmail-sign-btn:hover{background:rgba(20,65,200,0.62);}
-.email-list-wrap{height:100%;overflow-y:auto;padding:8px 6px;}
-.email-row{padding:10px 13px;border-radius:10px;cursor:pointer;margin-bottom:3px;border:0.5px solid transparent;transition:background .12s;}
-.email-row:hover{background:rgba(25,70,200,0.18);border-color:rgba(60,120,255,0.2);}
-.email-row.unread .email-from::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--udot);margin-right:8px;vertical-align:middle;box-shadow:0 0 5px rgba(100,200,255,0.8);}
-.email-from{font-size:11px;font-weight:500;color:var(--tp);margin-bottom:3px;}
-.email-row:not(.unread) .email-from{color:var(--ts);}
-.email-subject{font-size:12px;color:rgba(180,215,255,0.85);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px;}
-.email-row:not(.unread) .email-subject{color:var(--ts);font-size:11px;}
-.email-snippet{font-size:10px;color:var(--td);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-
-/* HUD */
-#hud{position:fixed;inset:0;z-index:100;pointer-events:none;display:none;}
-#reticle{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:56px;height:56px;}
-#gaze-dot{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:8px;height:8px;border-radius:50%;background:rgba(140,210,255,0.95);box-shadow:0 0 7px rgba(80,180,255,0.9);}
-#dwell-svg{position:absolute;inset:0;width:100%;height:100%;}
-#dwell-track{fill:none;stroke:rgba(60,120,255,0.18);stroke-width:2;}
-#dwell-fill{fill:none;stroke:rgba(100,200,255,0.9);stroke-width:2;stroke-linecap:round;stroke-dasharray:138.2;stroke-dashoffset:138.2;transform-origin:28px 28px;transform:rotate(-90deg);transition:stroke-dashoffset .05s linear;}
-.tick{position:absolute;width:9px;height:9px;border-color:rgba(80,160,255,0.55);border-style:solid;}
-.tick-tl{top:0;left:0;border-width:1.5px 0 0 1.5px;}
-.tick-tr{top:0;right:0;border-width:1.5px 1.5px 0 0;}
-.tick-bl{bottom:0;left:0;border-width:0 0 1.5px 1.5px;}
-.tick-br{bottom:0;right:0;border-width:0 1.5px 1.5px 0;}
-#status-pill{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:110;display:none;padding:6px 18px;border-radius:999px;background:rgba(6,14,54,0.92);border:0.5px solid rgba(60,120,255,0.42);color:var(--ts);font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.1em;pointer-events:none;}
-
-#preview-labels{position:fixed;top:14px;left:0;right:0;display:none;justify-content:space-around;z-index:105;pointer-events:none;}
-.prev-lbl{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.14em;color:rgba(80,140,220,0.72);background:rgba(6,14,54,0.72);padding:4px 12px;border-radius:999px;border:0.5px solid rgba(60,120,255,0.3);}
+  .note {
+    margin-top: 28px; padding: 12px 14px; background: #0d141d;
+    border-left: 2px solid #64808f; font-size: 11px; color: #9fb3c0; line-height: 1.6;
+  }
 </style>
 </head>
 <body>
 
-<!-- LAUNCH -->
-<div id="launch">
-  <div class="l-logo">◈ Pangea AR Systems v1.0</div>
-  <div class="l-title">Panoramic<br><span>Workspace</span></div>
-  <div class="l-card">
-    <div class="l-lbl">Piped instance (optional)</div>
-    <input class="l-input" id="piped-instance-launch" placeholder="https://piped.video" value="https://piped.video">
-    <div class="l-hint">Piped is a free open-source YouTube frontend · no API key needed · change instance if one is slow</div>
-  </div>
-  <div class="l-card">
-    <div class="l-lbl">Gmail OAuth Client ID (optional)</div>
-    <input class="l-input" id="client-id-input" placeholder="paste Google OAuth client ID…">
-    <div class="l-hint">Same project → Gmail API → OAuth 2.0 Client ID · skip for demo inbox</div>
-  </div>
-  <button class="l-btn" id="launch-btn">◉  Enter AR Workspace</button>
-  <div class="l-sub">landscape · gaze + tap · WebXR world-locked panels</div>
-</div>
+<div class="app">
+  <h1>SERVO CALIBRATION</h1>
+  <div class="subtitle">GarageCalibrator via Bluetooth</div>
 
-<!-- HUD -->
-<div id="hud">
-  <div id="reticle">
-    <svg id="dwell-svg" viewBox="0 0 56 56">
-      <circle id="dwell-track" cx="28" cy="28" r="22"/>
-      <circle id="dwell-fill" cx="28" cy="28" r="22"/>
-    </svg>
-    <div id="gaze-dot"></div>
-    <div class="tick tick-tl"></div><div class="tick tick-tr"></div>
-    <div class="tick tick-bl"></div><div class="tick tick-br"></div>
+  <div id="status" class="status">
+    <div class="status-dot"></div>
+    <span id="statusText">Not connected</span>
   </div>
-</div>
-<div id="status-pill"></div>
 
-<!-- LEFT PANEL: Piped -->
-<div id="yt-panel" class="ar-panel" style="display:none">
-  <div class="p-head" style="padding:0 14px;gap:0">
-    <div class="p-pulse" style="margin-right:9px"></div>
-    <div class="p-title" style="flex-shrink:0">Piped</div>
-    <div class="pd-hsearch">
-      <input class="pd-hinput" id="pd-hinput" placeholder="search YouTube via Piped…">
-      <button class="pd-hgo" id="pd-hgo">go</button>
+  <button id="connectBtn" class="connect-btn">CONNECT TO GARAGE UNIT</button>
+
+  <div class="control">
+    <div class="control-label">
+      <span>IDLE ANGLE (resting position, moves live)</span>
+      <span class="control-value" id="idleValue">--</span>
     </div>
-    <div class="p-extra" id="pd-status">ready</div>
+    <input type="range" id="idleSlider" min="0" max="180" value="90" disabled>
   </div>
-  <div class="p-body" style="position:relative">
-    <button class="pd-back" id="pd-back">◀ home</button>
-    <div class="pd-home" id="pd-home">
-      <div class="pd-logo">◈ piped · open youtube frontend</div>
-      <div class="pd-search-row">
-        <input class="pd-search-in" id="pd-main-in" placeholder="search YouTube…" autocomplete="off">
-        <button class="pd-search-btn" id="pd-main-go">Search</button>
-      </div>
-      <div class="pd-chips">
-        <button class="pd-chip" onclick="pdSearch('lofi hip hop radio')">lo-fi beats</button>
-        <button class="pd-chip" onclick="pdSearch('WebXR AR tutorial')">WebXR</button>
-        <button class="pd-chip" onclick="pdSearch('Iron Man JARVIS')">Iron Man</button>
-        <button class="pd-chip" onclick="pdSearch('synthwave 2024 mix')">synthwave</button>
-        <button class="pd-chip" onclick="pdSearch('Three.js 3D demo')">Three.js</button>
-        <button class="pd-chip" onclick="pdLoad(PIPED+'/trending','trending')">Trending</button>
-      </div>
-      <div class="pd-inst-row">
-        <div class="pd-inst-dot" id="pd-dot"></div>
-        <span>Instance:</span>
-        <select class="pd-inst-sel" id="pd-inst-sel" onchange="switchPiped(this.value)">
-          <option value="https://piped.video">piped.video</option>
-          <option value="https://piped.adminforge.de">adminforge.de</option>
-          <option value="https://piped.syncpundit.io">syncpundit.io</option>
-          <option value="https://yt.cdaut.de">cdaut.de</option>
-          <option value="https://piped.privacydev.net">privacydev.net</option>
-        </select>
-      </div>
+
+  <div class="control">
+    <div class="control-label">
+      <span>PRESS ANGLE (button-press position)</span>
+      <span class="control-value" id="pressValue">--</span>
     </div>
-    <iframe id="pd-frame"
-      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
-      allow="autoplay;fullscreen;encrypted-media"
-      allowfullscreen></iframe>
+    <input type="range" id="pressSlider" min="0" max="180" value="90" disabled>
+  </div>
+
+  <button id="testBtn" class="test-btn" disabled>TEST PRESS</button>
+
+  <div class="note">
+    Moving the idle slider repositions the servo immediately so you can
+    watch it while tuning. The press angle is only verified when you tap
+    "Test Press" -- it's a momentary position, not somewhere the servo
+    sits at rest. Values save automatically to the board's flash memory,
+    no separate "save" step needed. Requires Chrome or Edge -- Web
+    Bluetooth is not supported in Safari on iPhone/iPad.
   </div>
 </div>
 
-<!-- CENTRE PANEL: Mini App Launcher -->
-<div id="launcher-panel" class="ar-panel" style="display:none">
-  <div class="p-head">
-    <div class="p-pulse"></div>
-    <div class="p-title" id="lnch-title">Workspace</div>
-    <div class="p-extra" id="lnch-extra">gaze + tap to open</div>
-  </div>
-  <div class="p-body">
-    <div class="launcher-wrap">
-      <!-- icon grid -->
-      <div class="launcher-grid" id="launcher-grid"></div>
-    </div>
-
-    <!-- CLOCK -->
-    <div class="mini-app" id="app-clock">
-      <div class="mini-head">
-        <button class="mini-back" onclick="closeMiniApp()">◀ back</button>
-        <span class="mini-title">Clock</span>
-      </div>
-      <div class="mini-body">
-        <div class="clock-face">
-          <div class="clock-time" id="clock-time">00:00:00</div>
-          <div class="clock-date" id="clock-date"></div>
-          <div class="clock-zones">
-            <div class="clock-zone"><div class="cz-city">New York</div><div class="cz-time" id="cz-ny"></div></div>
-            <div class="clock-zone"><div class="cz-city">London</div><div class="cz-time" id="cz-ldn"></div></div>
-            <div class="clock-zone"><div class="cz-city">Tokyo</div><div class="cz-time" id="cz-tky"></div></div>
-            <div class="clock-zone"><div class="cz-city">Dubai</div><div class="cz-time" id="cz-dxb"></div></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- CALCULATOR -->
-    <div class="mini-app" id="app-calc">
-      <div class="mini-head">
-        <button class="mini-back" onclick="closeMiniApp()">◀ back</button>
-        <span class="mini-title">Calculator</span>
-      </div>
-      <div class="mini-body" style="padding:12px">
-        <div class="calc-wrap">
-          <div class="calc-screen">
-            <div class="calc-expr" id="calc-expr"></div>
-            <div class="calc-val" id="calc-val">0</div>
-          </div>
-          <div class="calc-grid">
-            <button class="calc-btn" onclick="calcKey('C')">C</button>
-            <button class="calc-btn op" onclick="calcKey('+/-')">+/-</button>
-            <button class="calc-btn op" onclick="calcKey('%')">%</button>
-            <button class="calc-btn op" onclick="calcKey('÷')">÷</button>
-            <button class="calc-btn" onclick="calcKey('7')">7</button>
-            <button class="calc-btn" onclick="calcKey('8')">8</button>
-            <button class="calc-btn" onclick="calcKey('9')">9</button>
-            <button class="calc-btn op" onclick="calcKey('×')">×</button>
-            <button class="calc-btn" onclick="calcKey('4')">4</button>
-            <button class="calc-btn" onclick="calcKey('5')">5</button>
-            <button class="calc-btn" onclick="calcKey('6')">6</button>
-            <button class="calc-btn op" onclick="calcKey('-')">−</button>
-            <button class="calc-btn" onclick="calcKey('1')">1</button>
-            <button class="calc-btn" onclick="calcKey('2')">2</button>
-            <button class="calc-btn" onclick="calcKey('3')">3</button>
-            <button class="calc-btn op" onclick="calcKey('+')">+</button>
-            <button class="calc-btn span2" onclick="calcKey('0')">0</button>
-            <button class="calc-btn" onclick="calcKey('.')">.</button>
-            <button class="calc-btn eq" onclick="calcKey('=')">=</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- NOTES -->
-    <div class="mini-app" id="app-notes">
-      <div class="mini-head">
-        <button class="mini-back" onclick="closeMiniApp()">◀ back</button>
-        <span class="mini-title">Notes</span>
-        <span id="notes-saved" style="font-size:9px;color:var(--td);margin-left:auto;font-family:'Space Mono',monospace;letter-spacing:.06em"></span>
-      </div>
-      <div class="mini-body">
-        <textarea class="notes-area" id="notes-area" placeholder="start typing…" oninput="notesChange()"></textarea>
-      </div>
-    </div>
-
-    <!-- WEATHER -->
-    <div class="mini-app" id="app-weather">
-      <div class="mini-head">
-        <button class="mini-back" onclick="closeMiniApp()">◀ back</button>
-        <span class="mini-title">Weather</span>
-      </div>
-      <div class="mini-body">
-        <div class="weather-wrap">
-          <div class="weather-search">
-            <input class="weather-in" id="weather-in" placeholder="city name…">
-            <button class="weather-go" onclick="fetchWeather()">Search</button>
-          </div>
-          <div id="weather-result" style="display:none">
-            <div class="weather-main">
-              <div class="weather-icon" id="w-icon">🌤</div>
-              <div>
-                <div class="weather-temp" id="w-temp">—</div>
-                <div class="weather-desc" id="w-desc"></div>
-                <div class="weather-city" id="w-city"></div>
-              </div>
-            </div>
-            <div class="weather-details">
-              <div class="wd-box"><div class="wd-val" id="w-feels">—</div><div class="wd-lbl">Feels like</div></div>
-              <div class="wd-box"><div class="wd-val" id="w-wind">—</div><div class="wd-lbl">Wind km/h</div></div>
-              <div class="wd-box"><div class="wd-val" id="w-hum">—</div><div class="wd-lbl">Humidity</div></div>
-            </div>
-          </div>
-          <div id="weather-msg" style="font-size:12px;color:var(--td);margin-top:8px"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- TIMER -->
-    <div class="mini-app" id="app-timer">
-      <div class="mini-head">
-        <button class="mini-back" onclick="closeMiniApp()">◀ back</button>
-        <span class="mini-title">Stopwatch</span>
-      </div>
-      <div class="mini-body">
-        <div class="timer-wrap">
-          <div class="timer-disp" id="timer-disp">00:00.00</div>
-          <div class="timer-btns">
-            <button class="timer-btn go" id="timer-start" onclick="timerToggle()">Start</button>
-            <button class="timer-btn" onclick="timerLap()">Lap</button>
-            <button class="timer-btn" onclick="timerReset()">Reset</button>
-          </div>
-          <div class="timer-laps" id="timer-laps"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- SPOTIFY -->
-    <div class="mini-app" id="app-spotify">
-      <div class="mini-head">
-        <button class="mini-back" onclick="closeMiniApp()">◀ back</button>
-        <span class="mini-title">Spotify</span>
-      </div>
-      <div class="mini-body" style="padding:0;overflow:hidden">
-        <div class="spotify-home" id="spotify-home">
-          <div style="font-size:28px">♪</div>
-          <div class="spotify-hint">Pick a playlist to embed — Spotify embeds work natively</div>
-          <div class="spotify-links">
-            <button class="spotify-link" onclick="loadSpotify('37i9dQZF1DXcBWIGoYBM5M')">Today's Top Hits</button>
-            <button class="spotify-link" onclick="loadSpotify('37i9dQZF1DX4sWSpwq3LiO')">Peaceful Piano</button>
-            <button class="spotify-link" onclick="loadSpotify('37i9dQZF1DX3rxVfibe1L0')">Mood Booster</button>
-            <button class="spotify-link" onclick="loadSpotify('37i9dQZF1DWWQRwui0ExPn')">Lo-Fi Beats</button>
-            <button class="spotify-link" onclick="loadSpotify('37i9dQZF1DX4dyzvuaRJ0n')">mint</button>
-          </div>
-        </div>
-        <iframe id="spotify-frame" style="display:none" src="" frameborder="0" allowtransparency="true" allow="encrypted-media autoplay; clipboard-write; fullscreen; picture-in-picture" loading="lazy"></iframe>
-      </div>
-    </div>
-
-    <!-- DRAW -->
-    <div class="mini-app" id="app-draw">
-      <div class="mini-head">
-        <button class="mini-back" onclick="closeMiniApp()">◀ back</button>
-        <span class="mini-title">Draw</span>
-      </div>
-      <div class="mini-body" style="padding:10px;display:flex;flex-direction:column">
-        <div class="draw-toolbar">
-          <div class="draw-color active" style="background:#64c8ff" onclick="setDrawColor('#64c8ff',this)"></div>
-          <div class="draw-color" style="background:#fff" onclick="setDrawColor('#ffffff',this)"></div>
-          <div class="draw-color" style="background:#f0a0f0" onclick="setDrawColor('#f0a0f0',this)"></div>
-          <div class="draw-color" style="background:#80ffb0" onclick="setDrawColor('#80ffb0',this)"></div>
-          <div class="draw-color" style="background:#ffdd60" onclick="setDrawColor('#ffdd60',this)"></div>
-          <div class="draw-color" style="background:#ff6060" onclick="setDrawColor('#ff6060',this)"></div>
-          <input type="range" class="draw-size" id="draw-size" min="2" max="24" value="4" style="width:80px">
-          <button class="draw-clear" onclick="clearCanvas()">Clear</button>
-        </div>
-        <canvas id="draw-canvas"></canvas>
-      </div>
-    </div>
-
-    <!-- WIKIPEDIA -->
-    <div class="mini-app" id="app-wiki">
-      <div class="mini-head">
-        <button class="mini-back" onclick="closeMiniApp()">◀ back</button>
-        <span class="mini-title">Wikipedia</span>
-      </div>
-      <div class="mini-body">
-        <div class="wiki-wrap">
-          <div class="wiki-search">
-            <input class="wiki-in" id="wiki-in" placeholder="search Wikipedia…">
-            <button class="wiki-go" onclick="searchWiki()">Search</button>
-          </div>
-          <div class="wiki-result" id="wiki-result">
-            <div class="wiki-result-text" style="color:var(--td)">Search any topic to read a summary here.</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-  </div>
-</div>
-
-<!-- RIGHT PANEL: Gmail -->
-<div id="gmail-panel" class="ar-panel" style="display:none">
-  <div class="p-head">
-    <div class="p-pulse"></div>
-    <div class="p-title">Inbox</div>
-    <div class="p-extra" id="unread-badge">—</div>
-  </div>
-  <div class="p-body" id="gmail-body">
-    <div class="gmail-auth-wrap" id="gmail-auth-ui">
-      <div class="gmail-auth-lbl">Connect your inbox</div>
-      <button class="gmail-sign-btn" id="gmail-sign-btn">Sign in with Google</button>
-      <div style="font-size:10px;color:var(--td)">or</div>
-      <button class="gmail-sign-btn" onclick="loadDemoEmails()" style="font-size:11px;opacity:.7">use demo inbox</button>
-    </div>
-  </div>
-</div>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/renderers/CSS3DRenderer.js"></script>
 <script>
-const S={gmailClientId:'',gmailToken:null,gazeTarget:null,dwellStart:null,dwellMs:600,panels:{},meshes:[],refSpace:null};
-const DWELL_CIRC=2*Math.PI*22;
+const SERVICE_UUID       = 'a5f3d2e0-1234-4a5b-8c6d-9e0f1a2b3c4d';
+const IDLE_ANGLE_UUID    = 'a5f3d2e1-1234-4a5b-8c6d-9e0f1a2b3c4d';
+const PRESS_ANGLE_UUID   = 'a5f3d2e2-1234-4a5b-8c6d-9e0f1a2b3c4d';
+const TEST_PRESS_UUID    = 'a5f3d2e3-1234-4a5b-8c6d-9e0f1a2b3c4d';
 
-/* THREE.JS */
-const scene=new THREE.Scene(),cssScene=new THREE.Scene();
-const camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,0.01,100);
-camera.position.set(0,0,0);
-const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
-renderer.setPixelRatio(devicePixelRatio);renderer.setSize(innerWidth,innerHeight);renderer.xr.enabled=true;
-renderer.domElement.style.cssText='position:fixed;inset:0;z-index:1;';document.body.appendChild(renderer.domElement);
-const cssRenderer=new THREE.CSS3DRenderer();
-cssRenderer.setSize(innerWidth,innerHeight);
-Object.assign(cssRenderer.domElement.style,{position:'fixed',top:'0',left:'0',pointerEvents:'none',zIndex:'2'});
-document.body.appendChild(cssRenderer.domElement);
-const raycaster=new THREE.Raycaster(),fwd=new THREE.Vector3(),camQ=new THREE.Quaternion();
+let idleChar = null;
+let pressChar = null;
+let testChar = null;
+let device = null;
 
-/* WORLD-LOCKED PANELS
-   'local' reference space = panels stay nailed to world coordinates.
-   They don't follow your head. Walk left, they stay where they are.  */
-const SCALE=0.0020,DEPTH=-2.4,SPREAD=2.0,TILT=Math.PI/5.5;
-function buildPanels(){
-  document.querySelectorAll('.ar-panel').forEach(el=>el.style.display='block');
-  [{key:'left',el:'yt-panel',x:-SPREAD,ry:TILT},{key:'mid',el:'launcher-panel',x:0,ry:0},{key:'right',el:'gmail-panel',x:SPREAD,ry:-TILT}]
-  .forEach(({key,el,x,ry})=>{
-    const domEl=document.getElementById(el);
-    const obj=new THREE.CSS3DObject(domEl);
-    obj.position.set(x,0,DEPTH);obj.rotation.y=ry;obj.scale.setScalar(SCALE);cssScene.add(obj);
-    const mesh=new THREE.Mesh(new THREE.PlaneGeometry(820*SCALE,600*SCALE),new THREE.MeshBasicMaterial({visible:false,side:THREE.DoubleSide}));
-    mesh.position.set(x,0,DEPTH);mesh.rotation.y=ry;mesh.userData={key,el};scene.add(mesh);S.meshes.push(mesh);S.panels[key]={obj,mesh};
-  });
+const connectBtn = document.getElementById('connectBtn');
+const statusEl = document.getElementById('status');
+const statusText = document.getElementById('statusText');
+const idleSlider = document.getElementById('idleSlider');
+const pressSlider = document.getElementById('pressSlider');
+const idleValue = document.getElementById('idleValue');
+const pressValue = document.getElementById('pressValue');
+const testBtn = document.getElementById('testBtn');
+
+function setConnectedUI(connected) {
+  statusEl.classList.toggle('connected', connected);
+  statusText.textContent = connected ? 'Connected' : 'Not connected';
+  idleSlider.disabled = !connected;
+  pressSlider.disabled = !connected;
+  testBtn.disabled = !connected;
+  connectBtn.textContent = connected ? 'DISCONNECT' : 'CONNECT TO GARAGE UNIT';
 }
 
-/* RENDER LOOP */
-renderer.setAnimationLoop((t,frame)=>{
-  if(renderer.xr.isPresenting&&frame&&S.refSpace){
-    const pose=frame.getViewerPose(S.refSpace);
-    if(pose){
-      const tr=pose.transform;
-      camQ.set(tr.orientation.x,tr.orientation.y,tr.orientation.z,tr.orientation.w);
-      fwd.set(0,0,-1).applyQuaternion(camQ);
-      raycaster.set(new THREE.Vector3(tr.position.x,tr.position.y,tr.position.z),fwd);
-      doGaze();
-    }
-  }
-  renderer.render(scene,camera);cssRenderer.render(cssScene,camera);
-});
+async function decodeCharValue(characteristic) {
+  const value = await characteristic.readValue();
+  const text = new TextDecoder().decode(value);
+  return parseInt(text, 10);
+}
 
-/* WebXR SESSION */
-async function startXR(){
-  try{
-    const session=await navigator.xr.requestSession('immersive-ar',{
-      requiredFeatures:['local'],
-      optionalFeatures:['dom-overlay','hit-test'],
-      domOverlay:{root:document.body}
+async function connect() {
+  try {
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [SERVICE_UUID] }],
     });
-    renderer.xr.setSession(session);
-    S.refSpace=await session.requestReferenceSpace('local');
-    session.addEventListener('select',onTap);
-    session.addEventListener('end',()=>{S.refSpace=null;showStatus('Session ended',3000);});
-    document.getElementById('hud').style.display='block';
-    showStatus('AR active · world-locked panels · gaze to focus · tap to select',4000);
-  }catch(e){enterPreview();}
+
+    device.addEventListener('gattserverdisconnected', () => {
+      setConnectedUI(false);
+    });
+
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(SERVICE_UUID);
+
+    idleChar = await service.getCharacteristic(IDLE_ANGLE_UUID);
+    pressChar = await service.getCharacteristic(PRESS_ANGLE_UUID);
+    testChar = await service.getCharacteristic(TEST_PRESS_UUID);
+
+    const idleAngle = await decodeCharValue(idleChar);
+    const pressAngle = await decodeCharValue(pressChar);
+
+    idleSlider.value = idleAngle;
+    pressSlider.value = pressAngle;
+    idleValue.textContent = idleAngle + '\u00b0';
+    pressValue.textContent = pressAngle + '\u00b0';
+
+    setConnectedUI(true);
+  } catch (err) {
+    console.error('Connection failed:', err);
+    alert('Connection failed: ' + err.message);
+  }
 }
 
-/* PREVIEW MODE */
-function enterPreview(){
-  showStatus('Preview mode · mouse to gaze · click to select',4000);
-  document.getElementById('hud').style.display='block';
-  document.getElementById('preview-labels').style.display='flex';
-  const cx=innerWidth/2,cy=innerHeight/2;
-  document.addEventListener('mousemove',e=>{
-    fwd.set((e.clientX-cx)/cx*0.55,(cy-e.clientY)/cy*0.35,-1).normalize();
-    raycaster.set(camera.position,fwd);doGaze();tweenPanels();
-  });
-  document.addEventListener('click',onTap);
+function disconnect() {
+  if (device && device.gatt.connected) {
+    device.gatt.disconnect();
+  }
+  setConnectedUI(false);
 }
 
-/* GAZE */
-const dwellFill=document.getElementById('dwell-fill');
-function doGaze(){
-  const hits=raycaster.intersectObjects(S.meshes);
-  if(hits.length){
-    const k=hits[0].object.userData.key;
-    if(S.gazeTarget!==k){S.gazeTarget=k;S.dwellStart=performance.now();}
-    // tile-level gaze only when looking at centre panel and no mini-app is open
-    if(k==='mid'&&!document.querySelector('.mini-app.show')){
-      updateTileGaze(hits[0].uv||{x:.5,y:.5});
-    } else {
-      clearTileGaze();
-    }
+connectBtn.addEventListener('click', () => {
+  if (statusEl.classList.contains('connected')) {
+    disconnect();
   } else {
-    S.gazeTarget=null;S.dwellStart=null;
-    dwellFill.style.strokeDashoffset=DWELL_CIRC;
-    clearTileGaze();
-  }
-  if(S.dwellStart) dwellFill.style.strokeDashoffset=DWELL_CIRC*(1-Math.min((performance.now()-S.dwellStart)/S.dwellMs,1));
-  tweenPanels();
-}
-function tweenPanels(){
-  Object.entries(S.panels).forEach(([k,{obj}])=>{const t=(k===S.gazeTarget)?SCALE*1.045:SCALE;obj.scale.x+=(t-obj.scale.x)*0.1;obj.scale.y=obj.scale.z=obj.scale.x;});
-}
-function onTap(){
-  if(!S.gazeTarget)return;
-  const el=document.getElementById(S.panels[S.gazeTarget]?.mesh?.userData?.el);
-  if(el){el.style.transition='box-shadow .07s';el.style.boxShadow='inset 0 0 60px rgba(100,200,255,0.22),0 0 50px rgba(60,140,255,0.4)';setTimeout(()=>el.style.boxShadow='',200);}
-}
-
-/* STATUS */
-let sT;function showStatus(m,ms){const el=document.getElementById('status-pill');el.textContent=m;el.style.display='block';clearTimeout(sT);if(ms)sT=setTimeout(()=>el.style.display='none',ms);}
-
-/* PIPED */
-let PIPED=sessionStorage.getItem('ar_piped')||'https://piped.video';
-
-function pdSearch(q){q=q||document.getElementById('pd-main-in').value.trim();if(!q)return;pdLoad(`${PIPED}/search?q=${encodeURIComponent(q)}&filter=all`,q);}
-function pdLoad(url,label){
-  document.getElementById('pd-frame').src=url;
-  document.getElementById('pd-frame').style.display='block';
-  document.getElementById('pd-home').style.display='none';
-  document.getElementById('pd-back').style.display='block';
-  document.getElementById('pd-status').textContent=(label||'').slice(0,18);
-}
-function pdGoHome(){
-  document.getElementById('pd-frame').src='';
-  document.getElementById('pd-frame').style.display='none';
-  document.getElementById('pd-home').style.display='flex';
-  document.getElementById('pd-back').style.display='none';
-  document.getElementById('pd-status').textContent='ready';
-}
-function switchPiped(v){PIPED=v;sessionStorage.setItem('ar_piped',v);checkPiped();pdGoHome();}
-function checkPiped(){
-  const dot=document.getElementById('pd-dot');
-  dot.style.background='rgba(250,170,30,0.85)';dot.style.boxShadow='0 0 4px rgba(250,170,30,0.6)';
-  fetch(`${PIPED}/healthcheck`,{mode:'no-cors'})
-    .then(()=>{dot.style.background='rgba(60,200,120,0.9)';dot.style.boxShadow='0 0 5px rgba(60,200,120,0.7)';})
-    .catch(()=>{dot.style.background='rgba(220,70,70,0.9)';dot.style.boxShadow='0 0 5px rgba(220,70,70,0.7)';});
-}
-document.getElementById('pd-main-go').addEventListener('click',()=>pdSearch());
-document.getElementById('pd-main-in').addEventListener('keydown',e=>{if(e.key==='Enter')pdSearch();});
-document.getElementById('pd-back').addEventListener('click',pdGoHome);
-document.getElementById('pd-hgo').addEventListener('click',()=>{const v=document.getElementById('pd-hinput').value.trim();if(v){pdSearch(v);document.getElementById('pd-hinput').value='';}});
-document.getElementById('pd-hinput').addEventListener('keydown',e=>{if(e.key==='Enter'){const v=document.getElementById('pd-hinput').value.trim();if(v){pdSearch(v);document.getElementById('pd-hinput').value='';};}});
-checkPiped();
-
-/* ═══════════════════════════════
-   CENTRE PANEL — MINI APP LAUNCHER
-   Apps open inside the panel.
-   No Gmail, no YouTube (those are
-   the left and right panels).
-   Gaze works on individual tiles
-   via UV raycasting on the mesh.
-═══════════════════════════════ */
-const MINI_APPS=[
-  {id:'clock',    label:'Clock',      file:'clock.png',    emoji:'🕐'},
-  {id:'calc',     label:'Calculator', file:'calc.png',     emoji:'⊞'},
-  {id:'notes',    label:'Notes',      file:'notes.png',    emoji:'✏'},
-  {id:'weather',  label:'Weather',    file:'weather.png',  emoji:'🌤'},
-  {id:'timer',    label:'Stopwatch',  file:'timer.png',    emoji:'⏱'},
-  {id:'spotify',  label:'Spotify',    file:'spotify.png',  emoji:'♪'},
-  {id:'draw',     label:'Draw',       file:'draw.png',     emoji:'🎨'},
-  {id:'wiki',     label:'Wikipedia',  file:'wiki.png',     emoji:'◎'},
-];
-
-// tile gaze tracking (separate from panel-level gaze)
-let tileGazeId=null, tileDwellStart=null;
-const TILE_DWELL_MS=700;
-const COLS=4; // grid columns
-const PANEL_W=820, PANEL_H=556; // body area (600 - 44 header)
-const TILE_PAD_X=20, TILE_PAD_Y=18, TILE_GAP=14;
-const TILE_W=Math.floor((PANEL_W - TILE_PAD_X*2 - TILE_GAP*(COLS-1))/COLS); // ≈191
-const TILE_H=100;
-
-function tryPNG(wrap,file,emoji){
-  const img=new Image();
-  img.onload=()=>{wrap.innerHTML='';img.style.cssText='width:100%;height:100%;object-fit:cover;border-radius:14px;';wrap.appendChild(img);};
-  img.onerror=()=>{wrap.textContent=emoji;};
-  img.src=file;
-}
-
-function renderLauncher(){
-  const grid=document.getElementById('launcher-grid');
-  grid.innerHTML='';
-  MINI_APPS.forEach(app=>{
-    const tile=document.createElement('div');
-    tile.className='app-tile';
-    tile.dataset.appId=app.id;
-    const wrap=document.createElement('div');wrap.className='app-icon-wrap';
-    tryPNG(wrap,app.file,app.emoji);
-    const lbl=document.createElement('div');lbl.className='app-label';lbl.textContent=app.label;
-    // dwell ring svg
-    const dsvg=document.createElementNS('http://www.w3.org/2000/svg','svg');
-    dsvg.setAttribute('class','tile-dwell');dsvg.setAttribute('viewBox','0 0 18 18');
-    const dc=document.createElementNS('http://www.w3.org/2000/svg','circle');
-    dc.setAttribute('cx','9');dc.setAttribute('cy','9');dc.setAttribute('r','7');
-    dsvg.appendChild(dc);tile.appendChild(dsvg);
-    tile.appendChild(wrap);tile.appendChild(lbl);
-    tile.addEventListener('click',()=>openMiniApp(app.id));
-    grid.appendChild(tile);
-  });
-}
-
-function openMiniApp(id){
-  document.querySelectorAll('.mini-app').forEach(a=>a.classList.remove('show'));
-  const el=document.getElementById('app-'+id);
-  if(el){el.classList.add('show');}
-  document.getElementById('lnch-title').textContent=MINI_APPS.find(a=>a.id===id)?.label||'App';
-  document.getElementById('lnch-extra').textContent='◀ tap back to close';
-  // init app-specific stuff
-  if(id==='clock') startClock();
-  if(id==='draw')  initCanvas();
-}
-
-function closeMiniApp(){
-  document.querySelectorAll('.mini-app').forEach(a=>a.classList.remove('show'));
-  document.getElementById('lnch-title').textContent='Workspace';
-  document.getElementById('lnch-extra').textContent='gaze + tap to open';
-  tileGazeId=null;tileDwellStart=null;
-}
-
-/* Tile-level gaze via UV from raycaster intersection.
-   When the centre mesh is hit, UV → grid position → tile highlight + dwell. */
-function updateTileGaze(uv){
-  const px=uv.x*PANEL_W;
-  const py=(1-uv.y)*PANEL_H - 44; // subtract header
-  if(py<0){clearTileGaze();return;}
-  const col=Math.floor((px-TILE_PAD_X)/(TILE_W+TILE_GAP));
-  const row=Math.floor((py-TILE_PAD_Y)/(TILE_H+TILE_GAP));
-  const idx=row*COLS+col;
-  if(col<0||col>=COLS||row<0||idx>=MINI_APPS.length){clearTileGaze();return;}
-  const appId=MINI_APPS[idx].id;
-  if(tileGazeId!==appId){
-    clearTileGaze();
-    tileGazeId=appId;
-    tileDwellStart=performance.now();
-    document.querySelector(`.app-tile[data-app-id="${appId}"]`)?.classList.add('gaze-on');
-  }
-  // progress dwell ring
-  const p=Math.min((performance.now()-tileDwellStart)/TILE_DWELL_MS,1);
-  const circ=document.querySelector(`.app-tile[data-app-id="${appId}"] .tile-dwell circle`);
-  if(circ) circ.style.strokeDashoffset=44*(1-p);
-  // auto-open on full dwell
-  if(p>=1){openMiniApp(appId);clearTileGaze();}
-}
-
-function clearTileGaze(){
-  if(tileGazeId){
-    document.querySelector(`.app-tile[data-app-id="${tileGazeId}"]`)?.classList.remove('gaze-on');
-    const circ=document.querySelector(`.app-tile[data-app-id="${tileGazeId}"] .tile-dwell circle`);
-    if(circ) circ.style.strokeDashoffset=44;
-  }
-  tileGazeId=null;tileDwellStart=null;
-}
-
-/* ── CLOCK ── */
-let clockTimer=null;
-function startClock(){
-  if(clockTimer) clearInterval(clockTimer);
-  function tick(){
-    const now=new Date();
-    document.getElementById('clock-time').textContent=now.toLocaleTimeString('en-GB');
-    document.getElementById('clock-date').textContent=now.toLocaleDateString('en-GB',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-    const fmt=tz=>new Date().toLocaleTimeString('en-GB',{timeZone:tz,hour:'2-digit',minute:'2-digit'});
-    document.getElementById('cz-ny').textContent=fmt('America/New_York');
-    document.getElementById('cz-ldn').textContent=fmt('Europe/London');
-    document.getElementById('cz-tky').textContent=fmt('Asia/Tokyo');
-    document.getElementById('cz-dxb').textContent=fmt('Asia/Dubai');
-  }
-  tick();clockTimer=setInterval(tick,1000);
-}
-
-/* ── CALCULATOR ── */
-let calcBuf='',calcExpr='',calcOp='',calcPrev='';
-function calcKey(k){
-  const disp=v=>{document.getElementById('calc-val').textContent=v;};
-  const exprEl=document.getElementById('calc-expr');
-  if(k==='C'){calcBuf='0';calcExpr='';calcOp='';calcPrev='';disp('0');exprEl.textContent='';return;}
-  if(k==='+/-'){calcBuf=calcBuf.startsWith('-')?calcBuf.slice(1):'-'+calcBuf;disp(calcBuf||'0');return;}
-  if(k==='%'){calcBuf=String(parseFloat(calcBuf||'0')/100);disp(calcBuf);return;}
-  if(['÷','×','-','+'].includes(k)){
-    if(calcBuf){calcPrev=calcBuf;calcBuf='';}
-    calcOp=k;exprEl.textContent=(calcPrev||'0')+' '+k;return;
-  }
-  if(k==='='){
-    if(!calcOp||!calcPrev){return;}
-    const a=parseFloat(calcPrev),b=parseFloat(calcBuf||calcPrev);
-    let res=a;
-    if(calcOp==='÷')res=b?a/b:0;
-    else if(calcOp==='×')res=a*b;
-    else if(calcOp==='-')res=a-b;
-    else if(calcOp==='+')res=a+b;
-    res=Math.round(res*1e10)/1e10;
-    exprEl.textContent=(calcPrev)+' '+calcOp+' '+(calcBuf||calcPrev)+' =';
-    calcBuf=String(res);calcOp='';calcPrev='';disp(calcBuf);return;
-  }
-  if(k==='.'&&calcBuf.includes('.'))return;
-  calcBuf=(calcBuf==='0'&&k!=='.')?k:calcBuf+k;
-  disp(calcBuf);
-}
-
-/* ── NOTES ── */
-let notesTimer;
-function notesChange(){
-  document.getElementById('notes-saved').textContent='saving…';
-  clearTimeout(notesTimer);
-  notesTimer=setTimeout(()=>{
-    sessionStorage.setItem('ar_notes',document.getElementById('notes-area').value);
-    document.getElementById('notes-saved').textContent='saved';
-  },600);
-}
-window.addEventListener('load',()=>{
-  const saved=sessionStorage.getItem('ar_notes');
-  if(saved){const el=document.getElementById('notes-area');if(el)el.value=saved;}
-});
-
-/* ── WEATHER ── */
-const WEATHER_CODES={0:'Clear',1:'Mostly clear',2:'Partly cloudy',3:'Overcast',45:'Foggy',48:'Icy fog',51:'Light drizzle',61:'Rain',71:'Snow',80:'Showers',95:'Thunderstorm'};
-const WEATHER_ICONS={0:'☀️',1:'🌤',2:'⛅',3:'☁️',45:'🌫',51:'🌦',61:'🌧',71:'❄️',80:'🌦',95:'⛈'};
-async function fetchWeather(){
-  const city=document.getElementById('weather-in').value.trim();
-  if(!city)return;
-  document.getElementById('weather-msg').textContent='Searching…';
-  document.getElementById('weather-result').style.display='none';
-  try{
-    const geo=await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`).then(r=>r.json());
-    if(!geo.results?.length){document.getElementById('weather-msg').textContent='City not found.';return;}
-    const {latitude:lat,longitude:lon,name,country}=geo.results[0];
-    const wx=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=relativehumidity_2m,apparent_temperature,windspeed_10m&forecast_days=1`).then(r=>r.json());
-    const cw=wx.current_weather;
-    const code=cw.weathercode;
-    document.getElementById('w-temp').textContent=Math.round(cw.temperature)+'°C';
-    document.getElementById('w-desc').textContent=WEATHER_CODES[code]||'Unknown';
-    document.getElementById('w-city').textContent=name+', '+country;
-    document.getElementById('w-icon').textContent=WEATHER_ICONS[code]||'🌡';
-    document.getElementById('w-wind').textContent=Math.round(cw.windspeed);
-    document.getElementById('w-feels').textContent=Math.round(wx.hourly.apparent_temperature[0])+'°C';
-    document.getElementById('w-hum').textContent=wx.hourly.relativehumidity_2m[0]+'%';
-    document.getElementById('weather-result').style.display='block';
-    document.getElementById('weather-msg').textContent='';
-  }catch(e){document.getElementById('weather-msg').textContent='Error fetching weather.';}
-}
-document.getElementById('weather-in').addEventListener('keydown',e=>{if(e.key==='Enter')fetchWeather();});
-
-/* ── TIMER ── */
-let timerRunning=false,timerMs=0,timerRef=null,lapCount=0;
-function timerTick(){const now=performance.now();timerMs+=(now-(timerRef||now));timerRef=now;renderTimer();}
-function renderTimer(){const m=Math.floor(timerMs/60000),s=Math.floor((timerMs%60000)/1000),cs=Math.floor((timerMs%1000)/10);document.getElementById('timer-disp').textContent=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')+'.'+String(cs).padStart(2,'0');}
-function timerToggle(){
-  timerRunning=!timerRunning;
-  document.getElementById('timer-start').textContent=timerRunning?'Pause':'Resume';
-  if(timerRunning){timerRef=performance.now();timerTimer=setInterval(timerTick,50);}
-  else clearInterval(timerTimer);
-}
-function timerLap(){if(!timerRunning)return;lapCount++;const d=document.getElementById('timer-disp').textContent;const l=document.createElement('div');l.className='timer-lap';l.textContent='Lap '+lapCount+' — '+d;document.getElementById('timer-laps').prepend(l);}
-function timerReset(){clearInterval(timerTimer);timerRunning=false;timerMs=0;timerRef=null;lapCount=0;document.getElementById('timer-start').textContent='Start';document.getElementById('timer-disp').textContent='00:00.00';document.getElementById('timer-laps').innerHTML='';}
-let timerTimer;
-
-/* ── SPOTIFY ── */
-function loadSpotify(id){
-  document.getElementById('spotify-home').style.display='none';
-  const f=document.getElementById('spotify-frame');
-  f.src=`https://open.spotify.com/embed/playlist/${id}?utm_source=generator&theme=0`;
-  f.style.display='block';
-}
-
-/* ── DRAW ── */
-let drawColor='#64c8ff',drawSize=4,drawing=false;
-function initCanvas(){
-  const c=document.getElementById('draw-canvas');
-  const wrap=c.parentElement;
-  c.width=wrap.clientWidth-0;c.height=wrap.clientHeight-54;
-  c.style.width='100%';c.style.height=(wrap.clientHeight-54)+'px';
-  const ctx=c.getContext('2d');
-  ctx.fillStyle='rgba(4,12,45,0.9)';ctx.fillRect(0,0,c.width,c.height);
-  const getPos=e=>{const r=c.getBoundingClientRect();const t=e.touches?e.touches[0]:e;return{x:(t.clientX-r.left)*(c.width/r.width),y:(t.clientY-r.top)*(c.height/r.height)};};
-  c.onpointerdown=e=>{drawing=true;const p=getPos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);};
-  c.onpointermove=e=>{if(!drawing)return;const p=getPos(e);ctx.strokeStyle=drawColor;ctx.lineWidth=drawSize;ctx.lineCap='round';ctx.lineTo(p.x,p.y);ctx.stroke();};
-  c.onpointerup=c.onpointerleave=()=>drawing=false;
-}
-function setDrawColor(c,el){drawColor=c;document.querySelectorAll('.draw-color').forEach(d=>d.classList.remove('active'));el.classList.add('active');}
-function clearCanvas(){const c=document.getElementById('draw-canvas');const ctx=c.getContext('2d');ctx.fillStyle='rgba(4,12,45,0.9)';ctx.fillRect(0,0,c.width,c.height);}
-document.getElementById('draw-size').addEventListener('input',e=>drawSize=+e.target.value);
-
-/* ── WIKIPEDIA ── */
-async function searchWiki(){
-  const q=document.getElementById('wiki-in').value.trim();if(!q)return;
-  const r=document.getElementById('wiki-result');
-  r.innerHTML='<div style="color:var(--td);font-size:12px">Searching…</div>';
-  try{
-    const data=await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(q)}`).then(r=>r.json());
-    if(data.type==='disambiguation'||!data.extract){r.innerHTML='<div style="color:var(--td);font-size:12px">Try a more specific search term.</div>';return;}
-    r.innerHTML=`<div class="wiki-result-title">${data.title}</div><div class="wiki-result-text">${data.extract}</div>`;
-  }catch(e){r.innerHTML='<div style="color:rgba(220,80,80,0.9);font-size:12px">Could not fetch article.</div>';}
-}
-document.getElementById('wiki-in').addEventListener('keydown',e=>{if(e.key==='Enter')searchWiki();});
-
-/* GMAIL */
-function gmailAuthURL(){const b=location.href.split('#')[0].split('?')[0];return`https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(S.gmailClientId)}&redirect_uri=${encodeURIComponent(b)}&response_type=token&scope=${encodeURIComponent('https://www.googleapis.com/auth/gmail.readonly')}&prompt=select_account`;}
-document.getElementById('gmail-sign-btn').addEventListener('click',()=>{if(!S.gmailClientId){loadDemoEmails();return;}sessionStorage.setItem('ar_client_id',S.gmailClientId);location.href=gmailAuthURL();});
-async function fetchGmail(){
-  try{
-    const list=await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=16&q=in:inbox',{headers:{Authorization:`Bearer ${S.gmailToken}`}}).then(r=>r.json());
-    if(!list.messages){loadDemoEmails();return;}
-    const msgs=await Promise.all(list.messages.slice(0,14).map(m=>fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`,{headers:{Authorization:`Bearer ${S.gmailToken}`}}).then(r=>r.json())));
-    renderEmails(msgs.map(m=>({from:(m.payload.headers.find(h=>h.name==='From')?.value||'Unknown').replace(/<.*>/,'').trim(),subject:m.payload.headers.find(h=>h.name==='Subject')?.value||'(no subject)',snippet:m.snippet||'',unread:m.labelIds?.includes('UNREAD')})));
-    document.getElementById('unread-badge').textContent=msgs.filter(m=>m.labelIds?.includes('UNREAD')).length+' unread';
-  }catch(e){loadDemoEmails();}
-}
-function loadDemoEmails(){renderEmails([{from:'Anthropic',subject:'AR workspace live',snippet:'Your panoramic workspace is running. Gaze to focus panels, tap to interact.',unread:true},{from:'GitHub',subject:'PR merged: feat/webxr-panels',snippet:'Pull request #42 merged into main. 3 checks passed.',unread:true},{from:'Google Calendar',subject:'Stand-up in 10 min',snippet:'Your daily stand-up starts at 10:00 AM.',unread:true},{from:'Vercel',subject:'Deployment successful ✓',snippet:'ar-workspace.vercel.app deployed to production.',unread:false},{from:'Stripe',subject:'Payment received $480',snippet:'Payment received from ACME Corp. Depositing in 2 days.',unread:false},{from:'Linear',subject:'6 issues assigned',snippet:'Critical: gaze raycaster edge case · Feature: dark glass variant...',unread:false},{from:'Notion',subject:'Weekly digest',snippet:'4 pages updated, 2 comments, 1 task due tomorrow.',unread:false},{from:'Figma',subject:'Design file shared',snippet:'Jordan Lee shared "AR HUD Components v3" with you.',unread:false},{from:'npm',subject:'Security advisory',snippet:'3 low-severity vulnerabilities. Run npm audit to review.',unread:false},{from:'Smashing Magazine',subject:'Spatial UI patterns',snippet:'This week: glass morphism in WebXR, CSS3DRenderer tips.',unread:false}]);document.getElementById('unread-badge').textContent='3 unread';}
-function renderEmails(emails){const body=document.getElementById('gmail-body');const wrap=document.createElement('div');wrap.className='email-list-wrap';wrap.innerHTML=emails.map(e=>`<div class="email-row${e.unread?' unread':''}"><div class="email-from">${e.from}</div><div class="email-subject">${e.subject}</div><div class="email-snippet">${e.snippet}</div></div>`).join('');body.innerHTML='';body.appendChild(wrap);}
-
-/* OAUTH REDIRECT */
-function checkOAuth(){const m=location.hash.match(/access_token=([^&]+)/);if(!m)return false;S.gmailToken=m[1];S.gmailClientId=sessionStorage.getItem('ar_client_id')||'';history.replaceState(null,'',location.pathname);return true;}
-
-/* LAUNCH */
-document.getElementById('launch-btn').addEventListener('click',async()=>{
-  const pi=(document.getElementById('piped-instance-launch').value||'').trim();
-  if(pi){PIPED=pi;sessionStorage.setItem('ar_piped',pi);const sel=document.getElementById('pd-inst-sel');if(sel){const opt=[...sel.options].find(o=>o.value===pi);if(opt)opt.selected=true;}}
-  S.gmailClientId=(document.getElementById('client-id-input').value||'').trim();
-  document.getElementById('launch').style.display='none';
-  renderLauncher();buildPanels();
-  if(S.gmailToken)fetchGmail();else if(!S.gmailClientId)loadDemoEmails();
-  const arOk=navigator.xr&&await navigator.xr.isSessionSupported('immersive-ar').catch(()=>false);
-  if(arOk)startXR();else enterPreview();
-});
-
-window.addEventListener('load',()=>{
-  const sp=sessionStorage.getItem('ar_piped');
-  if(sp){PIPED=sp;document.getElementById('piped-instance-launch').value=sp;const sel=document.getElementById('pd-inst-sel');if(sel){const opt=[...sel.options].find(o=>o.value===sp);if(opt)opt.selected=true;}}
-  if(checkOAuth()){
-    document.getElementById('client-id-input').value=S.gmailClientId;
-    document.getElementById('launch').style.display='none';
-    renderLauncher();buildPanels();fetchGmail();
-    navigator.xr?.isSessionSupported('immersive-ar').then(ok=>ok?startXR():enterPreview()).catch(()=>enterPreview());
+    connect();
   }
 });
 
-window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);cssRenderer.setSize(innerWidth,innerHeight);});
+let idleDebounce = null;
+idleSlider.addEventListener('input', () => {
+  idleValue.textContent = idleSlider.value + '\u00b0';
+  if (idleDebounce) clearTimeout(idleDebounce);
+  idleDebounce = setTimeout(async () => {
+    if (idleChar) {
+      await idleChar.writeValue(new TextEncoder().encode(String(idleSlider.value)));
+    }
+  }, 150);
+});
+
+let pressDebounce = null;
+pressSlider.addEventListener('input', () => {
+  pressValue.textContent = pressSlider.value + '\u00b0';
+  if (pressDebounce) clearTimeout(pressDebounce);
+  pressDebounce = setTimeout(async () => {
+    if (pressChar) {
+      await pressChar.writeValue(new TextEncoder().encode(String(pressSlider.value)));
+    }
+  }, 150);
+});
+
+testBtn.addEventListener('click', async () => {
+  if (testChar) {
+    await testChar.writeValue(new TextEncoder().encode('1'));
+  }
+});
 </script>
+
 </body>
 </html>
