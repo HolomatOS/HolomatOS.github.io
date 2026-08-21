@@ -3,212 +3,433 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Servo Calibration</title>
+<title>HOLOMATOS // LED CONTROL</title>
 <style>
-  * { box-sizing: border-box; }
-  html, body {
-    margin: 0; padding: 0; min-height: 100vh;
-    background: #000000;
-    font-family: -apple-system, "SF Mono", ui-monospace, monospace;
-    color: #d8ecf5;
+  :root{
+    --bg:#05080b;
+    --bg-panel:#0a131a;
+    --bg-panel-2:#0d1820;
+    --line:#12333d;
+    --cyan:#00e5ff;
+    --cyan-dim:#0891a8;
+    --cyan-glow:rgba(0,229,255,.35);
+    --text:#d7f6ff;
+    --text-dim:#5f8b96;
+    --off:#3a4a50;
+    --danger:#ff3b5c;
+    --amber:#ffb020;
+    --mono:'SF Mono','Consolas','Menlo','Courier New',monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
   }
-  .app { max-width: 480px; margin: 0 auto; padding: 24px 20px; }
-  h1 { font-size: 15px; letter-spacing: 2px; font-weight: 700; margin-bottom: 4px; }
-  .subtitle { color: #64808f; font-size: 11px; margin-bottom: 24px; }
 
-  .status {
-    display: flex; align-items: center; gap: 8px;
-    padding: 10px 14px; border: 1px solid #64808f; border-radius: 4px;
-    margin-bottom: 24px; font-size: 12px;
-  }
-  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #64808f; }
-  .status.connected { border-color: #35e08a; }
-  .status.connected .status-dot { background: #35e08a; }
+  *{box-sizing:border-box;margin:0;padding:0;}
 
-  .connect-btn {
-    width: 100%; padding: 16px; margin-bottom: 24px;
-    background: #0d141d; border: 1px solid #33e0ff; color: #33e0ff;
-    font-family: inherit; font-size: 13px; font-weight: 700; letter-spacing: 1px;
-    border-radius: 4px; cursor: pointer;
+  body{
+    background:
+      radial-gradient(ellipse at top,#0a1620 0%,var(--bg) 55%),
+      repeating-linear-gradient(0deg, rgba(0,229,255,.025) 0px, rgba(0,229,255,.025) 1px, transparent 1px, transparent 3px);
+    color:var(--text);
+    font-family:var(--sans);
+    min-height:100vh;
+    padding:20px;
   }
-  .connect-btn:disabled { opacity: 0.4; cursor: default; }
 
-  .control { margin-bottom: 28px; }
-  .control-label {
-    display: flex; justify-content: space-between; align-items: baseline;
-    margin-bottom: 8px; font-size: 12px; letter-spacing: 1px; color: #9fb3c0;
-  }
-  .control-value { color: #33e0ff; font-size: 18px; font-weight: 700; }
-  input[type="range"] {
-    width: 100%; accent-color: #33e0ff; height: 6px;
-  }
-  input[type="range"]:disabled { opacity: 0.3; }
+  .wrap{ max-width:960px; margin:0 auto; }
 
-  .test-btn {
-    width: 100%; padding: 18px; margin-top: 8px;
-    background: #0d141d; border: 1px solid #ffb300; color: #ffb300;
-    font-family: inherit; font-size: 13px; font-weight: 700; letter-spacing: 2px;
-    border-radius: 4px; cursor: pointer;
+  /* ---------- header ---------- */
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:16px; flex-wrap:wrap;
+    padding-bottom:18px; margin-bottom:22px;
+    border-bottom:1px solid var(--line);
   }
-  .test-btn:disabled { opacity: 0.3; cursor: default; }
+  .brand{ display:flex; align-items:center; gap:14px; }
+  .brand h1{
+    font-family:var(--mono); font-size:1.15rem; letter-spacing:.28em;
+    color:var(--cyan); text-transform:uppercase; font-weight:700;
+    text-shadow:0 0 12px var(--cyan-glow);
+  }
+  .brand small{
+    display:block; font-family:var(--mono); font-size:.62rem;
+    letter-spacing:.2em; color:var(--text-dim); margin-top:3px;
+  }
 
-  .note {
-    margin-top: 28px; padding: 12px 14px; background: #0d141d;
-    border-left: 2px solid #64808f; font-size: 11px; color: #9fb3c0; line-height: 1.6;
+  .ring{ position:relative; width:46px; height:46px; flex:none; }
+  .ring .dot{
+    position:absolute; inset:0; border-radius:50%;
+    border:2px solid var(--off);
   }
+  .ring .sweep{
+    position:absolute; inset:0; border-radius:50%;
+    background:conic-gradient(var(--cyan) 0deg, transparent 70deg);
+    -webkit-mask:radial-gradient(circle, transparent 62%, black 63%);
+            mask:radial-gradient(circle, transparent 62%, black 63%);
+    animation:spin 2.6s linear infinite;
+    opacity:0;
+    transition:opacity .3s ease;
+  }
+  .ring.connected .sweep{ opacity:1; }
+  .ring.connected .dot{ border-color:var(--cyan-dim); box-shadow:0 0 14px var(--cyan-glow); }
+  .ring.error .dot{ border-color:var(--danger); }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  .conn-status{ text-align:right; font-family:var(--mono); font-size:.72rem; }
+  .conn-status .state{ letter-spacing:.15em; font-weight:700; }
+  .conn-status .state.ok{ color:var(--cyan); }
+  .conn-status .state.bad{ color:var(--danger); }
+  .conn-status .ip{ color:var(--text-dim); margin-top:2px; }
+
+  /* ---------- panels ---------- */
+  .panel{
+    background:linear-gradient(180deg,var(--bg-panel-2),var(--bg-panel));
+    border:1px solid var(--line);
+    border-radius:2px;
+    padding:18px 20px;
+    margin-bottom:16px;
+    position:relative;
+  }
+  .panel::before, .panel::after{
+    content:''; position:absolute; width:10px; height:10px;
+    border:1px solid var(--cyan-dim); opacity:.7;
+  }
+  .panel::before{ top:-1px; left:-1px; border-right:none; border-bottom:none; }
+  .panel::after{ bottom:-1px; right:-1px; border-left:none; border-top:none; }
+
+  .panel h2{
+    font-family:var(--mono); font-size:.68rem; letter-spacing:.24em;
+    text-transform:uppercase; color:var(--text-dim); margin-bottom:14px;
+  }
+
+  /* ---------- config bar ---------- */
+  .config-row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .config-row label{ font-family:var(--mono); font-size:.7rem; color:var(--text-dim); letter-spacing:.1em; }
+  .config-row input[type=text]{
+    background:var(--bg); border:1px solid var(--line); color:var(--cyan);
+    font-family:var(--mono); font-size:.85rem; padding:8px 10px; border-radius:2px;
+    min-width:180px; flex:1;
+  }
+  .config-row input[type=text]:focus{ outline:none; border-color:var(--cyan-dim); box-shadow:0 0 8px var(--cyan-glow); }
+
+  .warn{
+    display:none;
+    margin-top:12px; padding:10px 12px; border:1px solid var(--amber);
+    background:rgba(255,176,32,.08); color:var(--amber);
+    font-family:var(--mono); font-size:.72rem; line-height:1.5; border-radius:2px;
+  }
+  .warn.show{ display:block; }
+
+  /* ---------- buttons ---------- */
+  button{
+    font-family:var(--mono); font-size:.72rem; letter-spacing:.12em;
+    text-transform:uppercase; cursor:pointer; border-radius:2px;
+    background:var(--bg); color:var(--cyan); border:1px solid var(--cyan-dim);
+    padding:9px 14px; transition:all .15s ease;
+  }
+  button:hover{ background:rgba(0,229,255,.08); box-shadow:0 0 10px var(--cyan-glow); }
+  button:active{ transform:translateY(1px); }
+  button.primary{ background:var(--cyan-dim); color:#00161a; font-weight:700; }
+  button.primary:hover{ background:var(--cyan); }
+  button.danger{ border-color:var(--danger); color:var(--danger); }
+  button.danger:hover{ background:rgba(255,59,92,.1); box-shadow:0 0 10px rgba(255,59,92,.35); }
+  button:disabled{ opacity:.35; cursor:not-allowed; box-shadow:none; }
+  button.toggled{ background:var(--cyan); color:#00161a; font-weight:700; }
+
+  /* ---------- LED grid ---------- */
+  .led-grid{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr));
+    gap:12px;
+  }
+  .led-card{
+    border:1px solid var(--line); background:var(--bg); border-radius:2px;
+    padding:12px; text-align:center;
+  }
+  .led-card .bulb{
+    width:34px; height:34px; margin:0 auto 10px; border-radius:50%;
+    background:var(--off); border:1px solid var(--line);
+    transition:all .2s ease;
+  }
+  .led-card .bulb.on{
+    background:var(--cyan); box-shadow:0 0 16px var(--cyan), 0 0 30px var(--cyan-glow);
+    border-color:var(--cyan);
+  }
+  .led-card .label{ font-family:var(--mono); font-size:.75rem; letter-spacing:.1em; margin-bottom:2px; }
+  .led-card .sub{ font-family:var(--mono); font-size:.6rem; color:var(--text-dim); margin-bottom:10px; }
+  .led-card button{ width:100%; }
+
+  .row{ display:flex; gap:10px; flex-wrap:wrap; }
+
+  /* ---------- chase panel ---------- */
+  .chase-controls{ display:flex; flex-direction:column; gap:14px; }
+  .slider-row{ display:flex; align-items:center; gap:12px; }
+  .slider-row input[type=range]{
+    flex:1; -webkit-appearance:none; height:3px; background:var(--line); border-radius:2px;
+  }
+  .slider-row input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:14px; height:14px; border-radius:50%;
+    background:var(--cyan); box-shadow:0 0 8px var(--cyan-glow); cursor:pointer;
+  }
+  .slider-row .val{ font-family:var(--mono); font-size:.75rem; color:var(--cyan); min-width:60px; text-align:right; }
+
+  /* ---------- telemetry ---------- */
+  .telemetry{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+    gap:10px; font-family:var(--mono); font-size:.72rem;
+  }
+  .telemetry .item{ border-left:2px solid var(--cyan-dim); padding-left:10px; }
+  .telemetry .item .k{ color:var(--text-dim); font-size:.62rem; letter-spacing:.15em; text-transform:uppercase; }
+  .telemetry .item .v{ color:var(--cyan); margin-top:2px; }
+
+  footer{ text-align:center; font-family:var(--mono); font-size:.62rem; color:var(--text-dim); letter-spacing:.15em; padding:24px 0 10px; }
 </style>
 </head>
 <body>
+<div class="wrap">
 
-<div class="app">
-  <h1>SERVO CALIBRATION</h1>
-  <div class="subtitle">GarageCalibrator via Bluetooth</div>
-
-  <div id="status" class="status">
-    <div class="status-dot"></div>
-    <span id="statusText">Not connected</span>
-  </div>
-
-  <button id="connectBtn" class="connect-btn">CONNECT TO GARAGE UNIT</button>
-
-  <div class="control">
-    <div class="control-label">
-      <span>IDLE ANGLE (resting position, moves live)</span>
-      <span class="control-value" id="idleValue">--</span>
+  <header>
+    <div class="brand">
+      <div class="ring" id="connRing"><div class="dot"></div><div class="sweep"></div></div>
+      <div>
+        <h1>HoloMatos</h1>
+        <small>LED ARRAY // ESP32-S3 · 74HC595</small>
+      </div>
     </div>
-    <input type="range" id="idleSlider" min="0" max="180" value="90" disabled>
-  </div>
-
-  <div class="control">
-    <div class="control-label">
-      <span>PRESS ANGLE (button-press position)</span>
-      <span class="control-value" id="pressValue">--</span>
+    <div class="conn-status">
+      <div class="state bad" id="connState">DISCONNECTED</div>
+      <div class="ip" id="connIp">—</div>
     </div>
-    <input type="range" id="pressSlider" min="0" max="180" value="90" disabled>
+  </header>
+
+  <!-- ================================================================
+       CONFIG PANEL — this is the ONE OBVIOUS PLACE to set the ESP32 IP.
+       You can either type it here every time you load the page, or
+       edit ESP32_CONFIG.defaultBaseUrl in the <script> at the bottom
+       of this file so it's already filled in when the page loads.
+       ================================================================ -->
+  <div class="panel">
+    <h2>Device Address</h2>
+    <div class="config-row">
+      <label for="baseUrlInput">ESP32 URL</label>
+      <input type="text" id="baseUrlInput" placeholder="http://192.168.1.50">
+      <button id="connectBtn" class="primary">Connect</button>
+    </div>
+    <div class="warn" id="mixedContentWarn">
+      ⚠ This page is loaded over HTTPS (GitHub Pages). Browsers block HTTPS
+      pages from calling http:// addresses on your local network
+      (mixed-content / private-network blocking). Requests to your ESP32
+      will likely fail from here. Open this same file locally
+      (double-click it, or serve it with a plain HTTP local server) to
+      control the LEDs — see the chat explanation for the full picture
+      and other options.
+    </div>
   </div>
 
-  <button id="testBtn" class="test-btn" disabled>TEST PRESS</button>
-
-  <div class="note">
-    Moving the idle slider repositions the servo immediately so you can
-    watch it while tuning. The press angle is only verified when you tap
-    "Test Press" -- it's a momentary position, not somewhere the servo
-    sits at rest. Values save automatically to the board's flash memory,
-    no separate "save" step needed. Requires Chrome or Edge -- Web
-    Bluetooth is not supported in Safari on iPhone/iPad.
+  <div class="panel">
+    <h2>LED Array</h2>
+    <div class="led-grid" id="ledGrid"></div>
+    <div class="row" style="margin-top:14px;">
+      <button id="allOnBtn" class="primary">All On</button>
+      <button id="allOffBtn" class="danger">All Off</button>
+    </div>
   </div>
+
+  <div class="panel">
+    <h2>Chase Sequence</h2>
+    <div class="chase-controls">
+      <div class="row">
+        <button id="chaseStartBtn" class="primary">Start Chase</button>
+        <button id="chaseStopBtn" class="danger">Stop Chase</button>
+        <button id="dirFwdBtn">Forward</button>
+        <button id="dirRevBtn">Reverse</button>
+      </div>
+      <div class="slider-row">
+        <label style="font-family:var(--mono);font-size:.7rem;color:var(--text-dim);letter-spacing:.1em;">SPEED</label>
+        <input type="range" id="speedSlider" min="20" max="1000" step="10" value="150">
+        <div class="val" id="speedVal">150 ms</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>System Telemetry</h2>
+    <div class="telemetry">
+      <div class="item"><div class="k">Board</div><div class="v" id="telBoard">—</div></div>
+      <div class="item"><div class="k">Driver</div><div class="v" id="telDriver">—</div></div>
+      <div class="item"><div class="k">Signal (RSSI)</div><div class="v" id="telRssi">—</div></div>
+      <div class="item"><div class="k">Uptime</div><div class="v" id="telUptime">—</div></div>
+      <div class="item"><div class="k">Chase</div><div class="v" id="telChase">—</div></div>
+      <div class="item"><div class="k">Direction</div><div class="v" id="telDir">—</div></div>
+    </div>
+  </div>
+
+  <footer>HOLOMATOS // LOCAL NETWORK CONTROL SYSTEM</footer>
 </div>
 
 <script>
-const SERVICE_UUID       = 'a5f3d2e0-1234-4a5b-8c6d-9e0f1a2b3c4d';
-const IDLE_ANGLE_UUID    = 'a5f3d2e1-1234-4a5b-8c6d-9e0f1a2b3c4d';
-const PRESS_ANGLE_UUID   = 'a5f3d2e2-1234-4a5b-8c6d-9e0f1a2b3c4d';
-const TEST_PRESS_UUID    = 'a5f3d2e3-1234-4a5b-8c6d-9e0f1a2b3c4d';
+/* =====================================================================
+   CONFIG — edit defaultBaseUrl below to hardcode your ESP32's address,
+   OR leave it blank and type the address into the "Device Address"
+   box every time you load the page (it will not be saved between
+   visits — that's intentional, see chat notes).
+   ===================================================================== */
+const ESP32_CONFIG = {
+  defaultBaseUrl: "http://192.168.1.50"   // <-- put your ESP32's IP here
+};
 
-let idleChar = null;
-let pressChar = null;
-let testChar = null;
-let device = null;
+let baseUrl = ESP32_CONFIG.defaultBaseUrl;
+let connected = false;
+let pollTimer = null;
 
-const connectBtn = document.getElementById('connectBtn');
-const statusEl = document.getElementById('status');
-const statusText = document.getElementById('statusText');
-const idleSlider = document.getElementById('idleSlider');
-const pressSlider = document.getElementById('pressSlider');
-const idleValue = document.getElementById('idleValue');
-const pressValue = document.getElementById('pressValue');
-const testBtn = document.getElementById('testBtn');
+const LED_LABELS = [
+  {name:"LED 1", sub:"Q5 · pin 5"},
+  {name:"LED 2", sub:"Q0 · pin 15"},
+  {name:"LED 3", sub:"Q4 · pin 4"},
+  {name:"LED 4", sub:"Q6 · pin 6"},
+  {name:"LED 5", sub:"Q2 · pin 2"},
+  {name:"LED 6", sub:"Q1 · pin 1"}
+];
 
-function setConnectedUI(connected) {
-  statusEl.classList.toggle('connected', connected);
-  statusText.textContent = connected ? 'Connected' : 'Not connected';
-  idleSlider.disabled = !connected;
-  pressSlider.disabled = !connected;
-  testBtn.disabled = !connected;
-  connectBtn.textContent = connected ? 'DISCONNECT' : 'CONNECT TO GARAGE UNIT';
+const els = {
+  ring: document.getElementById('connRing'),
+  connState: document.getElementById('connState'),
+  connIp: document.getElementById('connIp'),
+  baseUrlInput: document.getElementById('baseUrlInput'),
+  connectBtn: document.getElementById('connectBtn'),
+  mixedWarn: document.getElementById('mixedContentWarn'),
+  ledGrid: document.getElementById('ledGrid'),
+  allOnBtn: document.getElementById('allOnBtn'),
+  allOffBtn: document.getElementById('allOffBtn'),
+  chaseStartBtn: document.getElementById('chaseStartBtn'),
+  chaseStopBtn: document.getElementById('chaseStopBtn'),
+  dirFwdBtn: document.getElementById('dirFwdBtn'),
+  dirRevBtn: document.getElementById('dirRevBtn'),
+  speedSlider: document.getElementById('speedSlider'),
+  speedVal: document.getElementById('speedVal'),
+  telBoard: document.getElementById('telBoard'),
+  telDriver: document.getElementById('telDriver'),
+  telRssi: document.getElementById('telRssi'),
+  telUptime: document.getElementById('telUptime'),
+  telChase: document.getElementById('telChase'),
+  telDir: document.getElementById('telDir'),
+};
+
+els.baseUrlInput.value = baseUrl;
+
+// Warn immediately if this page itself is HTTPS — the ESP32 talk will
+// very likely be blocked by the browser regardless of CORS.
+if (location.protocol === 'https:') {
+  els.mixedWarn.classList.add('show');
 }
 
-async function decodeCharValue(characteristic) {
-  const value = await characteristic.readValue();
-  const text = new TextDecoder().decode(value);
-  return parseInt(text, 10);
-}
+// ---- build the 6 LED cards ----
+LED_LABELS.forEach((meta, i) => {
+  const card = document.createElement('div');
+  card.className = 'led-card';
+  card.innerHTML = `
+    <div class="bulb" id="bulb-${i}"></div>
+    <div class="label">${meta.name}</div>
+    <div class="sub">${meta.sub}</div>
+    <button data-led="${i}" id="btn-${i}">Toggle</button>
+  `;
+  els.ledGrid.appendChild(card);
+  card.querySelector('button').addEventListener('click', () => toggleLed(i));
+});
 
-async function connect() {
+// ---- networking helper ----
+async function apiCall(path) {
+  if (!baseUrl) return null;
   try {
-    device = await navigator.bluetooth.requestDevice({
-      filters: [{ services: [SERVICE_UUID] }],
-    });
-
-    device.addEventListener('gattserverdisconnected', () => {
-      setConnectedUI(false);
-    });
-
-    const server = await device.gatt.connect();
-    const service = await server.getPrimaryService(SERVICE_UUID);
-
-    idleChar = await service.getCharacteristic(IDLE_ANGLE_UUID);
-    pressChar = await service.getCharacteristic(PRESS_ANGLE_UUID);
-    testChar = await service.getCharacteristic(TEST_PRESS_UUID);
-
-    const idleAngle = await decodeCharValue(idleChar);
-    const pressAngle = await decodeCharValue(pressChar);
-
-    idleSlider.value = idleAngle;
-    pressSlider.value = pressAngle;
-    idleValue.textContent = idleAngle + '\u00b0';
-    pressValue.textContent = pressAngle + '\u00b0';
-
-    setConnectedUI(true);
+    const res = await fetch(baseUrl + path, { method: 'GET' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    setConnected(true);
+    return data;
   } catch (err) {
-    console.error('Connection failed:', err);
-    alert('Connection failed: ' + err.message);
+    setConnected(false);
+    console.warn('ESP32 request failed:', path, err);
+    return null;
   }
 }
 
-function disconnect() {
-  if (device && device.gatt.connected) {
-    device.gatt.disconnect();
-  }
-  setConnectedUI(false);
+function setConnected(ok) {
+  connected = ok;
+  els.ring.classList.toggle('connected', ok);
+  els.ring.classList.toggle('error', !ok);
+  els.connState.textContent = ok ? 'CONNECTED' : 'DISCONNECTED';
+  els.connState.className = 'state ' + (ok ? 'ok' : 'bad');
+  els.connIp.textContent = baseUrl || '—';
 }
 
-connectBtn.addEventListener('click', () => {
-  if (statusEl.classList.contains('connected')) {
-    disconnect();
-  } else {
-    connect();
+function renderStatus(data) {
+  if (!data) return;
+  data.leds.forEach((on, i) => {
+    document.getElementById(`bulb-${i}`).classList.toggle('on', on);
+    document.getElementById(`btn-${i}`).classList.toggle('toggled', on);
+  });
+  els.telBoard.textContent = data.board || '—';
+  els.telDriver.textContent = data.driver || '—';
+  els.telRssi.textContent = (data.rssi ?? '—') + ' dBm';
+  els.telUptime.textContent = formatUptime(data.uptimeSeconds);
+  els.telChase.textContent = data.chaseActive ? 'RUNNING' : 'STOPPED';
+  els.telDir.textContent = data.chaseForward ? 'FORWARD' : 'REVERSE';
+  els.dirFwdBtn.classList.toggle('toggled', data.chaseForward);
+  els.dirRevBtn.classList.toggle('toggled', !data.chaseForward);
+  els.chaseStartBtn.classList.toggle('toggled', data.chaseActive);
+
+  if (typeof data.chaseSpeedMs === 'number') {
+    els.speedSlider.value = data.chaseSpeedMs;
+    els.speedVal.textContent = data.chaseSpeedMs + ' ms';
   }
+}
+
+function formatUptime(sec) {
+  if (typeof sec !== 'number') return '—';
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  return `${h}h ${m}m ${s}s`;
+}
+
+// ---- actions ----
+async function toggleLed(i) {
+  const data = await apiCall(`/toggle?led=${i}`);
+  renderStatus(data);
+}
+async function allOn() { renderStatus(await apiCall('/allon')); }
+async function allOff() { renderStatus(await apiCall('/alloff')); }
+async function startChase() { renderStatus(await apiCall('/chase?state=1')); }
+async function stopChase() { renderStatus(await apiCall('/chase?state=0')); }
+async function setDirection(fwd) { renderStatus(await apiCall(`/direction?value=${fwd ? 1 : 0}`)); }
+async function setSpeed(ms) { renderStatus(await apiCall(`/speed?value=${ms}`)); }
+async function refreshStatus() { renderStatus(await apiCall('/status')); }
+
+// ---- wire up UI ----
+els.allOnBtn.addEventListener('click', allOn);
+els.allOffBtn.addEventListener('click', allOff);
+els.chaseStartBtn.addEventListener('click', startChase);
+els.chaseStopBtn.addEventListener('click', stopChase);
+els.dirFwdBtn.addEventListener('click', () => setDirection(true));
+els.dirRevBtn.addEventListener('click', () => setDirection(false));
+
+els.speedSlider.addEventListener('input', () => {
+  els.speedVal.textContent = els.speedSlider.value + ' ms';
+});
+els.speedSlider.addEventListener('change', () => {
+  setSpeed(parseInt(els.speedSlider.value, 10));
 });
 
-let idleDebounce = null;
-idleSlider.addEventListener('input', () => {
-  idleValue.textContent = idleSlider.value + '\u00b0';
-  if (idleDebounce) clearTimeout(idleDebounce);
-  idleDebounce = setTimeout(async () => {
-    if (idleChar) {
-      await idleChar.writeValue(new TextEncoder().encode(String(idleSlider.value)));
-    }
-  }, 150);
+els.connectBtn.addEventListener('click', () => {
+  baseUrl = els.baseUrlInput.value.trim().replace(/\/$/, '');
+  refreshStatus();
 });
 
-let pressDebounce = null;
-pressSlider.addEventListener('input', () => {
-  pressValue.textContent = pressSlider.value + '\u00b0';
-  if (pressDebounce) clearTimeout(pressDebounce);
-  pressDebounce = setTimeout(async () => {
-    if (pressChar) {
-      await pressChar.writeValue(new TextEncoder().encode(String(pressSlider.value)));
-    }
-  }, 150);
-});
+// ---- poll status every 2 seconds so the panel stays live ----
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(refreshStatus, 2000);
+}
 
-testBtn.addEventListener('click', async () => {
-  if (testChar) {
-    await testChar.writeValue(new TextEncoder().encode('1'));
-  }
-});
+refreshStatus();
+startPolling();
 </script>
-
 </body>
 </html>
