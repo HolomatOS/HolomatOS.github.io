@@ -109,8 +109,8 @@
 
       camera.srcObject = localStream;
       await camera.play();
+      statusLabel.textContent = 'Camera active. Connecting to signaling...';
 
-      statusLabel.textContent = 'Connecting to signaling server...';
       startBtn.disabled = true;
       startBtn.textContent = 'Connecting...';
 
