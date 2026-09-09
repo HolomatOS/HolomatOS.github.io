@@ -99,7 +99,9 @@
 
   async function start() {
     try {
-      // Get camera + mic
+      statusLabel.textContent = 'Requesting camera/mic...';
+      statusEl.textContent = 'Please allow camera and microphone access.';
+
       localStream = await navigator.mediaDevices.getUserMedia({
         video: { width:{ideal:1280}, height:{ideal:720}, facingMode:"user" },
         audio: { echoCancellation:true, noiseSuppression:true, autoGainControl:true }
@@ -112,7 +114,6 @@
       startBtn.disabled = true;
       startBtn.textContent = 'Connecting...';
 
-      // Create PeerJS instance
       peer = new Peer(peerId, {
         host: '0.peerjs.com',
         port: 443,
@@ -131,33 +132,27 @@
         statusEl.textContent = 'Waiting for phone to connect...';
       });
 
-      // Handle incoming call from phone
       peer.on('call', (call) => {
         log('Phone connecting...');
         call.answer(localStream);
-        
         call.on('stream', (remoteStream) => {
           log('Phone stream received');
         });
-
         call.on('close', () => {
           log('Phone disconnected');
           statusEl.textContent = 'Phone disconnected. Waiting for new connection...';
         });
       });
 
-      // Handle data connection from phone (for audio)
       peer.on('connection', (conn) => {
         log('Phone data channel open');
         statusEl.textContent = 'Connected! Receiving audio...';
-
         conn.on('data', (data) => {
           if (data instanceof ArrayBuffer) {
             const int16 = new Int16Array(data);
             playAudioChunk(int16);
           }
         });
-
         conn.on('close', () => {
           log('Data channel closed');
         });
@@ -167,20 +162,21 @@
         console.error('Peer error:', err);
         log('Error: ' + err.type);
         statusEl.textContent = 'Connection error: ' + err.type;
+        startBtn.disabled = false;
+        startBtn.textContent = 'Retry';
       });
 
     } catch (e) {
+      console.error('Start error:', e);
       log('Error: ' + e.message);
-      statusEl.textContent = 'Permission denied: ' + e.message;
+      statusEl.textContent = 'Error: ' + e.message;
+      startBtn.disabled = false;
+      startBtn.textContent = 'Retry';
     }
   }
 
   startBtn.addEventListener('click', start);
-
-  // Auto-start if peerId is provided
-  if (peerId) {
-    start();
-  }
+})();
 </script>
 </body>
 </html>
