@@ -64,7 +64,7 @@
   const params = new URLSearchParams(window.location.search);
   let peerId = params.get('peerId');
   if (!peerId) {
-    peerId = 'jarvis-host-unique';
+    peerId = 'jarvis-host-' + Math.random().toString(36).slice(2, 8);
   }
 
   const camera = document.getElementById('camera');
@@ -129,18 +129,28 @@
 
       peer.on('open', (id) => {
         log('Host peer ID: ' + id);
-        statusEl.textContent = 'Waiting for phone to connect...';
+        statusEl.textContent = 'Host ready. Share ID with phone: ' + id;
       });
 
       peer.on('call', (call) => {
         log('Phone connecting...');
-        call.answer(localStream);
+        if (localStream) {
+          call.answer(localStream);
+        } else {
+          console.warn('Call received but localStream is not ready yet');
+          statusEl.textContent = 'Phone called before camera started';
+          call.answer();
+        }
         call.on('stream', (remoteStream) => {
           log('Phone stream received');
         });
         call.on('close', () => {
           log('Phone disconnected');
           statusEl.textContent = 'Phone disconnected. Waiting for new connection...';
+        });
+        call.on('error', (err) => {
+          console.error('Call error:', err);
+          statusEl.textContent = 'Call error: ' + (err.type || err.message || 'unknown');
         });
       });
 
