@@ -149,9 +149,11 @@
         const videoTrack = localStream ? localStream.getVideoTracks()[0] : null;
         const audioTrack = localStream ? localStream.getAudioTracks()[0] : null;
         console.log('Host answering call with tracks:', { videoTrack, audioTrack });
+        console.log('Host localStream ready:', !!localStream);
         if (localStream) {
           try {
             call.answer(localStream);
+            console.log('Host answered call with localStream');
           } catch (e) {
             console.error('Host call.answer failed:', e);
             statusEl.textContent = 'Failed to answer call: ' + (e.message || e);
