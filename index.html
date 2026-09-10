@@ -50,6 +50,11 @@
   #localPreview{
     position:absolute;
     z-index:5;
+    /* reset every inset/size property the generic video{} rule set —
+       otherwise sides this element doesn't redeclare (left/bottom/height)
+       keep their video{} values and the box stretches full-height/left. */
+    inset:auto; top:auto; right:auto; bottom:auto; left:auto;
+    width:auto; height:auto;
     object-fit:cover;
     border:1px solid var(--line);
     box-shadow:0 0 0 1px rgba(0,0,0,.6), 0 4px 18px rgba(0,0,0,.55);
@@ -59,7 +64,9 @@
   body.mode-broadcast #localPreview{
     top: calc(18px + var(--safe-t));
     right: calc(18px + var(--safe-r));
+    bottom:auto; left:auto;
     width: 26vw; max-width:220px; min-width:120px;
+    height:auto;
     aspect-ratio: 4/3;
     border-radius:2px;
   }
@@ -182,9 +189,45 @@
   }
   #remoteVideo.hidden ~ #standby{ display:flex; }
   #remoteVideo:not(.hidden) ~ #standby{ display:none; }
+  /* broadcast/laptop mode never uses remoteVideo (only remote audio) —
+     the "awaiting uplink" placeholder is a viewer-only concept */
+  body.mode-broadcast #standby{ display:none !important; }
 
   @media (prefers-reduced-motion: reduce){
     #statusLine.ok .dot, #standby .glyph::before{ animation:none; }
+  }
+
+  /* ---------- tuned for the Galaxy A17's 412x892 CSS viewport (and
+     similarly-sized compact phones) — viewer mode only ---------- */
+  @media (max-width: 480px){
+    body.mode-viewer #idTag{
+      top:calc(16px + var(--safe-t)); left:calc(20px + var(--safe-l));
+      font-size:12px;
+    }
+    body.mode-viewer #idTag span{ font-size:9px; }
+    body.mode-viewer #retryBtn{
+      top:calc(16px + var(--safe-t)); right:calc(20px + var(--safe-r));
+      font-size:10px; padding:7px 10px;
+    }
+    body.mode-viewer .corner{ width:26px; height:26px; }
+    body.mode-viewer .corner.tl, body.mode-viewer .corner.tr{ top:calc(10px + var(--safe-t)); }
+    body.mode-viewer .corner.bl, body.mode-viewer .corner.br{ bottom:calc(10px + var(--safe-b)); }
+    body.mode-viewer .corner.tl, body.mode-viewer .corner.bl{ left:calc(10px + var(--safe-l)); }
+    body.mode-viewer .corner.tr, body.mode-viewer .corner.br{ right:calc(10px + var(--safe-r)); }
+    body.mode-viewer #telemetry{
+      left:calc(20px + var(--safe-l)); right:calc(20px + var(--safe-r));
+      bottom:calc(16px + var(--safe-b));
+      flex-direction:column; align-items:flex-start; gap:10px;
+    }
+    body.mode-viewer #statusLine{ font-size:14px; }
+    body.mode-viewer #statusSub{ max-width:88vw; font-size:11px; white-space:normal; }
+    body.mode-viewer #meter{ align-self:flex-end; height:26px; }
+    body.mode-viewer #meter i{ width:5px; }
+    body.mode-viewer #standby{ padding:0 9vw; gap:14px; }
+    body.mode-viewer #standby .glyph{ width:78px; height:78px; }
+    body.mode-viewer #standby .glyph::before{ width:12px; height:12px; }
+    body.mode-viewer #standby h1{ font-size:17px; letter-spacing:.1em; }
+    body.mode-viewer #standby p{ font-size:12.5px; line-height:1.7; }
   }
 </style>
 </head>
