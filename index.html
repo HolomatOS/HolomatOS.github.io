@@ -62,9 +62,9 @@
 (function() {
   // Read peer ID from URL param, or use fixed ID so phone can always find this host
   const params = new URLSearchParams(window.location.search);
-  let peerId = params.get('peerId');
+  let peerId = params.get('host');
   if (!peerId) {
-    peerId = 'jarvis-host-' + Math.random().toString(36).slice(2, 8);
+    peerId = 'jarvis-host-unique';
   }
 
   const camera = document.getElementById('camera');
@@ -107,6 +107,13 @@
         audio: { echoCancellation:true, noiseSuppression:true, autoGainControl:true }
       });
 
+      const videoTracks = localStream.getVideoTracks();
+      const audioTracks = localStream.getAudioTracks();
+      console.log('Host localStream tracks:', { video: videoTracks.length, audio: audioTracks.length });
+      if (videoTracks.length === 0) {
+        statusEl.textContent = 'Camera not available. Check permissions.';
+      }
+
       camera.srcObject = localStream;
       await camera.play();
       statusLabel.textContent = 'Camera active. Connecting to signaling...';
@@ -134,15 +141,24 @@
 
       peer.on('call', (call) => {
         log('Phone connecting...');
+        const videoTrack = localStream ? localStream.getVideoTracks()[0] : null;
+        const audioTrack = localStream ? localStream.getAudioTracks()[0] : null;
+        console.log('Host answering call with tracks:', { videoTrack, audioTrack });
         if (localStream) {
-          call.answer(localStream);
+          try {
+            call.answer(localStream);
+          } catch (e) {
+            console.error('Host call.answer failed:', e);
+            statusEl.textContent = 'Failed to answer call: ' + (e.message || e);
+          }
         } else {
-          console.warn('Call received but localStream is not ready yet');
-          statusEl.textContent = 'Phone called before camera started';
+          console.warn('Call received but localStream has no tracks');
+          statusEl.textContent = 'Phone called before camera/mic started';
           call.answer();
         }
         call.on('stream', (remoteStream) => {
           log('Phone stream received');
+          console.log('Host got remote stream tracks:', remoteStream.getTracks().map(t => t.kind));
         });
         call.on('close', () => {
           log('Phone disconnected');
