@@ -113,6 +113,9 @@
 
     if (isHost && localStream) {
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    } else if (!isHost) {
+      pc.addTransceiver('video', { direction: 'recvonly' });
+      pc.addTransceiver('audio', { direction: 'recvonly' });
     }
 
     pc.ontrack = (event) => {
@@ -142,27 +145,39 @@
   }
 
   async function handleSignaling(msg) {
-    if (!pc) return;
+    if (!pc) {
+      console.warn('Host got signaling but mediaPc is null');
+      return;
+    }
     try {
       const data = typeof msg === 'string' ? JSON.parse(msg) : msg;
       if (data.type === 'offer') {
-        console.log('Got offer');
+        console.log('Host got offer, setting remote');
         await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        console.log('Host creating answer');
         const answer = await pc.createAnswer();
+        console.log('Host setting local answer');
         await pc.setLocalDescription(answer);
-        if (dataChannel && dataChannel.readyState === 'open') {
+        console.log('Host sending answer');
+        const channelReady = dataChannel && dataChannel.readyState === 'open';
+        console.log('Host dataChannel ready:', channelReady, 'readyState:', dataChannel && dataChannel.readyState);
+        if (channelReady) {
           dataChannel.send(JSON.stringify({ type: 'answer', sdp: answer }));
+          statusEl.textContent = 'Sent answer, waiting for video...';
+        } else {
+          console.warn('Host cannot send answer: dataChannel not open');
         }
       } else if (data.type === 'answer') {
-        console.log('Got answer');
+        console.log('Host got answer');
         await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
       } else if (data.type === 'ice-candidate') {
+        console.log('Host got ICE candidate');
         try {
           await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
         } catch (e) {}
       }
     } catch (e) {
-      console.error('Signaling error:', e);
+      console.error('Host signaling error:', e);
     }
   }
 
@@ -418,3 +433,4 @@
 </script>
 </body>
 </html>
+
