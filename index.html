@@ -327,12 +327,20 @@
   var activeCall = null;
   var reconnectTimer = null;
   var callAttemptTimer = null;
+  var reconnectAttempts = 0;
 
   function getMedia(){
     var constraints = isBroadcast
       ? { video: { facingMode:'user', width:{ideal:1280}, height:{ideal:720} }, audio: true }
       : { video:false, audio:true };
     return navigator.mediaDevices.getUserMedia(constraints);
+  }
+
+  function backoffDelay(){
+    // 3s, ~5s, ~8s, ~13s ... capped at 30s, with jitter so both devices
+    // don't hammer the signaling server in lockstep
+    var d = Math.min(30000, 3000 * Math.pow(1.6, reconnectAttempts));
+    return d + Math.random() * 500;
   }
 
   function startPeer(){
@@ -342,6 +350,7 @@
     });
 
     peer.on('open', function(id){
+      reconnectAttempts = 0;
       setStatus(isBroadcast ? 'NODE ONLINE' : 'STANDBY', 'ID ' + id + ' · target ' + TARGET_ID, '');
       if (isBroadcast){
         beginCallLoop();
@@ -356,37 +365,58 @@
     });
 
     peer.on('error', function(err){
-      console.warn('peer error', err && err.type, err);
-      if (err && err.type === 'unavailable-id'){
-        setStatus('ID BUSY', 'retrying uplink in 3s…', 'bad');
-      } else if (err && err.type === 'peer-unavailable'){
-        // normal while waiting for the other device to come online
-      } else {
-        setStatus('LINK ERROR', (err && err.type) || 'unknown', 'bad');
+      var type = err && err.type;
+      console.warn('peer error', type, err);
+
+      // peer-unavailable just means the far side isn't registered yet —
+      // completely normal while waiting for the other device, and NOT a
+      // fault of our own connection. Reconnecting here would fight our own
+      // live signaling session and can trigger spurious disconnects.
+      if (type === 'peer-unavailable'){
+        return;
       }
-      scheduleReconnect();
+      if (type === 'unavailable-id'){
+        // our own ID is still held by a previous session on the broker —
+        // rebuild from scratch (not reconnect) once it clears
+        setStatus('ID BUSY', 'previous session clearing — retrying…', 'bad');
+        scheduleRebuild();
+        return;
+      }
+      setStatus('LINK ERROR', type || 'unknown', 'bad');
+      scheduleRebuild();
     });
 
     peer.on('disconnected', function(){
+      // signaling socket dropped but the peer object is still salvageable —
+      // try the cheaper peer.reconnect() first
       setStatus('DISCONNECTED', 'reconnecting…', 'bad');
-      scheduleReconnect();
+      scheduleSoftReconnect();
     });
 
     peer.on('close', function(){
       setStatus('NODE CLOSED', 'retrying…', 'bad');
-      scheduleReconnect();
+      scheduleRebuild();
     });
   }
 
-  function scheduleReconnect(){
+  function scheduleSoftReconnect(){
     clearTimeout(reconnectTimer);
+    var delay = backoffDelay();
+    reconnectAttempts++;
     reconnectTimer = setTimeout(function(){
       if (peer && !peer.destroyed){
-        try{ peer.reconnect(); }catch(e){ rebuildPeer(); }
+        try{ peer.reconnect(); }catch(e){ scheduleRebuild(); }
       } else {
         rebuildPeer();
       }
-    }, 3000);
+    }, delay);
+  }
+
+  function scheduleRebuild(){
+    clearTimeout(reconnectTimer);
+    var delay = backoffDelay();
+    reconnectAttempts++;
+    reconnectTimer = setTimeout(rebuildPeer, delay);
   }
 
   function rebuildPeer(){
@@ -434,6 +464,8 @@
 
   retryBtn.addEventListener('click', function(){
     setStatus('RE-SYNCING', '', '');
+    clearTimeout(reconnectTimer);
+    reconnectAttempts = 0;
     if (activeCall){ try{ activeCall.close(); }catch(e){} activeCall = null; }
     rebuildPeer();
   });
