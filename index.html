@@ -1,495 +1,418 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Holomatos</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>HolomatOS // Uplink</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  html, body {
-    height:100%; width:100%; overflow:hidden;
-    background:#0a0a0c; color:#ebebf0;
-    font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    touch-action:manipulation; user-select:none;
+  :root{
+    --bg: #060a0d;
+    --panel: rgba(10,20,24,.62);
+    --line: #1d3a40;
+    --cyan: #49e0ea;
+    --cyan-dim: #2c8c93;
+    --amber: #e8a23f;
+    --red: #e85b4f;
+    --text: #cdeef1;
+    --text-dim: #6f9498;
+    --safe-t: env(safe-area-inset-top, 0px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-l: env(safe-area-inset-left, 0px);
+    --safe-r: env(safe-area-inset-right, 0px);
   }
-  #app {
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    height:100vh; width:100vw; padding:20px; gap:16px;
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{
+    margin:0; padding:0; width:100%; height:100%;
+    background: radial-gradient(120% 140% at 50% 0%, #0b171c 0%, var(--bg) 55%, #030506 100%);
+    color:var(--text);
+    font-family:'Share Tech Mono', monospace;
+    overflow:hidden;
+    overscroll-behavior:none;
   }
-  .preview {
-    width:100%; max-width:640px; aspect-ratio:4/3; border-radius:14px;
-    background:#141416; border:1.5px solid #2a2a30; overflow:hidden; position:relative;
+  #stage{
+    position:fixed; inset:0;
+    height:100dvh; width:100vw;
   }
-  .preview video {
-    width:100%; height:100%; object-fit:cover; display:block; background:#000;
+
+  /* ---------- video layers ---------- */
+  video{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    object-fit:cover;
+    background:#000;
   }
-  .preview .label {
-    position:absolute; top:10px; left:10px;
-    background:rgba(0,0,0,0.6); color:#eba53c;
-    padding:4px 10px; border-radius:6px; font-size:11px; font-weight:600;
+  #remoteVideo{ z-index:1; }
+  #remoteVideo.hidden{ opacity:0; }
+  #localPreview{
+    position:absolute;
+    z-index:5;
+    object-fit:cover;
+    border:1px solid var(--line);
+    box-shadow:0 0 0 1px rgba(0,0,0,.6), 0 4px 18px rgba(0,0,0,.55);
   }
-  .btn {
-    padding:14px 28px; border-radius:12px; border:none;
-    background:linear-gradient(180deg,#eba53c,#c7852a); color:#0a0a0c;
-    font-size:14px; font-weight:700; cursor:pointer;
-    display:flex; align-items:center; gap:8px;
+
+  /* broadcast mode: small PIP top-right */
+  body.mode-broadcast #localPreview{
+    top: calc(18px + var(--safe-t));
+    right: calc(18px + var(--safe-r));
+    width: 26vw; max-width:220px; min-width:120px;
+    aspect-ratio: 4/3;
+    border-radius:2px;
   }
-  .btn:active { transform:scale(0.96); }
-  .btn:disabled { opacity:0.5; cursor:not-allowed; }
-  .status {
-    font-size:13px; color:#6b6b76; text-align:center; max-width:500px;
+  /* viewer mode: no visible self-video, mic only */
+  body.mode-viewer #localPreview{ display:none; }
+
+  /* darken under the HUD chrome */
+  #scrim{
+    position:absolute; inset:0; z-index:2; pointer-events:none;
+    background:linear-gradient(180deg, rgba(3,6,7,.75) 0%, rgba(3,6,7,0) 16%, rgba(3,6,7,0) 78%, rgba(3,6,7,.85) 100%);
+  }
+
+  /* ---------- scanline / grid texture ---------- */
+  #grain{
+    position:absolute; inset:0; z-index:3; pointer-events:none; opacity:.5;
+    background-image:
+      repeating-linear-gradient(180deg, rgba(73,224,234,.035) 0px, rgba(73,224,234,.035) 1px, transparent 1px, transparent 3px);
+    mix-blend-mode:screen;
+  }
+
+  /* ---------- corner frame ---------- */
+  .corner{
+    position:absolute; z-index:6; width:34px; height:34px;
+    border-color:var(--cyan-dim); pointer-events:none;
+  }
+  .corner.tl{ top:calc(14px + var(--safe-t)); left:calc(14px + var(--safe-l)); border-top:2px solid; border-left:2px solid; }
+  .corner.tr{ top:calc(14px + var(--safe-t)); right:calc(14px + var(--safe-r)); border-top:2px solid; border-right:2px solid; }
+  .corner.bl{ bottom:calc(14px + var(--safe-b)); left:calc(14px + var(--safe-l)); border-bottom:2px solid; border-left:2px solid; }
+  .corner.br{ bottom:calc(14px + var(--safe-b)); right:calc(14px + var(--safe-r)); border-bottom:2px solid; border-right:2px solid; }
+
+  /* ---------- top identity tag ---------- */
+  #idTag{
+    position:absolute; z-index:6;
+    top:calc(18px + var(--safe-t)); left:calc(30px + var(--safe-l));
+    font-family:'Orbitron', sans-serif; font-weight:700;
+    font-size:13px; letter-spacing:.14em; color:var(--cyan);
+    text-shadow:0 0 10px rgba(73,224,234,.45);
+  }
+  #idTag span{
+    display:block; margin-top:3px;
+    font-family:'Share Tech Mono', monospace; font-weight:400;
+    font-size:10px; letter-spacing:.1em; color:var(--text-dim);
+  }
+
+  /* ---------- bottom telemetry strip ---------- */
+  #telemetry{
+    position:absolute; z-index:6;
+    left:calc(30px + var(--safe-l)); right:calc(30px + var(--safe-r));
+    bottom:calc(18px + var(--safe-b));
+    display:flex; align-items:flex-end; justify-content:space-between; gap:14px;
+  }
+  #statusBlock{ min-width:0; }
+  #statusLine{
+    font-family:'Orbitron', sans-serif; font-weight:700;
+    font-size:13px; letter-spacing:.1em;
+    color:var(--amber);
+    display:flex; align-items:center; gap:9px;
+  }
+  #statusLine .dot{
+    width:8px; height:8px; border-radius:50%;
+    background:var(--amber);
+    box-shadow:0 0 8px var(--amber);
+    flex:none;
+  }
+  #statusLine.ok{ color:var(--cyan); }
+  #statusLine.ok .dot{ background:var(--cyan); box-shadow:0 0 8px var(--cyan); animation:pulse 2s ease-in-out infinite; }
+  #statusLine.bad{ color:var(--red); }
+  #statusLine.bad .dot{ background:var(--red); box-shadow:0 0 8px var(--red); }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.35;} }
+
+  #statusSub{
+    margin-top:5px; font-size:10.5px; letter-spacing:.06em; color:var(--text-dim);
+    max-width:60vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+
+  /* mic level meter */
+  #meter{
+    display:flex; align-items:flex-end; gap:3px; height:22px; flex:none;
+  }
+  #meter i{
+    display:block; width:4px; border-radius:1px;
+    background:var(--line);
+    height:20%;
+    transition:height .07s linear, background .07s linear;
+  }
+
+  #retryBtn{
+    position:absolute; z-index:6;
+    top:calc(18px + var(--safe-t)); right:calc(30px + var(--safe-r));
+    font-family:'Share Tech Mono', monospace; font-size:10.5px; letter-spacing:.08em;
+    color:var(--text-dim); background:transparent; border:1px solid var(--line);
+    padding:6px 10px; cursor:pointer; border-radius:2px;
+  }
+  #retryBtn:hover{ color:var(--cyan); border-color:var(--cyan-dim); }
+  #retryBtn:focus-visible, button:focus-visible{ outline:2px solid var(--cyan); outline-offset:2px; }
+  body.mode-broadcast #retryBtn{ top:calc(18px + var(--safe-t) + 34px + 6vw + 84px); }
+
+  /* standby placeholder (viewer mode, no signal yet) */
+  #standby{
+    position:absolute; inset:0; z-index:1;
+    display:flex; align-items:center; justify-content:center; flex-direction:column; gap:10px;
+    text-align:center; padding:0 12vw;
+  }
+  #standby .glyph{
+    width:64px; height:64px; border:1px solid var(--cyan-dim); border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 0 24px rgba(73,224,234,.15) inset;
+  }
+  #standby .glyph::before{
+    content:''; width:10px; height:10px; border-radius:50%;
+    background:var(--amber); box-shadow:0 0 10px var(--amber);
+    animation:pulse 1.6s ease-in-out infinite;
+  }
+  #standby h1{
+    font-family:'Orbitron', sans-serif; font-size:15px; letter-spacing:.12em;
+    color:var(--text); margin:8px 0 0; font-weight:700;
+  }
+  #standby p{
+    font-size:11px; letter-spacing:.05em; color:var(--text-dim); margin:0; line-height:1.6;
+  }
+  #remoteVideo.hidden ~ #standby{ display:flex; }
+  #remoteVideo:not(.hidden) ~ #standby{ display:none; }
+
+  @media (prefers-reduced-motion: reduce){
+    #statusLine.ok .dot, #standby .glyph::before{ animation:none; }
   }
 </style>
 </head>
 <body>
-<div id="app">
-  <div class="preview" id="preview">
-    <video id="camera" autoplay playsinline muted></video>
-    <div class="label" id="statusLabel">Initializing...</div>
-    <div id="playOverlay" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);color:#eba53c;font-size:18px;font-weight:700;cursor:pointer;z-index:10;">
-      Tap to start video
-    </div>
+
+<div id="stage">
+  <video id="remoteVideo" class="hidden" autoplay playsinline></video>
+  <div id="standby">
+    <div class="glyph"></div>
+    <h1>AWAITING UPLINK</h1>
+    <p>Standing by for the laptop broadcast.<br>Keep this page open on the handset.</p>
   </div>
 
-  <button class="btn" id="micBtn" style="display:none;">
-    <span>🎤</span> Hold to Talk
-  </button>
+  <video id="localPreview" autoplay playsinline muted></video>
+  <div id="scrim"></div>
+  <div id="grain"></div>
 
-  <div class="status" id="status">
-    Holomatos Remote
+  <i class="corner tl"></i><i class="corner tr"></i>
+  <i class="corner bl"></i><i class="corner br"></i>
+
+  <div id="idTag">HOLOMAT·OS<span id="idSub">—</span></div>
+  <button id="retryBtn" type="button">RE-SYNC</button>
+
+  <div id="telemetry">
+    <div id="statusBlock">
+      <div id="statusLine"><i class="dot"></i><span id="statusText">INITIALIZING</span></div>
+      <div id="statusSub" id="statusSub"></div>
+    </div>
+    <div id="meter" aria-hidden="true"></div>
   </div>
 </div>
 
-<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<audio id="remoteAudio" autoplay playsinline></audio>
+
 <script>
-(function() {
-  const params = new URLSearchParams(window.location.search);
-  const isHost = params.has('broadcast');
-  const hostPeerId = params.get('id') || 'holomatos-host';
+(function(){
+  "use strict";
 
-  const camera = document.getElementById('camera');
-  const micBtn = document.getElementById('micBtn');
-  const statusEl = document.getElementById('status');
-  const statusLabel = document.getElementById('statusLabel');
+  // ---------------- config ----------------
+  var params = new URLSearchParams(location.search);
+  var isBroadcast = params.get('broadcast') === '1';
+  // "id" (optional) names THIS peer; "target" (optional) names the far side.
+  var MY_ID     = params.get('id') || (isBroadcast ? 'holomatos-laptop-01' : 'holomatos-phone-01');
+  var TARGET_ID = params.get('target') || (isBroadcast ? 'holomatos-phone-01' : 'holomatos-laptop-01');
 
-  let peer = null;
-  let localStream = null;
-  let audioContext = null;
-  let dataChannel = null;
-  let pc = null;
-  let micStream = null;
-  let scriptProcessor = null;
+  document.body.classList.add(isBroadcast ? 'mode-broadcast' : 'mode-viewer');
 
-  function log(msg) {
-    console.log('[Holomatos]', msg);
-    statusLabel.textContent = msg;
+  var idSub = document.getElementById('idSub');
+  idSub.textContent = (isBroadcast ? 'BROADCAST · ' : 'RECEIVER · ') + MY_ID;
+
+  var statusLine = document.getElementById('statusLine');
+  var statusText = document.getElementById('statusText');
+  var statusSub  = document.getElementById('statusSub');
+  var retryBtn   = document.getElementById('retryBtn');
+  var remoteVideo = document.getElementById('remoteVideo');
+  var remoteAudio = document.getElementById('remoteAudio');
+  var localPreview = document.getElementById('localPreview');
+  var meterEl = document.getElementById('meter');
+
+  var METER_BARS = 14;
+  for (var i=0;i<METER_BARS;i++){ meterEl.appendChild(document.createElement('i')); }
+  var meterBars = meterEl.querySelectorAll('i');
+
+  function setStatus(text, sub, state){
+    statusText.textContent = text;
+    statusSub.textContent = sub || '';
+    statusLine.className = state ? state : '';
   }
 
-  function playAudioChunk(int16Array) {
-    if (!audioContext) {
-      audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    const float32 = new Float32Array(int16Array.length);
-    for (let i = 0; i < int16Array.length; i++) {
-      float32[i] = int16Array[i] / 0x8000;
-    }
-    const buffer = audioContext.createBuffer(1, float32.length, 16000);
-    buffer.getChannelData(0).set(float32);
-    const source = audioContext.createBufferSource();
-    source.buffer = buffer;
-    source.connect(audioContext.destination);
-    source.start();
+  // ---------------- mic level meter ----------------
+  function attachMeter(stream){
+    try{
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      var src = ctx.createMediaStreamSource(stream);
+      var analyser = ctx.createAnalyser();
+      analyser.fftSize = 64;
+      src.connect(analyser);
+      var data = new Uint8Array(analyser.frequencyBinCount);
+      (function tick(){
+        analyser.getByteFrequencyData(data);
+        var avg = data.reduce(function(a,b){return a+b;},0) / data.length;
+        var level = Math.min(1, avg / 90);
+        for (var i=0;i<meterBars.length;i++){
+          var barThresh = i / meterBars.length;
+          var on = level > barThresh;
+          meterBars[i].style.height = on ? (24 + i*4) + '%' : '20%';
+          meterBars[i].style.background = on ? (i > meterBars.length*0.75 ? '#e85b4f' : '#49e0ea') : '#1d3a40';
+        }
+        requestAnimationFrame(tick);
+      })();
+    }catch(e){ /* meter is cosmetic; ignore failures */ }
   }
 
-  function setupMediaPC() {
-    if (pc) {
-      try { pc.close(); } catch (e) {}
-      pc = null;
-    }
+  // ---------------- media acquisition ----------------
+  var localStream = null;
+  var peer = null;
+  var activeCall = null;
+  var reconnectTimer = null;
+  var callAttemptTimer = null;
 
-    pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-      ]
+  function getMedia(){
+    var constraints = isBroadcast
+      ? { video: { facingMode:'user', width:{ideal:1280}, height:{ideal:720} }, audio: true }
+      : { video:false, audio:true };
+    return navigator.mediaDevices.getUserMedia(constraints);
+  }
+
+  function startPeer(){
+    setStatus('LINKING NODE', MY_ID, '');
+    peer = new Peer(MY_ID, {
+      debug: 1
     });
 
-    if (isHost && localStream) {
-      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-    } else if (!isHost) {
-      pc.addTransceiver('video', { direction: 'recvonly' });
-      pc.addTransceiver('audio', { direction: 'recvonly' });
-    }
-
-    pc.ontrack = (event) => {
-      console.log('ontrack:', event.track.kind, event.streams.length);
-      if (event.track.kind === 'video' && event.streams[0]) {
-        log('Receiving camera');
-        const stream = event.streams[0];
-        camera.srcObject = stream;
-        camera.muted = true;
-        camera.style.display = 'block';
-        camera.style.opacity = '1';
-        const playOverlay = document.getElementById('playOverlay');
-        if (playOverlay) playOverlay.style.display = 'none';
-        camera.onloadedmetadata = () => {
-          console.log('Phone video loadedmetadata, readyState:', camera.readyState, 'paused:', camera.paused);
-          camera.play().then(() => {
-            console.log('Phone video playing');
-            statusEl.textContent = 'Connected. Hold mic to talk.';
-            if (playOverlay) playOverlay.style.display = 'none';
-          }).catch(e => console.error('Phone play failed:', e));
-        };
-        camera.onplaying = () => {
-          console.log('Phone video onplaying');
-          statusEl.textContent = 'Connected. Hold mic to talk.';
-          if (playOverlay) playOverlay.style.display = 'none';
-        };
-        camera.onerror = (e) => {
-          console.error('Phone video error:', e);
-        };
-        if (camera.readyState >= 2) {
-          camera.play().catch(e => console.error('Phone immediate play failed:', e));
-        }
+    peer.on('open', function(id){
+      setStatus(isBroadcast ? 'NODE ONLINE' : 'STANDBY', 'ID ' + id + ' · target ' + TARGET_ID, '');
+      if (isBroadcast){
+        beginCallLoop();
       }
-      if (event.track.kind === 'audio' && event.streams[0]) {
-        const audio = new Audio();
-        audio.srcObject = event.streams[0];
-        audio.play();
+    });
+
+    peer.on('call', function(call){
+      // viewer side receives the laptop's call and answers with its mic
+      activeCall = call;
+      call.answer(localStream);
+      wireCall(call);
+    });
+
+    peer.on('error', function(err){
+      console.warn('peer error', err && err.type, err);
+      if (err && err.type === 'unavailable-id'){
+        setStatus('ID BUSY', 'retrying uplink in 3s…', 'bad');
+      } else if (err && err.type === 'peer-unavailable'){
+        // normal while waiting for the other device to come online
+      } else {
+        setStatus('LINK ERROR', (err && err.type) || 'unknown', 'bad');
       }
-    };
+      scheduleReconnect();
+    });
 
-    pc.onicecandidate = (event) => {
-      if (event.candidate && dataChannel && dataChannel.readyState === 'open') {
-        dataChannel.send(JSON.stringify({ type: 'ice-candidate', candidate: event.candidate }));
+    peer.on('disconnected', function(){
+      setStatus('DISCONNECTED', 'reconnecting…', 'bad');
+      scheduleReconnect();
+    });
+
+    peer.on('close', function(){
+      setStatus('NODE CLOSED', 'retrying…', 'bad');
+      scheduleReconnect();
+    });
+  }
+
+  function scheduleReconnect(){
+    clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(function(){
+      if (peer && !peer.destroyed){
+        try{ peer.reconnect(); }catch(e){ rebuildPeer(); }
+      } else {
+        rebuildPeer();
       }
-    };
-
-    pc.oniceconnectionstatechange = () => {
-      console.log('ICE:', pc.iceConnectionState);
-    };
+    }, 3000);
   }
 
-  async function handleSignaling(msg, channel) {
-    if (!pc) {
-      console.warn('Host got signaling but mediaPc is null');
-      return;
-    }
-    const sendChannel = channel;
-    try {
-      const data = typeof msg === 'string' ? JSON.parse(msg) : msg;
-      if (data.type === 'offer') {
-        console.log('Host got offer, setting remote');
-        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-        console.log('Host creating answer');
-        const answer = await pc.createAnswer();
-        console.log('Host setting local answer');
-        await pc.setLocalDescription(answer);
-        console.log('Host sending answer');
-        const channelReady = sendChannel && sendChannel.open === true;
-        console.log('Host dataChannel ready:', channelReady, 'open:', sendChannel && sendChannel.open);
-        if (channelReady) {
-          sendChannel.send(JSON.stringify({ type: 'answer', sdp: answer }));
-          statusEl.textContent = 'Sent answer, waiting for video...';
-        } else {
-          console.warn('Host cannot send answer: dataChannel not open');
-        }
-      } else if (data.type === 'answer') {
-        console.log('Host got answer');
-        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-      } else if (data.type === 'ice-candidate') {
-        console.log('Host got ICE candidate');
-        try {
-          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-        } catch (e) {}
+  function rebuildPeer(){
+    try{ if (peer) peer.destroy(); }catch(e){}
+    startPeer();
+  }
+
+  function beginCallLoop(){
+    clearInterval(callAttemptTimer);
+    callAttemptTimer = setInterval(function(){
+      if (activeCall && activeCall.open) return; // already connected
+      if (!peer || peer.disconnected || peer.destroyed) return;
+      setStatus('SEEKING RECEIVER', 'calling ' + TARGET_ID + '…', '');
+      var call = peer.call(TARGET_ID, localStream);
+      if (!call) return;
+      activeCall = call;
+      wireCall(call);
+    }, 3000);
+  }
+
+  function wireCall(call){
+    call.on('stream', function(remoteStream){
+      setStatus('UPLINK ESTABLISHED', TARGET_ID, 'ok');
+      if (isBroadcast){
+        // incoming = phone mic only
+        remoteAudio.srcObject = remoteStream;
+        attachMeter(remoteStream);
+      } else {
+        remoteVideo.srcObject = remoteStream;
+        remoteVideo.classList.remove('hidden');
       }
-    } catch (e) {
-      console.error('Host signaling error:', e);
-    }
+    });
+    call.on('close', function(){
+      setStatus(isBroadcast ? 'RECEIVER LOST' : 'UPLINK LOST', 'awaiting reconnection…', 'bad');
+      remoteVideo.classList.add('hidden');
+      remoteVideo.srcObject = null;
+      activeCall = null;
+    });
+    call.on('error', function(err){
+      console.warn('call error', err);
+      setStatus('CALL ERROR', String(err && err.message || err), 'bad');
+      activeCall = null;
+    });
   }
 
-  async function startHost() {
-    try {
-      log('Requesting camera/mic...');
-      statusEl.textContent = 'Please allow camera and microphone.';
-
-      localStream = await navigator.mediaDevices.getUserMedia({
-        video: { width:{ideal:1280}, height:{ideal:720}, facingMode:"user" },
-        audio: { echoCancellation:true, noiseSuppression:true, autoGainControl:true }
-      });
-
-      camera.srcObject = localStream;
-      await camera.play();
-      log('Camera active. Starting broadcast...');
-
-      peer = new Peer(hostPeerId, {
-        host: '0.peerjs.com',
-        port: 443,
-        path: '/',
-        secure: true,
-        config: {
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-          ]
-        }
-      });
-
-      peer.on('open', (id) => {
-        log('Broadcast ID: ' + id);
-        statusEl.textContent = 'Phone URL: ' + window.location.origin + window.location.pathname + '?host=' + id;
-      });
-
-      peer.on('connection', (conn) => {
-        log('Phone connected');
-        statusEl.textContent = 'Phone connected. Streaming...';
-        const channel = conn;
-        channel.binaryType = 'arraybuffer';
-
-        channel.on('data', (data) => {
-          if (typeof data === 'string') {
-            handleSignaling(data, channel);
-            return;
-          }
-          if (data instanceof ArrayBuffer) {
-            const int16 = new Int16Array(data);
-            playAudioChunk(int16);
-          }
-        });
-
-        channel.on('close', () => {
-          log('Phone disconnected');
-        });
-
-        setupMediaPC();
-      });
-
-      peer.on('error', (err) => {
-        console.error('Peer error:', err);
-        log('Error: ' + err.type);
-        statusEl.textContent = 'Error: ' + err.type;
-      });
-
-    } catch (e) {
-      console.error('Start error:', e);
-      log('Error: ' + e.message);
-      statusEl.textContent = 'Error: ' + e.message;
-    }
-  }
-
-  async function startPhone() {
-    const targetHost = params.get('host') || 'holomatos-host';
-    
-    try {
-      log('Connecting to broadcast...');
-      statusEl.textContent = 'Connecting to ' + targetHost + '...';
-
-      peer = new Peer(null, {
-        host: '0.peerjs.com',
-        port: 443,
-        path: '/',
-        secure: true,
-        config: {
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-          ]
-        }
-      });
-
-      peer.on('open', (id) => {
-        log('Phone ready. Connecting to ' + targetHost + '...');
-        
-        const conn = peer.connect(targetHost, { reliable: false });
-        
-        conn.on('open', () => {
-          log('Connected to broadcast');
-          statusEl.textContent = 'Connected. Starting video...';
-          dataChannel = conn;
-          dataChannel.binaryType = 'arraybuffer';
-
-          dataChannel.on('data', (data) => {
-            if (typeof data === 'string') {
-              handleSignaling(data);
-              return;
-            }
-            if (data instanceof ArrayBuffer) {
-              const int16 = new Int16Array(data);
-              playAudioChunk(int16);
-            }
-          });
-
-          dataChannel.on('close', () => {
-            log('Disconnected');
-            dataChannel = null;
-            statusEl.textContent = 'Disconnected. Refresh to reconnect.';
-          });
-
-          setupMediaPC();
-          
-          setTimeout(async () => {
-            if (pc && pc.signalingState === 'stable') {
-              console.log('Creating offer');
-              try {
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                dataChannel.send(JSON.stringify({ type: 'offer', sdp: offer }));
-                statusEl.textContent = 'Sent offer, waiting for video...';
-              } catch (e) {
-                console.error('Offer failed:', e);
-              }
-            }
-          }, 1000);
-        });
-
-        conn.on('error', (err) => {
-          console.error('Connection error:', err);
-          statusEl.textContent = 'Connection error. Retrying...';
-          setTimeout(() => peer.connect(targetHost, { reliable: false }), 3000);
-        });
-
-        conn.on('close', () => {
-          log('Disconnected');
-          dataChannel = null;
-          statusEl.textContent = 'Disconnected. Refresh to reconnect.';
-        });
-      });
-
-      peer.on('error', (err) => {
-        console.error('Peer error:', err);
-        if (err.type === 'peer-unavailable') {
-          log('Broadcast not found. Retrying...');
-          statusEl.textContent = 'Broadcast not found. Retrying in 3s...';
-          setTimeout(startPhone, 3000);
-        } else {
-          statusEl.textContent = 'Error: ' + err.type;
-        }
-      });
-
-    } catch (e) {
-      console.error('Start error:', e);
-      log('Error: ' + e.message);
-    }
-  }
-
-  async function startMic() {
-    if (!dataChannel || dataChannel.readyState !== 'open') {
-      alert('Not connected yet');
-      return;
-    }
-
-    try {
-      micStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          sampleRate: 16000,
-          channelCount: 1
-        },
-        video: false
-      });
-
-      audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const source = audioContext.createMediaStreamSource(micStream);
-      scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
-
-      scriptProcessor.onaudioprocess = (e) => {
-        if (!dataChannel || dataChannel.readyState !== 'open') return;
-
-        const input = e.inputBuffer.getChannelData(0);
-        const int16 = new Int16Array(input.length);
-        for (let i = 0; i < input.length; i++) {
-          const s = Math.max(-1, Math.min(1, input[i]));
-          int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-        }
-
-        try {
-          dataChannel.send(int16.buffer);
-        } catch (err) {
-          // Channel closed
-        }
-      };
-
-      source.connect(scriptProcessor);
-
-      micBtn.style.animation = 'pulse 1.2s infinite';
-      statusEl.textContent = 'Talking...';
-
-    } catch (e) {
-      alert('Mic access denied: ' + e.message);
-    }
-  }
-
-  function stopMic() {
-    if (micStream) {
-      micStream.getTracks().forEach(t => t.stop());
-      micStream = null;
-    }
-    if (audioContext) {
-      audioContext.close();
-      audioContext = null;
-    }
-    if (scriptProcessor) {
-      scriptProcessor.disconnect();
-      scriptProcessor = null;
-    }
-    micBtn.style.animation = '';
-    statusEl.textContent = 'Connected to broadcast';
-  }
-
-  const style = document.createElement('style');
-  style.textContent = '@keyframes pulse { 0%,100% { box-shadow:0 0 20px rgba(235,165,60,0.4); } 50% { box-shadow:0 0 40px rgba(235,165,60,0.7); } }';
-  document.head.appendChild(style);
-
-  micBtn.addEventListener('mousedown', startMic);
-  micBtn.addEventListener('mouseup', stopMic);
-  micBtn.addEventListener('mouseleave', stopMic);
-  micBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startMic(); });
-  micBtn.addEventListener('touchend', (e) => { e.preventDefault(); stopMic(); });
-
-  camera.addEventListener('click', () => {
-    console.log('Phone camera clicked');
-    if (camera.srcObject && camera.paused) {
-      camera.play().catch(() => {});
-    }
-    const playOverlay = document.getElementById('playOverlay');
-    if (playOverlay) playOverlay.style.display = 'none';
-  });
-  camera.addEventListener('touchstart', () => {
-    console.log('Phone camera touched');
-    if (camera.srcObject && camera.paused) {
-      camera.play().catch(() => {});
-    }
-    const playOverlay = document.getElementById('playOverlay');
-    if (playOverlay) playOverlay.style.display = 'none';
+  retryBtn.addEventListener('click', function(){
+    setStatus('RE-SYNCING', '', '');
+    if (activeCall){ try{ activeCall.close(); }catch(e){} activeCall = null; }
+    rebuildPeer();
   });
 
-  const playOverlay = document.getElementById('playOverlay');
-  if (playOverlay) {
-    playOverlay.addEventListener('click', () => {
-      console.log('Phone playOverlay clicked');
-      if (camera.srcObject) {
-        camera.play().catch(() => {});
-      }
-      playOverlay.style.display = 'none';
-    });
-    playOverlay.addEventListener('touchstart', () => {
-      console.log('Phone playOverlay touched');
-      if (camera.srcObject) {
-        camera.play().catch(() => {});
-      }
-      playOverlay.style.display = 'none';
-    });
-  }
+  // ---------------- boot ----------------
+  getMedia().then(function(stream){
+    localStream = stream;
+    if (isBroadcast){
+      localPreview.srcObject = stream;
+    } else {
+      attachMeter(stream); // show the phone's own mic level while idle/sending
+    }
+    startPeer();
+  }).catch(function(err){
+    setStatus('MEDIA DENIED', String(err && err.message || err), 'bad');
+  });
 
-  if (isHost) {
-    micBtn.style.display = 'none';
-    startHost();
-  } else {
-    micBtn.style.display = 'flex';
-    startPhone();
-  }
+  document.addEventListener('visibilitychange', function(){
+    if (document.visibilityState === 'visible' && peer && peer.disconnected){
+      try{ peer.reconnect(); }catch(e){}
+    }
+  });
 })();
 </script>
 </body>
