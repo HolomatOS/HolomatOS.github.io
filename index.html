@@ -144,11 +144,12 @@
     };
   }
 
-  async function handleSignaling(msg) {
+  async function handleSignaling(msg, conn) {
     if (!pc) {
       console.warn('Host got signaling but mediaPc is null');
       return;
     }
+    const sendChannel = conn || dataChannel;
     try {
       const data = typeof msg === 'string' ? JSON.parse(msg) : msg;
       if (data.type === 'offer') {
@@ -159,10 +160,10 @@
         console.log('Host setting local answer');
         await pc.setLocalDescription(answer);
         console.log('Host sending answer');
-        const channelReady = dataChannel && dataChannel.readyState === 'open';
-        console.log('Host dataChannel ready:', channelReady, 'readyState:', dataChannel && dataChannel.readyState);
+        const channelReady = sendChannel && sendChannel.readyState === 'open';
+        console.log('Host dataChannel ready:', channelReady, 'readyState:', sendChannel && sendChannel.readyState);
         if (channelReady) {
-          dataChannel.send(JSON.stringify({ type: 'answer', sdp: answer }));
+          sendChannel.send(JSON.stringify({ type: 'answer', sdp: answer }));
           statusEl.textContent = 'Sent answer, waiting for video...';
         } else {
           console.warn('Host cannot send answer: dataChannel not open');
@@ -221,7 +222,7 @@
 
         dataChannel.on('data', (data) => {
           if (typeof data === 'string') {
-            handleSignaling(data);
+            handleSignaling(data, dataChannel);
             return;
           }
           if (data instanceof ArrayBuffer) {
@@ -433,4 +434,3 @@
 </script>
 </body>
 </html>
-
