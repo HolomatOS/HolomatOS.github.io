@@ -75,6 +75,7 @@
   let peer = null;
   let localStream = null;
   let audioContext = null;
+  let peerReady = false;
 
   function log(msg) {
     console.log('[Holomatos]', msg);
@@ -98,6 +99,11 @@
   }
 
   async function start() {
+    if (peer) {
+      statusEl.textContent = 'Already started';
+      return;
+    }
+
     try {
       statusLabel.textContent = 'Requesting camera/mic...';
       statusEl.textContent = 'Please allow camera and microphone access.';
@@ -136,10 +142,12 @@
 
       peer.on('open', (id) => {
         log('Host peer ID: ' + id);
+        peerReady = true;
         statusEl.textContent = 'Host ready. Share ID with phone: ' + id;
       });
 
       peer.on('call', (call) => {
+        console.log('Host received call from:', call.peer);
         log('Phone connecting...');
         const videoTrack = localStream ? localStream.getVideoTracks()[0] : null;
         const audioTrack = localStream ? localStream.getAudioTracks()[0] : null;
