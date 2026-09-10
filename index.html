@@ -21,7 +21,7 @@
     background:#141416; border:1.5px solid #2a2a30; overflow:hidden; position:relative;
   }
   .preview video {
-    width:100%; height:100%; object-fit:cover; display:block;
+    width:100%; height:100%; object-fit:cover; display:block; background:#000;
   }
   .preview .label {
     position:absolute; top:10px; left:10px;
@@ -43,9 +43,12 @@
 </head>
 <body>
 <div id="app">
-  <div class="preview">
+  <div class="preview" id="preview">
     <video id="camera" autoplay playsinline muted></video>
     <div class="label" id="statusLabel">Initializing...</div>
+    <div id="playOverlay" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);color:#eba53c;font-size:18px;font-weight:700;cursor:pointer;z-index:10;">
+      Tap to start video
+    </div>
   </div>
 
   <button class="btn" id="micBtn" style="display:none;">
@@ -123,21 +126,24 @@
       if (event.track.kind === 'video' && event.streams[0]) {
         log('Receiving camera');
         const stream = event.streams[0];
-        console.log('Phone video stream tracks:', stream.getTracks().map(t => t.kind));
         camera.srcObject = stream;
         camera.muted = true;
         camera.style.display = 'block';
         camera.style.opacity = '1';
+        const playOverlay = document.getElementById('playOverlay');
+        if (playOverlay) playOverlay.style.display = 'none';
         camera.onloadedmetadata = () => {
           console.log('Phone video loadedmetadata, readyState:', camera.readyState, 'paused:', camera.paused);
           camera.play().then(() => {
             console.log('Phone video playing');
             statusEl.textContent = 'Connected. Hold mic to talk.';
+            if (playOverlay) playOverlay.style.display = 'none';
           }).catch(e => console.error('Phone play failed:', e));
         };
         camera.onplaying = () => {
           console.log('Phone video onplaying');
           statusEl.textContent = 'Connected. Hold mic to talk.';
+          if (playOverlay) playOverlay.style.display = 'none';
         };
         camera.onerror = (e) => {
           console.error('Phone video error:', e);
@@ -443,15 +449,39 @@
   micBtn.addEventListener('touchend', (e) => { e.preventDefault(); stopMic(); });
 
   camera.addEventListener('click', () => {
+    console.log('Phone camera clicked');
     if (camera.srcObject && camera.paused) {
       camera.play().catch(() => {});
     }
+    const playOverlay = document.getElementById('playOverlay');
+    if (playOverlay) playOverlay.style.display = 'none';
   });
   camera.addEventListener('touchstart', () => {
+    console.log('Phone camera touched');
     if (camera.srcObject && camera.paused) {
       camera.play().catch(() => {});
     }
+    const playOverlay = document.getElementById('playOverlay');
+    if (playOverlay) playOverlay.style.display = 'none';
   });
+
+  const playOverlay = document.getElementById('playOverlay');
+  if (playOverlay) {
+    playOverlay.addEventListener('click', () => {
+      console.log('Phone playOverlay clicked');
+      if (camera.srcObject) {
+        camera.play().catch(() => {});
+      }
+      playOverlay.style.display = 'none';
+    });
+    playOverlay.addEventListener('touchstart', () => {
+      console.log('Phone playOverlay touched');
+      if (camera.srcObject) {
+        camera.play().catch(() => {});
+      }
+      playOverlay.style.display = 'none';
+    });
+  }
 
   if (isHost) {
     micBtn.style.display = 'none';
