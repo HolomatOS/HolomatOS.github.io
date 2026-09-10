@@ -73,6 +73,8 @@
   let localStream = null;
   let audioContext = null;
   let peerReady = false;
+  let mediaPc = null;
+  let mediaConn = null;
 
   function log(msg) {
     console.log('[Holomatos]', msg);
@@ -180,15 +182,26 @@
       peer.on('connection', (conn) => {
         log('Phone data channel open');
         statusEl.textContent = 'Connected! Receiving audio...';
-        conn.on('data', (data) => {
+        mediaConn = conn;
+        mediaConn.binaryType = 'arraybuffer';
+
+        mediaConn.on('data', (data) => {
+          if (typeof data === 'string') {
+            handleSignaling(data);
+            return;
+          }
           if (data instanceof ArrayBuffer) {
             const int16 = new Int16Array(data);
             playAudioChunk(int16);
           }
         });
-        conn.on('close', () => {
+
+        mediaConn.on('close', () => {
           log('Data channel closed');
+          mediaConn = null;
         });
+
+        setupMediaPeerConnection();
       });
 
       peer.on('error', (err) => {
@@ -205,6 +218,72 @@
       statusEl.textContent = 'Error: ' + e.message;
       startBtn.disabled = false;
       startBtn.textContent = 'Retry';
+    }
+  }
+
+  function setupMediaPeerConnection() {
+    if (mediaPc) {
+      try { mediaPc.close(); } catch (e) {}
+      mediaPc = null;
+    }
+
+    mediaPc = new RTCPeerConnection({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+      ]
+    });
+
+    if (localStream) {
+      localStream.getTracks().forEach(track => mediaPc.addTrack(track, localStream));
+    }
+
+    mediaPc.ontrack = (event) => {
+      console.log('Host ontrack:', event.track.kind, event.streams.length);
+      if (event.track.kind === 'audio' && event.streams[0]) {
+        const audio = new Audio();
+        audio.srcObject = event.streams[0];
+        audio.play();
+      }
+    };
+
+    mediaPc.onicecandidate = (event) => {
+      if (event.candidate && mediaConn && mediaConn.readyState === 'open') {
+        console.log('Host sending ICE candidate');
+        mediaConn.send(JSON.stringify({ type: 'ice-candidate', candidate: event.candidate }));
+      }
+    };
+
+    mediaPc.oniceconnectionstatechange = () => {
+      console.log('Host ICE state:', mediaPc.iceConnectionState);
+      statusEl.textContent = 'ICE: ' + mediaPc.iceConnectionState;
+    };
+  }
+
+  async function handleSignaling(msg) {
+    if (!mediaPc) return;
+    try {
+      const data = JSON.parse(msg);
+      if (data.type === 'offer') {
+        console.log('Host got offer');
+        await mediaPc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        const answer = await mediaPc.createAnswer();
+        await mediaPc.setLocalDescription(answer);
+        if (mediaConn && mediaConn.readyState === 'open') {
+          mediaConn.send(JSON.stringify({ type: 'answer', sdp: answer }));
+        }
+        statusEl.textContent = 'Sent answer, waiting for ICE...';
+      } else if (data.type === 'answer') {
+        console.log('Host got answer');
+        await mediaPc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+      } else if (data.type === 'ice-candidate') {
+        console.log('Host got ICE candidate');
+        try {
+          await mediaPc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        } catch (e) {}
+      }
+    } catch (e) {
+      console.error('Host signaling error:', e);
     }
   }
 
