@@ -122,9 +122,29 @@
       console.log('ontrack:', event.track.kind, event.streams.length);
       if (event.track.kind === 'video' && event.streams[0]) {
         log('Receiving camera');
-        camera.srcObject = event.streams[0];
-        camera.play().catch(() => {});
-        statusEl.textContent = 'Connected. Hold mic to talk.';
+        const stream = event.streams[0];
+        console.log('Phone video stream tracks:', stream.getTracks().map(t => t.kind));
+        camera.srcObject = stream;
+        camera.muted = true;
+        camera.style.display = 'block';
+        camera.style.opacity = '1';
+        camera.onloadedmetadata = () => {
+          console.log('Phone video loadedmetadata, readyState:', camera.readyState, 'paused:', camera.paused);
+          camera.play().then(() => {
+            console.log('Phone video playing');
+            statusEl.textContent = 'Connected. Hold mic to talk.';
+          }).catch(e => console.error('Phone play failed:', e));
+        };
+        camera.onplaying = () => {
+          console.log('Phone video onplaying');
+          statusEl.textContent = 'Connected. Hold mic to talk.';
+        };
+        camera.onerror = (e) => {
+          console.error('Phone video error:', e);
+        };
+        if (camera.readyState >= 2) {
+          camera.play().catch(e => console.error('Phone immediate play failed:', e));
+        }
       }
       if (event.track.kind === 'audio' && event.streams[0]) {
         const audio = new Audio();
@@ -421,6 +441,17 @@
   micBtn.addEventListener('mouseleave', stopMic);
   micBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startMic(); });
   micBtn.addEventListener('touchend', (e) => { e.preventDefault(); stopMic(); });
+
+  camera.addEventListener('click', () => {
+    if (camera.srcObject && camera.paused) {
+      camera.play().catch(() => {});
+    }
+  });
+  camera.addEventListener('touchstart', () => {
+    if (camera.srcObject && camera.paused) {
+      camera.play().catch(() => {});
+    }
+  });
 
   if (isHost) {
     micBtn.style.display = 'none';
