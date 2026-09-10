@@ -60,12 +60,9 @@
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
 (function() {
-  // Read peer ID from URL param, or use fixed ID so phone can always find this host
+  // Read peer ID from URL param, or use a simple numeric ID
   const params = new URLSearchParams(window.location.search);
-  let peerId = params.get('host');
-  if (!peerId) {
-    peerId = 'jarvis-host-unique';
-  }
+  let peerId = params.get('peerId') || params.get('host') || '1234567890';
 
   const camera = document.getElementById('camera');
   const startBtn = document.getElementById('startBtn');
@@ -143,7 +140,7 @@
       peer.on('open', (id) => {
         log('Host peer ID: ' + id);
         peerReady = true;
-        statusEl.textContent = 'Host ready. Share ID with phone: ' + id;
+        statusEl.textContent = 'Host ready. Phone URL: https://akshat2482.github.io?host=' + id;
       });
 
       peer.on('call', (call) => {
