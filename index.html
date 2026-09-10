@@ -48,30 +48,34 @@
   #remoteVideo{ z-index:1; }
   #remoteVideo.hidden{ opacity:0; }
   #localPreview{
-    position:absolute;
-    z-index:5;
-    /* reset every inset/size property the generic video{} rule set —
-       otherwise sides this element doesn't redeclare (left/bottom/height)
-       keep their video{} values and the box stretches full-height/left. */
-    inset:auto; top:auto; right:auto; bottom:auto; left:auto;
-    width:auto; height:auto;
+    position:absolute; z-index:1;
     object-fit:cover;
-    border:1px solid var(--line);
-    box-shadow:0 0 0 1px rgba(0,0,0,.6), 0 4px 18px rgba(0,0,0,.55);
+    background:#000;
   }
 
-  /* broadcast mode: small PIP top-right */
+  /* broadcast mode (laptop): split screen — own camera left, phone camera right */
   body.mode-broadcast #localPreview{
-    top: calc(18px + var(--safe-t));
-    right: calc(18px + var(--safe-r));
-    bottom:auto; left:auto;
-    width: 26vw; max-width:220px; min-width:120px;
-    height:auto;
-    aspect-ratio: 4/3;
-    border-radius:2px;
+    top:0; bottom:0; left:0; right:auto; width:50%; height:100%;
   }
-  /* viewer mode: no visible self-video, mic only */
+  body.mode-broadcast #remoteVideo{
+    top:0; bottom:0; left:50%; right:0; width:50%; height:100%;
+  }
+  body.mode-broadcast #standby{
+    left:50%; right:0; top:0; bottom:0; width:auto;
+  }
+  body.mode-broadcast #standby p{ padding:0 8%; }
+
+  /* viewer mode (phone): own camera is sent but not previewed locally —
+     the incoming laptop feed fills the whole screen */
   body.mode-viewer #localPreview{ display:none; }
+
+  /* vertical divider between the two halves, broadcast mode only */
+  #splitDivider{
+    position:absolute; z-index:4; top:0; bottom:0; left:50%; width:1px;
+    background:linear-gradient(180deg, transparent 0%, var(--cyan-dim) 15%, var(--cyan-dim) 85%, transparent 100%);
+    display:none; pointer-events:none;
+  }
+  body.mode-broadcast #splitDivider{ display:block; }
 
   /* darken under the HUD chrome */
   #scrim{
@@ -111,14 +115,12 @@
     font-size:10px; letter-spacing:.1em; color:var(--text-dim);
   }
 
-  /* ---------- bottom telemetry strip ---------- */
+  /* ---------- status readout — sits above the mic meter row ---------- */
   #telemetry{
     position:absolute; z-index:6;
     left:calc(30px + var(--safe-l)); right:calc(30px + var(--safe-r));
-    bottom:calc(18px + var(--safe-b));
-    display:flex; align-items:flex-end; justify-content:space-between; gap:14px;
+    bottom:calc(68px + var(--safe-b));
   }
-  #statusBlock{ min-width:0; }
   #statusLine{
     font-family:'Orbitron', sans-serif; font-weight:700;
     font-size:13px; letter-spacing:.1em;
@@ -139,19 +141,33 @@
 
   #statusSub{
     margin-top:5px; font-size:10.5px; letter-spacing:.06em; color:var(--text-dim);
-    max-width:60vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    max-width:70vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
 
-  /* mic level meter */
-  #meter{
-    display:flex; align-items:flex-end; gap:3px; height:22px; flex:none;
+  /* ---------- mic level meters ---------- */
+  .meterWrap{
+    position:absolute; z-index:6; bottom:calc(18px + var(--safe-b));
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+    pointer-events:none;
   }
-  #meter i{
+  .meterLabel{
+    font-size:9px; letter-spacing:.14em; color:var(--text-dim);
+  }
+  .meter{ display:flex; align-items:flex-end; gap:3px; height:22px; }
+  .meter i{
     display:block; width:4px; border-radius:1px;
     background:var(--line);
     height:20%;
     transition:height .07s linear, background .07s linear;
   }
+
+  /* viewer: single meter, bottom center */
+  body.mode-viewer #meterOwn{ left:50%; transform:translateX(-50%); }
+  body.mode-viewer #meterRemote{ display:none; }
+
+  /* broadcast: one meter centered under each half */
+  body.mode-broadcast #meterOwn{ left:25%; transform:translateX(-50%); }
+  body.mode-broadcast #meterRemote{ left:75%; transform:translateX(-50%); }
 
   #retryBtn{
     position:absolute; z-index:6;
@@ -162,9 +178,8 @@
   }
   #retryBtn:hover{ color:var(--cyan); border-color:var(--cyan-dim); }
   #retryBtn:focus-visible, button:focus-visible{ outline:2px solid var(--cyan); outline-offset:2px; }
-  body.mode-broadcast #retryBtn{ top:calc(18px + var(--safe-t) + 34px + 6vw + 84px); }
 
-  /* standby placeholder (viewer mode, no signal yet) */
+  /* standby placeholder — "awaiting uplink" (viewer) / "awaiting phone feed" (broadcast) */
   #standby{
     position:absolute; inset:0; z-index:1;
     display:flex; align-items:center; justify-content:center; flex-direction:column; gap:10px;
@@ -174,6 +189,7 @@
     width:64px; height:64px; border:1px solid var(--cyan-dim); border-radius:50%;
     display:flex; align-items:center; justify-content:center;
     box-shadow:0 0 24px rgba(73,224,234,.15) inset;
+    flex:none;
   }
   #standby .glyph::before{
     content:''; width:10px; height:10px; border-radius:50%;
@@ -189,45 +205,42 @@
   }
   #remoteVideo.hidden ~ #standby{ display:flex; }
   #remoteVideo:not(.hidden) ~ #standby{ display:none; }
-  /* broadcast/laptop mode never uses remoteVideo (only remote audio) —
-     the "awaiting uplink" placeholder is a viewer-only concept */
-  body.mode-broadcast #standby{ display:none !important; }
 
   @media (prefers-reduced-motion: reduce){
     #statusLine.ok .dot, #standby .glyph::before{ animation:none; }
   }
 
-  /* ---------- tuned for the Galaxy A17's 412x892 CSS viewport (and
-     similarly-sized compact phones) — viewer mode only ---------- */
-  @media (max-width: 480px){
+  /* ---------- tuned for the phone (viewer mode), forced landscape ----------
+     Matches the Galaxy A17 either as a narrow portrait fallback or, more
+     commonly now, its locked landscape footprint (~892x412 CSS px). */
+  @media (max-width: 480px), (orientation: landscape) and (max-height: 520px){
     body.mode-viewer #idTag{
-      top:calc(16px + var(--safe-t)); left:calc(20px + var(--safe-l));
+      top:calc(14px + var(--safe-t)); left:calc(18px + var(--safe-l));
       font-size:12px;
     }
     body.mode-viewer #idTag span{ font-size:9px; }
     body.mode-viewer #retryBtn{
-      top:calc(16px + var(--safe-t)); right:calc(20px + var(--safe-r));
-      font-size:10px; padding:7px 10px;
+      top:calc(14px + var(--safe-t)); right:calc(18px + var(--safe-r));
+      font-size:10px; padding:6px 9px;
     }
-    body.mode-viewer .corner{ width:26px; height:26px; }
-    body.mode-viewer .corner.tl, body.mode-viewer .corner.tr{ top:calc(10px + var(--safe-t)); }
-    body.mode-viewer .corner.bl, body.mode-viewer .corner.br{ bottom:calc(10px + var(--safe-b)); }
-    body.mode-viewer .corner.tl, body.mode-viewer .corner.bl{ left:calc(10px + var(--safe-l)); }
-    body.mode-viewer .corner.tr, body.mode-viewer .corner.br{ right:calc(10px + var(--safe-r)); }
+    body.mode-viewer .corner{ width:24px; height:24px; }
+    body.mode-viewer .corner.tl, body.mode-viewer .corner.tr{ top:calc(8px + var(--safe-t)); }
+    body.mode-viewer .corner.bl, body.mode-viewer .corner.br{ bottom:calc(8px + var(--safe-b)); }
+    body.mode-viewer .corner.tl, body.mode-viewer .corner.bl{ left:calc(8px + var(--safe-l)); }
+    body.mode-viewer .corner.tr, body.mode-viewer .corner.br{ right:calc(8px + var(--safe-r)); }
     body.mode-viewer #telemetry{
-      left:calc(20px + var(--safe-l)); right:calc(20px + var(--safe-r));
-      bottom:calc(16px + var(--safe-b));
-      flex-direction:column; align-items:flex-start; gap:10px;
+      left:calc(18px + var(--safe-l)); right:calc(18px + var(--safe-r));
+      bottom:calc(58px + var(--safe-b));
     }
-    body.mode-viewer #statusLine{ font-size:14px; }
-    body.mode-viewer #statusSub{ max-width:88vw; font-size:11px; white-space:normal; }
-    body.mode-viewer #meter{ align-self:flex-end; height:26px; }
-    body.mode-viewer #meter i{ width:5px; }
-    body.mode-viewer #standby{ padding:0 9vw; gap:14px; }
-    body.mode-viewer #standby .glyph{ width:78px; height:78px; }
-    body.mode-viewer #standby .glyph::before{ width:12px; height:12px; }
-    body.mode-viewer #standby h1{ font-size:17px; letter-spacing:.1em; }
-    body.mode-viewer #standby p{ font-size:12.5px; line-height:1.7; }
+    body.mode-viewer #statusLine{ font-size:12px; }
+    body.mode-viewer #statusSub{ font-size:10px; }
+    body.mode-viewer #meterOwn{ bottom:calc(12px + var(--safe-b)); }
+    body.mode-viewer .meter{ height:20px; }
+    body.mode-viewer .meter i{ width:4px; }
+    body.mode-viewer #standby{ padding:0 10vw; gap:12px; }
+    body.mode-viewer #standby .glyph{ width:56px; height:56px; }
+    body.mode-viewer #standby h1{ font-size:14px; }
+    body.mode-viewer #standby p{ font-size:11px; line-height:1.6; }
   }
 </style>
 </head>
@@ -237,11 +250,12 @@
   <video id="remoteVideo" class="hidden" autoplay playsinline></video>
   <div id="standby">
     <div class="glyph"></div>
-    <h1>AWAITING UPLINK</h1>
-    <p>Standing by for the laptop broadcast.<br>Keep this page open on the handset.</p>
+    <h1 id="standbyTitle">AWAITING UPLINK</h1>
+    <p id="standbyText">Standing by for the laptop broadcast.<br>Keep this page open on the handset.</p>
   </div>
 
   <video id="localPreview" autoplay playsinline muted></video>
+  <div id="splitDivider"></div>
   <div id="scrim"></div>
   <div id="grain"></div>
 
@@ -252,15 +266,19 @@
   <button id="retryBtn" type="button">RE-SYNC</button>
 
   <div id="telemetry">
-    <div id="statusBlock">
-      <div id="statusLine"><i class="dot"></i><span id="statusText">INITIALIZING</span></div>
-      <div id="statusSub" id="statusSub"></div>
-    </div>
-    <div id="meter" aria-hidden="true"></div>
+    <div id="statusLine"><i class="dot"></i><span id="statusText">INITIALIZING</span></div>
+    <div id="statusSub"></div>
+  </div>
+
+  <div id="meterOwn" class="meterWrap" aria-hidden="true">
+    <span class="meterLabel" id="meterOwnLabel">MIC</span>
+    <div class="meter"></div>
+  </div>
+  <div id="meterRemote" class="meterWrap" aria-hidden="true">
+    <span class="meterLabel">REMOTE MIC</span>
+    <div class="meter"></div>
   </div>
 </div>
-
-<audio id="remoteAudio" autoplay playsinline></audio>
 
 <script>
 (function(){
@@ -278,18 +296,21 @@
   var idSub = document.getElementById('idSub');
   idSub.textContent = (isBroadcast ? 'BROADCAST · ' : 'RECEIVER · ') + MY_ID;
 
+  var standbyTitle = document.getElementById('standbyTitle');
+  var standbyText  = document.getElementById('standbyText');
+  if (isBroadcast){
+    standbyTitle.textContent = 'AWAITING PHONE FEED';
+    standbyText.innerHTML = 'Open the receiver page on the handset to start its camera.';
+  }
+
   var statusLine = document.getElementById('statusLine');
   var statusText = document.getElementById('statusText');
   var statusSub  = document.getElementById('statusSub');
   var retryBtn   = document.getElementById('retryBtn');
   var remoteVideo = document.getElementById('remoteVideo');
-  var remoteAudio = document.getElementById('remoteAudio');
   var localPreview = document.getElementById('localPreview');
-  var meterEl = document.getElementById('meter');
 
-  var METER_BARS = 14;
-  for (var i=0;i<METER_BARS;i++){ meterEl.appendChild(document.createElement('i')); }
-  var meterBars = meterEl.querySelectorAll('i');
+  document.getElementById('meterOwnLabel').textContent = isBroadcast ? 'LOCAL MIC' : 'MIC';
 
   function setStatus(text, sub, state){
     statusText.textContent = text;
@@ -297,8 +318,16 @@
     statusLine.className = state ? state : '';
   }
 
-  // ---------------- mic level meter ----------------
-  function attachMeter(stream){
+  // ---------------- mic level meters ----------------
+  function buildMeterBars(container){
+    var n = 14;
+    for (var i=0;i<n;i++){ container.appendChild(document.createElement('i')); }
+    return container.querySelectorAll('i');
+  }
+  var meterOwnBars    = buildMeterBars(document.querySelector('#meterOwn .meter'));
+  var meterRemoteBars = buildMeterBars(document.querySelector('#meterRemote .meter'));
+
+  function attachMeter(stream, bars){
     try{
       var ctx = new (window.AudioContext || window.webkitAudioContext)();
       var src = ctx.createMediaStreamSource(stream);
@@ -310,15 +339,47 @@
         analyser.getByteFrequencyData(data);
         var avg = data.reduce(function(a,b){return a+b;},0) / data.length;
         var level = Math.min(1, avg / 90);
-        for (var i=0;i<meterBars.length;i++){
-          var barThresh = i / meterBars.length;
-          var on = level > barThresh;
-          meterBars[i].style.height = on ? (24 + i*4) + '%' : '20%';
-          meterBars[i].style.background = on ? (i > meterBars.length*0.75 ? '#e85b4f' : '#49e0ea') : '#1d3a40';
+        for (var i=0;i<bars.length;i++){
+          var on = level > i / bars.length;
+          bars[i].style.height = on ? (24 + i*4) + '%' : '20%';
+          bars[i].style.background = on ? (i > bars.length*0.75 ? '#e85b4f' : '#49e0ea') : '#1d3a40';
         }
         requestAnimationFrame(tick);
       })();
     }catch(e){ /* meter is cosmetic; ignore failures */ }
+  }
+
+  // ---------------- fullscreen + forced landscape (phone only) ----------------
+  function goImmersive(){
+    if (isBroadcast) return;
+    var el = document.documentElement;
+    var req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+    function lock(){
+      try{
+        if (screen.orientation && screen.orientation.lock){
+          screen.orientation.lock('landscape').catch(function(){});
+        }
+      }catch(e){}
+    }
+    if (!req){ lock(); return; }
+    try{
+      var res = req.call(el);
+      if (res && res.then){ res.then(lock).catch(function(){ /* needs a user gesture — fallback listener below covers it */ }); }
+      else { lock(); }
+    }catch(e){}
+  }
+  if (!isBroadcast){
+    goImmersive();
+    ['touchend','click'].forEach(function(evt){
+      document.addEventListener(evt, function retryImmersive(){
+        if (!document.fullscreenElement){ goImmersive(); }
+      }, { passive:true });
+    });
+    document.addEventListener('fullscreenchange', function(){
+      if (document.fullscreenElement && screen.orientation && screen.orientation.lock){
+        screen.orientation.lock('landscape').catch(function(){});
+      }
+    });
   }
 
   // ---------------- media acquisition ----------------
@@ -330,10 +391,11 @@
   var reconnectAttempts = 0;
 
   function getMedia(){
-    var constraints = isBroadcast
-      ? { video: { facingMode:'user', width:{ideal:1280}, height:{ideal:720} }, audio: true }
-      : { video:false, audio:true };
-    return navigator.mediaDevices.getUserMedia(constraints);
+    // both the laptop and the phone now send camera + mic
+    return navigator.mediaDevices.getUserMedia({
+      video: { facingMode:'user', width:{ideal:1280}, height:{ideal:720} },
+      audio: true
+    });
   }
 
   function backoffDelay(){
@@ -358,7 +420,7 @@
     });
 
     peer.on('call', function(call){
-      // viewer side receives the laptop's call and answers with its mic
+      // viewer side receives the laptop's call and answers with its own camera + mic
       activeCall = call;
       call.answer(localStream);
       wireCall(call);
@@ -440,17 +502,12 @@
   function wireCall(call){
     call.on('stream', function(remoteStream){
       setStatus('UPLINK ESTABLISHED', TARGET_ID, 'ok');
-      if (isBroadcast){
-        // incoming = phone mic only
-        remoteAudio.srcObject = remoteStream;
-        attachMeter(remoteStream);
-      } else {
-        remoteVideo.srcObject = remoteStream;
-        remoteVideo.classList.remove('hidden');
-      }
+      remoteVideo.srcObject = remoteStream;
+      remoteVideo.classList.remove('hidden');
+      attachMeter(remoteStream, meterRemoteBars);
     });
     call.on('close', function(){
-      setStatus(isBroadcast ? 'RECEIVER LOST' : 'UPLINK LOST', 'awaiting reconnection…', 'bad');
+      setStatus(isBroadcast ? 'PHONE FEED LOST' : 'UPLINK LOST', 'awaiting reconnection…', 'bad');
       remoteVideo.classList.add('hidden');
       remoteVideo.srcObject = null;
       activeCall = null;
@@ -468,24 +525,23 @@
     reconnectAttempts = 0;
     if (activeCall){ try{ activeCall.close(); }catch(e){} activeCall = null; }
     rebuildPeer();
+    if (!isBroadcast) goImmersive();
   });
 
   // ---------------- boot ----------------
   getMedia().then(function(stream){
     localStream = stream;
-    if (isBroadcast){
-      localPreview.srcObject = stream;
-    } else {
-      attachMeter(stream); // show the phone's own mic level while idle/sending
-    }
+    localPreview.srcObject = stream;
+    attachMeter(stream, meterOwnBars);
     startPeer();
   }).catch(function(err){
     setStatus('MEDIA DENIED', String(err && err.message || err), 'bad');
   });
 
   document.addEventListener('visibilitychange', function(){
-    if (document.visibilityState === 'visible' && peer && peer.disconnected){
-      try{ peer.reconnect(); }catch(e){}
+    if (document.visibilityState === 'visible'){
+      if (peer && peer.disconnected){ try{ peer.reconnect(); }catch(e){} }
+      if (!isBroadcast) goImmersive();
     }
   });
 })();
