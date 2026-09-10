@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Holomatos Remote Host</title>
+<title>Holomatos</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body {
@@ -48,33 +48,34 @@
     <div class="label" id="statusLabel">Initializing...</div>
   </div>
 
-  <button class="btn" id="startBtn">
-    <span>🎥</span> Start Camera & Mic
+  <button class="btn" id="micBtn" style="display:none;">
+    <span>🎤</span> Hold to Talk
   </button>
 
   <div class="status" id="status">
-    This page captures your camera and microphone and streams them to your phone.
+    Holomatos Remote
   </div>
 </div>
 
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
 (function() {
-  // Read peer ID from URL param, or use a simple numeric ID
   const params = new URLSearchParams(window.location.search);
-  let peerId = params.get('peerId') || params.get('host') || '1234567890';
+  const isHost = params.has('broadcast');
+  const hostPeerId = params.get('id') || 'holomatos-host';
 
   const camera = document.getElementById('camera');
-  const startBtn = document.getElementById('startBtn');
+  const micBtn = document.getElementById('micBtn');
   const statusEl = document.getElementById('status');
   const statusLabel = document.getElementById('statusLabel');
 
   let peer = null;
   let localStream = null;
   let audioContext = null;
-  let peerReady = false;
-  let mediaPc = null;
-  let mediaConn = null;
+  let dataChannel = null;
+  let pc = null;
+  let micStream = null;
+  let scriptProcessor = null;
 
   function log(msg) {
     console.log('[Holomatos]', msg);
@@ -97,36 +98,89 @@
     source.start();
   }
 
-  async function start() {
-    if (peer) {
-      statusEl.textContent = 'Already started';
-      return;
+  function setupMediaPC() {
+    if (pc) {
+      try { pc.close(); } catch (e) {}
+      pc = null;
     }
 
+    pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+      ]
+    });
+
+    if (isHost && localStream) {
+      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    }
+
+    pc.ontrack = (event) => {
+      console.log('ontrack:', event.track.kind, event.streams.length);
+      if (event.track.kind === 'video' && event.streams[0]) {
+        log('Receiving camera');
+        camera.srcObject = event.streams[0];
+        camera.play().catch(() => {});
+        statusEl.textContent = 'Connected. Hold mic to talk.';
+      }
+      if (event.track.kind === 'audio' && event.streams[0]) {
+        const audio = new Audio();
+        audio.srcObject = event.streams[0];
+        audio.play();
+      }
+    };
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate && dataChannel && dataChannel.readyState === 'open') {
+        dataChannel.send(JSON.stringify({ type: 'ice-candidate', candidate: event.candidate }));
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log('ICE:', pc.iceConnectionState);
+    };
+  }
+
+  async function handleSignaling(msg) {
+    if (!pc) return;
     try {
-      statusLabel.textContent = 'Requesting camera/mic...';
-      statusEl.textContent = 'Please allow camera and microphone access.';
+      const data = typeof msg === 'string' ? JSON.parse(msg) : msg;
+      if (data.type === 'offer') {
+        console.log('Got offer');
+        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        if (dataChannel && dataChannel.readyState === 'open') {
+          dataChannel.send(JSON.stringify({ type: 'answer', sdp: answer }));
+        }
+      } else if (data.type === 'answer') {
+        console.log('Got answer');
+        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+      } else if (data.type === 'ice-candidate') {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        } catch (e) {}
+      }
+    } catch (e) {
+      console.error('Signaling error:', e);
+    }
+  }
+
+  async function startHost() {
+    try {
+      log('Requesting camera/mic...');
+      statusEl.textContent = 'Please allow camera and microphone.';
 
       localStream = await navigator.mediaDevices.getUserMedia({
         video: { width:{ideal:1280}, height:{ideal:720}, facingMode:"user" },
         audio: { echoCancellation:true, noiseSuppression:true, autoGainControl:true }
       });
 
-      const videoTracks = localStream.getVideoTracks();
-      const audioTracks = localStream.getAudioTracks();
-      console.log('Host localStream tracks:', { video: videoTracks.length, audio: audioTracks.length });
-      if (videoTracks.length === 0) {
-        statusEl.textContent = 'Camera not available. Check permissions.';
-      }
-
       camera.srcObject = localStream;
       await camera.play();
-      statusLabel.textContent = 'Camera active. Connecting to signaling...';
+      log('Camera active. Starting broadcast...');
 
-      startBtn.disabled = true;
-      startBtn.textContent = 'Connecting...';
-
-      peer = new Peer(peerId, {
+      peer = new Peer(hostPeerId, {
         host: '0.peerjs.com',
         port: 443,
         path: '/',
@@ -140,52 +194,17 @@
       });
 
       peer.on('open', (id) => {
-        log('Host peer ID: ' + id);
-        peerReady = true;
-        statusEl.textContent = 'Host ready. Phone URL: https://akshat2482.github.io?host=' + id;
-      });
-
-      peer.on('call', (call) => {
-        console.log('Host received call from:', call.peer);
-        log('Phone connecting...');
-        const videoTrack = localStream ? localStream.getVideoTracks()[0] : null;
-        const audioTrack = localStream ? localStream.getAudioTracks()[0] : null;
-        console.log('Host answering call with tracks:', { videoTrack, audioTrack });
-        console.log('Host localStream ready:', !!localStream);
-        if (localStream) {
-          try {
-            call.answer(localStream);
-            console.log('Host answered call with localStream');
-          } catch (e) {
-            console.error('Host call.answer failed:', e);
-            statusEl.textContent = 'Failed to answer call: ' + (e.message || e);
-          }
-        } else {
-          console.warn('Call received but localStream has no tracks');
-          statusEl.textContent = 'Phone called before camera/mic started';
-          call.answer();
-        }
-        call.on('stream', (remoteStream) => {
-          log('Phone stream received');
-          console.log('Host got remote stream tracks:', remoteStream.getTracks().map(t => t.kind));
-        });
-        call.on('close', () => {
-          log('Phone disconnected');
-          statusEl.textContent = 'Phone disconnected. Waiting for new connection...';
-        });
-        call.on('error', (err) => {
-          console.error('Call error:', err);
-          statusEl.textContent = 'Call error: ' + (err.type || err.message || 'unknown');
-        });
+        log('Broadcast ID: ' + id);
+        statusEl.textContent = 'Phone URL: ' + window.location.origin + window.location.pathname + '?host=' + id;
       });
 
       peer.on('connection', (conn) => {
-        log('Phone data channel open');
-        statusEl.textContent = 'Connected! Receiving audio...';
-        mediaConn = conn;
-        mediaConn.binaryType = 'arraybuffer';
+        log('Phone connected');
+        statusEl.textContent = 'Phone connected. Streaming...';
+        dataChannel = conn;
+        dataChannel.binaryType = 'arraybuffer';
 
-        mediaConn.on('data', (data) => {
+        dataChannel.on('data', (data) => {
           if (typeof data === 'string') {
             handleSignaling(data);
             return;
@@ -196,98 +215,205 @@
           }
         });
 
-        mediaConn.on('close', () => {
-          log('Data channel closed');
-          mediaConn = null;
+        dataChannel.on('close', () => {
+          log('Phone disconnected');
+          dataChannel = null;
         });
 
-        setupMediaPeerConnection();
+        setupMediaPC();
       });
 
       peer.on('error', (err) => {
         console.error('Peer error:', err);
         log('Error: ' + err.type);
-        statusEl.textContent = 'Connection error: ' + err.type;
-        startBtn.disabled = false;
-        startBtn.textContent = 'Retry';
+        statusEl.textContent = 'Error: ' + err.type;
       });
 
     } catch (e) {
       console.error('Start error:', e);
       log('Error: ' + e.message);
       statusEl.textContent = 'Error: ' + e.message;
-      startBtn.disabled = false;
-      startBtn.textContent = 'Retry';
     }
   }
 
-  function setupMediaPeerConnection() {
-    if (mediaPc) {
-      try { mediaPc.close(); } catch (e) {}
-      mediaPc = null;
-    }
-
-    mediaPc = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-      ]
-    });
-
-    if (localStream) {
-      localStream.getTracks().forEach(track => mediaPc.addTrack(track, localStream));
-    }
-
-    mediaPc.ontrack = (event) => {
-      console.log('Host ontrack:', event.track.kind, event.streams.length);
-      if (event.track.kind === 'audio' && event.streams[0]) {
-        const audio = new Audio();
-        audio.srcObject = event.streams[0];
-        audio.play();
-      }
-    };
-
-    mediaPc.onicecandidate = (event) => {
-      if (event.candidate && mediaConn && mediaConn.readyState === 'open') {
-        console.log('Host sending ICE candidate');
-        mediaConn.send(JSON.stringify({ type: 'ice-candidate', candidate: event.candidate }));
-      }
-    };
-
-    mediaPc.oniceconnectionstatechange = () => {
-      console.log('Host ICE state:', mediaPc.iceConnectionState);
-      statusEl.textContent = 'ICE: ' + mediaPc.iceConnectionState;
-    };
-  }
-
-  async function handleSignaling(msg) {
-    if (!mediaPc) return;
+  async function startPhone() {
+    const targetHost = params.get('host') || 'holomatos-host';
+    
     try {
-      const data = JSON.parse(msg);
-      if (data.type === 'offer') {
-        console.log('Host got offer');
-        await mediaPc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-        const answer = await mediaPc.createAnswer();
-        await mediaPc.setLocalDescription(answer);
-        if (mediaConn && mediaConn.readyState === 'open') {
-          mediaConn.send(JSON.stringify({ type: 'answer', sdp: answer }));
+      log('Connecting to broadcast...');
+      statusEl.textContent = 'Connecting to ' + targetHost + '...';
+
+      peer = new Peer(null, {
+        host: '0.peerjs.com',
+        port: 443,
+        path: '/',
+        secure: true,
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+          ]
         }
-        statusEl.textContent = 'Sent answer, waiting for ICE...';
-      } else if (data.type === 'answer') {
-        console.log('Host got answer');
-        await mediaPc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-      } else if (data.type === 'ice-candidate') {
-        console.log('Host got ICE candidate');
-        try {
-          await mediaPc.addIceCandidate(new RTCIceCandidate(data.candidate));
-        } catch (e) {}
-      }
+      });
+
+      peer.on('open', (id) => {
+        log('Phone ready. Connecting to ' + targetHost + '...');
+        
+        const conn = peer.connect(targetHost, { reliable: false });
+        
+        conn.on('open', () => {
+          log('Connected to broadcast');
+          statusEl.textContent = 'Connected. Starting video...';
+          dataChannel = conn;
+          dataChannel.binaryType = 'arraybuffer';
+
+          dataChannel.on('data', (data) => {
+            if (typeof data === 'string') {
+              handleSignaling(data);
+              return;
+            }
+            if (data instanceof ArrayBuffer) {
+              const int16 = new Int16Array(data);
+              playAudioChunk(int16);
+            }
+          });
+
+          dataChannel.on('close', () => {
+            log('Disconnected');
+            dataChannel = null;
+            statusEl.textContent = 'Disconnected. Refresh to reconnect.';
+          });
+
+          setupMediaPC();
+          
+          setTimeout(async () => {
+            if (pc && pc.signalingState === 'stable') {
+              console.log('Creating offer');
+              try {
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                dataChannel.send(JSON.stringify({ type: 'offer', sdp: offer }));
+                statusEl.textContent = 'Sent offer, waiting for video...';
+              } catch (e) {
+                console.error('Offer failed:', e);
+              }
+            }
+          }, 1000);
+        });
+
+        conn.on('error', (err) => {
+          console.error('Connection error:', err);
+          statusEl.textContent = 'Connection error. Retrying...';
+          setTimeout(() => peer.connect(targetHost, { reliable: false }), 3000);
+        });
+
+        conn.on('close', () => {
+          log('Disconnected');
+          dataChannel = null;
+          statusEl.textContent = 'Disconnected. Refresh to reconnect.';
+        });
+      });
+
+      peer.on('error', (err) => {
+        console.error('Peer error:', err);
+        if (err.type === 'peer-unavailable') {
+          log('Broadcast not found. Retrying...');
+          statusEl.textContent = 'Broadcast not found. Retrying in 3s...';
+          setTimeout(startPhone, 3000);
+        } else {
+          statusEl.textContent = 'Error: ' + err.type;
+        }
+      });
+
     } catch (e) {
-      console.error('Host signaling error:', e);
+      console.error('Start error:', e);
+      log('Error: ' + e.message);
     }
   }
 
-  startBtn.addEventListener('click', start);
+  async function startMic() {
+    if (!dataChannel || dataChannel.readyState !== 'open') {
+      alert('Not connected yet');
+      return;
+    }
+
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 16000,
+          channelCount: 1
+        },
+        video: false
+      });
+
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const source = audioContext.createMediaStreamSource(micStream);
+      scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+
+      scriptProcessor.onaudioprocess = (e) => {
+        if (!dataChannel || dataChannel.readyState !== 'open') return;
+
+        const input = e.inputBuffer.getChannelData(0);
+        const int16 = new Int16Array(input.length);
+        for (let i = 0; i < input.length; i++) {
+          const s = Math.max(-1, Math.min(1, input[i]));
+          int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+
+        try {
+          dataChannel.send(int16.buffer);
+        } catch (err) {
+          // Channel closed
+        }
+      };
+
+      source.connect(scriptProcessor);
+
+      micBtn.style.animation = 'pulse 1.2s infinite';
+      statusEl.textContent = 'Talking...';
+
+    } catch (e) {
+      alert('Mic access denied: ' + e.message);
+    }
+  }
+
+  function stopMic() {
+    if (micStream) {
+      micStream.getTracks().forEach(t => t.stop());
+      micStream = null;
+    }
+    if (audioContext) {
+      audioContext.close();
+      audioContext = null;
+    }
+    if (scriptProcessor) {
+      scriptProcessor.disconnect();
+      scriptProcessor = null;
+    }
+    micBtn.style.animation = '';
+    statusEl.textContent = 'Connected to broadcast';
+  }
+
+  const style = document.createElement('style');
+  style.textContent = '@keyframes pulse { 0%,100% { box-shadow:0 0 20px rgba(235,165,60,0.4); } 50% { box-shadow:0 0 40px rgba(235,165,60,0.7); } }';
+  document.head.appendChild(style);
+
+  micBtn.addEventListener('mousedown', startMic);
+  micBtn.addEventListener('mouseup', stopMic);
+  micBtn.addEventListener('mouseleave', stopMic);
+  micBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startMic(); });
+  micBtn.addEventListener('touchend', (e) => { e.preventDefault(); stopMic(); });
+
+  if (isHost) {
+    micBtn.style.display = 'none';
+    startHost();
+  } else {
+    micBtn.style.display = 'flex';
+    startPhone();
+  }
 })();
 </script>
 </body>
