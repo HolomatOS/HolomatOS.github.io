@@ -368,11 +368,25 @@
       else { lock(); }
     }catch(e){}
   }
+  // Screen Wake Lock (phone only): without this, the OS will dim/lock the
+  // screen after its idle timeout and many mobile browsers kill the camera
+  // track the moment that happens — which shows up as "it connects for a
+  // bit, then disconnects" with no obvious error.
+  var wakeLock = null;
+  function requestWakeLock(){
+    if (isBroadcast || !('wakeLock' in navigator)) return;
+    navigator.wakeLock.request('screen').then(function(lock){
+      wakeLock = lock;
+    }).catch(function(){ /* not fatal — best effort */ });
+  }
+
   if (!isBroadcast){
     goImmersive();
+    requestWakeLock();
     ['touchend','click'].forEach(function(evt){
       document.addEventListener(evt, function retryImmersive(){
         if (!document.fullscreenElement){ goImmersive(); }
+        if (!wakeLock){ requestWakeLock(); }
       }, { passive:true });
     });
     document.addEventListener('fullscreenchange', function(){
@@ -420,7 +434,13 @@
     });
 
     peer.on('call', function(call){
-      // viewer side receives the laptop's call and answers with its own camera + mic
+      // viewer side receives the laptop's call and answers with its own camera + mic.
+      // If a previous call is still hanging around (e.g. the broadcaster retried
+      // before the old one finished closing), drop it first so we never answer
+      // two overlapping calls at once.
+      if (activeCall && activeCall !== call){
+        try{ activeCall.close(); }catch(e){}
+      }
       activeCall = call;
       call.answer(localStream);
       wireCall(call);
@@ -489,7 +509,13 @@
   function beginCallLoop(){
     clearInterval(callAttemptTimer);
     callAttemptTimer = setInterval(function(){
-      if (activeCall && activeCall.open) return; // already connected
+      // Any call already in flight (even if not yet "open") counts as busy.
+      // Re-calling here while a prior attempt is still negotiating is what
+      // was causing the connect-then-drop cycle: PeerJS only flips .open to
+      // true once the answer round-trip finishes, which can take longer than
+      // one poll tick over wifi/cellular, so the old check let a second,
+      // competing call get fired on top of the first one every few seconds.
+      if (activeCall) return;
       if (!peer || peer.disconnected || peer.destroyed) return;
       setStatus('SEEKING RECEIVER', 'calling ' + TARGET_ID + '…', '');
       var call = peer.call(TARGET_ID, localStream);
@@ -500,22 +526,40 @@
   }
 
   function wireCall(call){
+    // Safety net: if a call never opens and never fires close/error (a stuck
+    // negotiation), don't let it block the loop forever — abandon it after a
+    // while so a fresh attempt can be made.
+    var settled = false;
+    var stallTimer = setTimeout(function(){
+      if (settled || activeCall !== call) return;
+      console.warn('call attempt stalled, resetting', call.peer);
+      try{ call.close(); }catch(e){}
+      if (activeCall === call) activeCall = null;
+    }, 12000);
+
     call.on('stream', function(remoteStream){
+      settled = true;
+      clearTimeout(stallTimer);
       setStatus('UPLINK ESTABLISHED', TARGET_ID, 'ok');
       remoteVideo.srcObject = remoteStream;
       remoteVideo.classList.remove('hidden');
       attachMeter(remoteStream, meterRemoteBars);
     });
     call.on('close', function(){
+      clearTimeout(stallTimer);
       setStatus(isBroadcast ? 'PHONE FEED LOST' : 'UPLINK LOST', 'awaiting reconnection…', 'bad');
       remoteVideo.classList.add('hidden');
       remoteVideo.srcObject = null;
-      activeCall = null;
+      // Only clear the shared reference if this closing call is still the
+      // one we're tracking — a stale/superseded call's close shouldn't be
+      // able to wipe out a newer, healthy connection.
+      if (activeCall === call) activeCall = null;
     });
     call.on('error', function(err){
+      clearTimeout(stallTimer);
       console.warn('call error', err);
       setStatus('CALL ERROR', String(err && err.message || err), 'bad');
-      activeCall = null;
+      if (activeCall === call) activeCall = null;
     });
   }
 
@@ -528,11 +572,40 @@
     if (!isBroadcast) goImmersive();
   });
 
+  // If the OS/browser kills a camera or mic track out from under us (common
+  // right after screen lock or an app-switch on phones), reacquire a fresh
+  // stream and hot-swap it into whatever call is active, rather than sitting
+  // on a dead track until someone manually hits RE-SYNC.
+  function watchTrackHealth(stream){
+    stream.getTracks().forEach(function(track){
+      track.addEventListener('ended', function(){
+        console.warn('local track ended unexpectedly:', track.kind);
+        setStatus('CAMERA LOST', 'reacquiring…', 'bad');
+        getMedia().then(function(newStream){
+          localStream = newStream;
+          localPreview.srcObject = newStream;
+          attachMeter(newStream, meterOwnBars);
+          watchTrackHealth(newStream);
+          if (activeCall && activeCall.peerConnection){
+            var pc = activeCall.peerConnection;
+            newStream.getTracks().forEach(function(t){
+              var sender = pc.getSenders().filter(function(s){ return s.track && s.track.kind === t.kind; })[0];
+              if (sender) sender.replaceTrack(t);
+            });
+          }
+        }).catch(function(err){
+          setStatus('MEDIA DENIED', String(err && err.message || err), 'bad');
+        });
+      });
+    });
+  }
+
   // ---------------- boot ----------------
   getMedia().then(function(stream){
     localStream = stream;
     localPreview.srcObject = stream;
     attachMeter(stream, meterOwnBars);
+    watchTrackHealth(stream);
     startPeer();
   }).catch(function(err){
     setStatus('MEDIA DENIED', String(err && err.message || err), 'bad');
@@ -541,7 +614,7 @@
   document.addEventListener('visibilitychange', function(){
     if (document.visibilityState === 'visible'){
       if (peer && peer.disconnected){ try{ peer.reconnect(); }catch(e){} }
-      if (!isBroadcast) goImmersive();
+      if (!isBroadcast){ goImmersive(); requestWakeLock(); }
     }
   });
 })();
